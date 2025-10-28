@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { Button } from "@/components/ui/button";
+<button>Click me</button>;
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
