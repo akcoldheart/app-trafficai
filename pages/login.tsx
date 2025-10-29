@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 import { createClient } from "@supabase/supabase-js";
+<button>Click me</button>
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
