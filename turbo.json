@@ -1,0 +1,38 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "NODE_ENV",
+    "NEXT_PUBLIC_POSTHOG_KEY",
+    "NEXT_PUBLIC_POSTHOG_HOST"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "shared/**",
+        "preview/**"
+      ],
+      "outputs": [
+        "dist/**"
+      ],
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": false
+    },
+    "clean": {
+      "dependsOn": [
+        "^clean"
+      ],
+      "cache": false
+    },
+    "bundlewatch": {
+      "dependsOn": [
+        "build"
+      ]
+    }
+  }
+}
