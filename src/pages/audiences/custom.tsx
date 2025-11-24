@@ -1,0 +1,156 @@
+import { useEffect, useState, FormEvent } from 'react';
+import { useRouter } from 'next/router';
+import Link from 'next/link';
+import Layout from '@/components/layout/Layout';
+import { TrafficAPI } from '@/lib/api';
+import { IconPlus } from '@tabler/icons-react';
+
+export default function CustomAudience() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [topic, setTopic] = useState('');
+  const [description, setDescription] = useState('');
+
+  useEffect(() => {
+    if (!TrafficAPI.hasApiKey()) {
+      alert('Please configure your API key in Settings first');
+      router.push('/settings');
+    }
+  }, [router]);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const result = await TrafficAPI.createCustomAudience(topic, description);
+      alert('Custom audience created successfully! Status: ' + ((result as unknown as { Status?: string }).Status || 'processing'));
+      router.push('/audiences');
+    } catch (error) {
+      alert('Error creating custom audience: ' + (error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Layout title="Create Custom Audience" pageTitle="Create Custom Audience" pagePretitle="Traffic AI">
+      <div className="row row-cards">
+        <div className="col-lg-8">
+          <form onSubmit={handleSubmit}>
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">Custom Audience Details</h3>
+              </div>
+              <div className="card-body">
+                <div className="mb-3">
+                  <label className="form-label required">Topic</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    placeholder="e.g., Luxury Travel Enthusiasts"
+                    required
+                  />
+                  <small className="form-hint">Enter a custom topic name for your audience</small>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label required">Description</label>
+                  <textarea
+                    className="form-control"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={4}
+                    placeholder="e.g., Users interested in luxury travel, first-class flights, and premium hotel experiences"
+                    required
+                  ></textarea>
+                  <small className="form-hint">
+                    Provide a detailed description of the custom topic to help identify relevant users
+                  </small>
+                </div>
+              </div>
+              <div className="card-footer">
+                <div className="d-flex justify-content-between">
+                  <Link href="/audiences" className="btn btn-outline-secondary">
+                    Cancel
+                  </Link>
+                  <button type="submit" className="btn btn-primary" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <IconPlus className="icon" />
+                        Create Custom Audience
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div className="col-lg-4">
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">About Custom Audiences</h3>
+            </div>
+            <div className="card-body">
+              <p className="text-muted">
+                Custom audiences let you define your own targeting criteria using natural language descriptions.
+              </p>
+
+              <h4>How it works</h4>
+              <ol className="text-muted">
+                <li>Define a topic that describes your target audience</li>
+                <li>Provide a detailed description of user interests and behaviors</li>
+                <li>The system will process your request and find matching users</li>
+              </ol>
+
+              <h4>Example Topics</h4>
+              <ul className="text-muted">
+                <li>Electric Vehicle Enthusiasts</li>
+                <li>Small Business Owners</li>
+                <li>Health & Fitness Professionals</li>
+                <li>Tech Early Adopters</li>
+                <li>Sustainable Living Advocates</li>
+              </ul>
+
+              <div className="alert alert-info mt-3">
+                <h4 className="alert-title">Processing Time</h4>
+                <p className="mb-0">
+                  Custom audiences may take some time to process. You&apos;ll see a &quot;processing&quot; status while the
+                  audience is being built.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Tips for Better Results</h3>
+            </div>
+            <div className="card-body">
+              <ul className="text-muted">
+                <li>
+                  <strong>Be specific:</strong> The more detailed your description, the better the targeting
+                </li>
+                <li>
+                  <strong>Include behaviors:</strong> Mention specific activities or interests
+                </li>
+                <li>
+                  <strong>Add context:</strong> Include industry, job roles, or demographics if relevant
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}

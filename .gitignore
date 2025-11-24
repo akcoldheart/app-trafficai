@@ -1,17 +1,65 @@
+# Dependencies
 node_modules/
+.pnpm-store
+
+# Next.js
+.next/
+out/
+
+# Production
+build
+dist/
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vercel
+.vercel
+
+# Turbo
+.turbo
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
 .idea/
-/db.json
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+*.log
+/yarn.lock
+package-lock.json
+
+# Legacy build artifacts
 .jekyll-metadata
 .jekyll-cache
 /tmp/
 /.tmp/
 /tmp-dist/
-/yarn.lock
-.DS_Store
 /_site/
 /.cache/
 .sass-cache/
-
 /_gh_pages/
 /site/docs/**/dist/
 /site/static/**/dist/
@@ -24,16 +72,10 @@ node_modules/
 /preview/pages/screenshot-*.html
 /preview/pages/playground-*.html
 /preview/pages/features.html
+demo/
+packages-zip/
 
+# pnp
 .pnp.loader.mjs
 .pnp.cjs
 .yarn
-.next
-.vercel
-.turbo
-package-lock.json
-
-demo/
-dist/
-packages-zip/
-.env
