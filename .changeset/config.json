@@ -5,13 +5,13 @@
   "fixed": [],
   "linked": [
     [
-      "@tabler/core",
-      "@tabler/preview",
-      "@tabler/docs"
+      "@stl-product-lab/core",
+      "@stl-product-lab/preview",
+      "@stl-product-lab/docs"
     ]
   ],
-  "access": "public",
-  "baseBranch": "dev",
+  "access": "restricted",
+  "baseBranch": "main",
   "ignore": [],
   "privatePackages": {
     "version": true,

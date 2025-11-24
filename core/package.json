@@ -1,8 +1,8 @@
 {
-  "name": "@tabler/core",
-  "version": "1.4.0",
-  "description": "Premium and Open Source dashboard template with responsive and high quality UI.",
-  "homepage": "https://tabler.io",
+  "name": "@stl-product-lab/core",
+  "version": "1.0.0",
+  "description": "Premium dashboard template with responsive and high quality UI by STL Product Lab LLC.",
+  "homepage": "https://stlproductlab.com",
   "scripts": {
     "dev": "pnpm run clean && pnpm run copy && pnpm run watch",
     "build": "pnpm run clean && pnpm run css && pnpm run js && pnpm run copy && pnpm run generate-sri",
@@ -41,7 +41,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tabler/tabler.git"
+    "url": "git+https://github.com/Stealth-Labz-LLC/admin-panel-demo.git"
   },
   "keywords": [
     "css",
@@ -50,16 +50,14 @@
     "responsive",
     "front-end",
     "framework",
-    "web"
+    "web",
+    "admin-panel",
+    "dashboard"
   ],
-  "author": "codecalm",
-  "license": "MIT",
+  "author": "STL Product Lab LLC",
+  "license": "UNLICENSED",
   "bugs": {
-    "url": "https://github.com/tabler/tabler/issues"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/codecalm"
+    "url": "https://github.com/Stealth-Labz-LLC/admin-panel-demo/issues"
   },
   "engines": {
     "node": ">=20"
@@ -89,59 +87,11 @@
         "maxSize": "70 kB"
       },
       {
-        "path": "./dist/css/tabler.rtl.css",
-        "maxSize": "75 kB"
-      },
-      {
-        "path": "./dist/css/tabler.rtl.min.css",
-        "maxSize": "70 kB"
-      },
-      {
-        "path": "./dist/css/tabler-flags.css",
-        "maxSize": "2.5 kB"
-      },
-      {
-        "path": "./dist/css/tabler-flags.min.css",
-        "maxSize": "2 kB"
-      },
-      {
-        "path": "./dist/css/tabler-payments.css",
-        "maxSize": "2.2 kB"
-      },
-      {
-        "path": "./dist/css/tabler-payments.min.css",
-        "maxSize": "2 kB"
-      },
-      {
-        "path": "./dist/css/tabler-socials.css",
-        "maxSize": "2 kB"
-      },
-      {
-        "path": "./dist/css/tabler-socials.min.css",
-        "maxSize": "2 kB"
-      },
-      {
-        "path": "./dist/css/tabler-vendors.css",
-        "maxSize": "7.5 kB"
-      },
-      {
-        "path": "./dist/css/tabler-vendors.min.css",
-        "maxSize": "6.5 kB"
-      },
-      {
         "path": "./dist/js/tabler.js",
         "maxSize": "60 kB"
       },
       {
         "path": "./dist/js/tabler.min.js",
-        "maxSize": "45 kB"
-      },
-      {
-        "path": "./dist/js/tabler.esm.js",
-        "maxSize": "60 kB"
-      },
-      {
-        "path": "./dist/js/tabler.esm.min.js",
         "maxSize": "45 kB"
       }
     ]

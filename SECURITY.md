@@ -1,16 +1,15 @@
 # Security Policy
 
-We take security very seriously and ask that you follow the following process.
+## Reporting a Vulnerability
+
+If you discover a security vulnerability within this project, please contact STL Product Lab LLC directly.
+
+**Do not** create public GitHub issues for security vulnerabilities.
 
 ## Supported Versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.0.x   | :white_check_mark: |
-| 0.x     | :x:                |
+Only the latest version of the admin panel is supported with security updates.
 
-## Reporting a Vulnerability
+## Contact
 
-If you think you may have found a security bug, We ask that you privately send the details to support@tabler.io. 
-Please make sure to use a descriptive title in the email.
-
+For security concerns, contact STL Product Lab LLC through authorized channels.

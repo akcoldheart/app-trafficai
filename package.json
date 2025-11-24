@@ -1,7 +1,8 @@
 {
+  "name": "@stl-product-lab/admin-panel",
   "private": true,
-  "description": "Premium and Open Source dashboard template with responsive and high quality UI.",
-  "homepage": "https://tabler.io",
+  "description": "Premium dashboard template with responsive and high quality UI by STL Product Lab LLC.",
+  "homepage": "https://stlproductlab.com",
   "scripts": {
     "build": "turbo build && pnpm run zip-package",
     "dev": "turbo dev",
@@ -15,6 +16,8 @@
     "start": "pnpm dev"
   },
   "packageManager": "pnpm@10.19.0",
+  "author": "STL Product Lab LLC",
+  "license": "UNLICENSED",
   "dependencies": {
     "shx": "^0.4.0"
   },

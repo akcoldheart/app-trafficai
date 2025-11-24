@@ -1,8 +1,10 @@
 {
-  "name": "@tabler/docs",
-  "version": "1.4.0",
-  "description": "",
+  "name": "@stl-product-lab/docs",
+  "version": "1.0.0",
+  "description": "Documentation for STL Product Lab Admin Panel",
   "private": true,
+  "author": "STL Product Lab LLC",
+  "license": "UNLICENSED",
   "scripts": {
     "build": "pnpm run clean && pnpm run js && pnpm run css && pnpm run html ",
     "html": "eleventy",
@@ -22,8 +24,6 @@
     "clean": "shx rm -rf dist"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
   "devDependencies": {
     "@11ty/eleventy": "3.1.0",
     "@docsearch/css": "^3.9.0",
@@ -32,6 +32,6 @@
     "shiki": "^3.13.0"
   },
   "dependencies": {
-    "@tabler/core": "workspace:*"
+    "@stl-product-lab/core": "workspace:*"
   }
 }
