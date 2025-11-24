@@ -45,28 +45,6 @@ To create a production build:
 pnpm run build
 ```
 
-## Docker Support
-
-### Using Docker
-
-1. Build the image:
-```sh
-docker build -t admin-panel .
-```
-
-2. Run the container:
-```sh
-docker run -p 3000:3000 -p 3001:3001 -v $(pwd)/src:/app/src admin-panel
-```
-
-3. Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### Using Docker Compose
-
-```sh
-docker compose up --build
-```
-
 ## Default Theme Settings
 
 The admin panel comes pre-configured with:
