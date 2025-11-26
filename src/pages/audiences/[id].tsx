@@ -25,10 +25,6 @@ export default function AudienceView() {
 
   const loadAudienceData = useCallback(async (page = 1) => {
     if (!id || typeof id !== 'string') return;
-    if (!TrafficAPI.hasApiKey()) {
-      router.push('/settings');
-      return;
-    }
 
     setLoading(true);
     setCurrentPage(page);

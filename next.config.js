@@ -1,18 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Enable static export if needed
-  // output: 'export',
-
-  // Configure asset prefix for CDN if needed
-  // assetPrefix: '',
-
-  // Configure base path if app is not at root
-  // basePath: '',
 
   // Image optimization settings
   images: {
-    unoptimized: true, // Set to false when using Vercel or proper image optimization
+    unoptimized: false, // Enable Vercel image optimization
+  },
+
+  // Environment variables validation
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
 };
 

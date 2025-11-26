@@ -26,11 +26,6 @@ export default function CreateAudience() {
   const [segments, setSegments] = useState('');
 
   useEffect(() => {
-    if (!TrafficAPI.hasApiKey()) {
-      alert('Please configure your API key in Settings first');
-      router.push('/settings');
-      return;
-    }
 
     loadAttributes();
   }, [router]);

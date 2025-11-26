@@ -42,12 +42,6 @@ export default function Enrich() {
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [orMatch, setOrMatch] = useState(false);
 
-  useEffect(() => {
-    if (!TrafficAPI.hasApiKey()) {
-      alert('Please configure your API key in Settings first');
-      router.push('/settings');
-    }
-  }, [router]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

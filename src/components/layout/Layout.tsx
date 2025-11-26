@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import dynamic from 'next/dynamic';
 import Sidebar from './Sidebar';
+import Header from './Header';
 import Footer from './Footer';
 import PageHeader from './PageHeader';
 
@@ -34,6 +35,8 @@ export default function Layout({
         <Sidebar />
 
         <div className="page-wrapper">
+          <Header />
+
           {pageTitle && (
             <PageHeader title={pageTitle} pretitle={pagePretitle}>
               {pageActions}

@@ -11,12 +11,6 @@ export default function CustomAudience() {
   const [topic, setTopic] = useState('');
   const [description, setDescription] = useState('');
 
-  useEffect(() => {
-    if (!TrafficAPI.hasApiKey()) {
-      alert('Please configure your API key in Settings first');
-      router.push('/settings');
-    }
-  }, [router]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

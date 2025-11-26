@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings } from '@tabler/icons-react';
+import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode } from '@tabler/icons-react';
 
 interface MenuItem {
   title: string;
@@ -13,6 +13,11 @@ const menuItems: MenuItem[] = [
     title: 'Dashboard',
     href: '/',
     icon: <IconChartDots3 className="icon" />,
+  },
+  {
+    title: 'Pixel Creation',
+    href: '/pixels',
+    icon: <IconCode className="icon" />,
   },
   {
     title: 'Audiences',

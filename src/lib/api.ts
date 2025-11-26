@@ -1,9 +1,10 @@
 /**
  * Traffic AI API Service
- * Handles all API calls to the Traffic AI backend
+ * Handles all API calls through Next.js API routes (which proxy to Traffic AI backend)
+ *
+ * IMPORTANT: This service now calls Next.js API routes instead of the external API directly.
+ * API routes handle authentication, API key retrieval, and proxying to Traffic AI backend.
  */
-
-const BASE_URL = 'https://v3-api-job-72802495918.us-east1.run.app';
 
 // Types
 export interface Audience {
@@ -72,43 +73,32 @@ export interface ConnectionTestResult {
   message: string;
 }
 
-// API Key Management
-export function getApiKey(): string {
-  if (typeof window === 'undefined') return '';
-  return localStorage.getItem('traffic_api_key') || '';
-}
-
-export function setApiKey(key: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('traffic_api_key', key);
-}
-
-export function hasApiKey(): boolean {
-  return !!getApiKey();
-}
-
-// Generic fetch wrapper with auth
+// Generic fetch wrapper for Next.js API routes
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error('API key not configured. Please set your API key in Settings.');
-  }
-
   const config: RequestInit = {
     headers: {
-      'X-Api-Key': apiKey,
       'Content-Type': 'application/json',
       ...options.headers,
     },
+    credentials: 'include', // Include cookies for authentication
     ...options,
   };
 
   try {
-    const response = await fetch(`${BASE_URL}${endpoint}`, config);
+    const response = await fetch(`/api${endpoint}`, config);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+
+      // Handle specific error cases
+      if (response.status === 401) {
+        throw new Error('Please log in to continue');
+      }
+      if (response.status === 403) {
+        throw new Error(errorData.error || 'You do not have permission to perform this action');
+      }
+
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
     }
 
     return await response.json();
@@ -169,7 +159,7 @@ export async function deleteAudience(id: string): Promise<void> {
 export async function getAudienceAttributes(
   attribute: 'sic' | 'industries' | 'departments' | 'seniority' | 'gender' | 'segments'
 ): Promise<string[]> {
-  return request<string[]>(`/audiences/attributes/${attribute}`, { method: 'GET' });
+  return request<string[]>(`/audiences/attributes?attribute=${attribute}`, { method: 'GET' });
 }
 
 // ==================== ENRICH ====================
@@ -197,14 +187,14 @@ export async function enrichContact(filter: EnrichFilter, options: EnrichOptions
  * Get user credits
  */
 export async function getCredits(): Promise<CreditsResponse> {
-  return request<CreditsResponse>('/user/credits', { method: 'POST' });
+  return request<CreditsResponse>('/credits', { method: 'GET' });
 }
 
 /**
- * Add credits to user
+ * Add credits to user (Admin only)
  */
 export async function addCredits(amount: number): Promise<CreditsResponse> {
-  return request<CreditsResponse>('/user/credits/add', {
+  return request<CreditsResponse>('/credits/add', {
     method: 'POST',
     body: JSON.stringify({ amount }),
   });
@@ -226,9 +216,6 @@ export async function testConnection(): Promise<ConnectionTestResult> {
 
 // Export all as TrafficAPI namespace for compatibility
 export const TrafficAPI = {
-  getApiKey,
-  setApiKey,
-  hasApiKey,
   testConnection,
   getAudiences,
   getAudience,

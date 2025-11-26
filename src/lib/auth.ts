@@ -1,0 +1,88 @@
+import type { User } from '@supabase/supabase-js';
+import type { UserRole } from './supabase/types';
+
+/**
+ * Auth utility functions
+ */
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: UserRole;
+}
+
+/**
+ * Check if user has a specific role
+ */
+export function hasRole(user: UserProfile | null, role: UserRole): boolean {
+  return user?.role === role;
+}
+
+/**
+ * Check if user is an admin
+ */
+export function isAdmin(user: UserProfile | null): boolean {
+  return hasRole(user, 'admin');
+}
+
+/**
+ * Check if user is a team member
+ */
+export function isTeam(user: UserProfile | null): boolean {
+  return hasRole(user, 'team');
+}
+
+/**
+ * Check if user is a partner
+ */
+export function isPartner(user: UserProfile | null): boolean {
+  return hasRole(user, 'partner');
+}
+
+/**
+ * Check if user has admin or team role
+ */
+export function isAdminOrTeam(user: UserProfile | null): boolean {
+  return isAdmin(user) || isTeam(user);
+}
+
+/**
+ * Get user display name
+ */
+export function getUserDisplayName(user: UserProfile | User | null): string {
+  if (!user) return 'Guest';
+
+  if ('email' in user && user.email) {
+    return user.email.split('@')[0];
+  }
+
+  return 'User';
+}
+
+/**
+ * Role display names
+ */
+export const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Admin',
+  team: 'Team Member',
+  partner: 'Partner',
+};
+
+/**
+ * Get role label
+ */
+export function getRoleLabel(role: UserRole): string {
+  return ROLE_LABELS[role];
+}
+
+/**
+ * Get role badge color class
+ */
+export function getRoleBadgeClass(role: UserRole): string {
+  const classes: Record<UserRole, string> = {
+    admin: 'bg-danger',
+    team: 'bg-primary',
+    partner: 'bg-info',
+  };
+  return classes[role];
+}

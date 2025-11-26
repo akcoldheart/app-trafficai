@@ -20,7 +20,7 @@ export default function Document() {
               (function() {
                 var themeConfig = {
                   'theme': 'dark',
-                  'theme-base': 'stone',
+                  'theme-base': 'zinc',
                   'theme-font': 'sans-serif',
                   'theme-primary': 'pink',
                   'theme-radius': '1'

@@ -15,11 +15,6 @@ export default function Audiences() {
   const pageSize = 20;
 
   const loadAudiences = useCallback(async (page = 1) => {
-    if (!TrafficAPI.hasApiKey()) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setCurrentPage(page);
 
@@ -112,12 +107,6 @@ export default function Audiences() {
                       <td colSpan={6} className="text-center py-4">
                         <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                         Loading audiences...
-                      </td>
-                    </tr>
-                  ) : !TrafficAPI.hasApiKey() ? (
-                    <tr>
-                      <td colSpan={6} className="text-center text-muted py-4">
-                        Please configure your API key in <Link href="/settings">Settings</Link>
                       </td>
                     </tr>
                   ) : audiences.length === 0 ? (
