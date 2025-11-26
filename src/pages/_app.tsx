@@ -12,8 +12,9 @@ export default function App({ Component, pageProps }: AppProps) {
   // Load Bootstrap JS on client-side only
   useEffect(() => {
     // Dynamically import Bootstrap JS for client-side functionality
-    // @ts-expect-error - Bootstrap JS doesn't have TypeScript declarations
-    import('bootstrap/dist/js/bootstrap.bundle.min.js');
+    if (typeof window !== 'undefined') {
+      import('bootstrap');
+    }
   }, []);
 
   return (
