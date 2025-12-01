@@ -13,6 +13,7 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
 }
 
+
 const AuthContext = createContext<AuthContextType>({
   user: null,
   userProfile: null,
