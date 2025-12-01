@@ -20,9 +20,9 @@ export default function Document() {
               (function() {
                 var themeConfig = {
                   'theme': 'dark',
-                  'theme-base': 'zinc',
+                  'theme-base': 'purple',
                   'theme-font': 'sans-serif',
-                  'theme-primary': 'pink',
+                  'theme-primary': 'violet',
                   'theme-radius': '1'
                 };
                 for (var key in themeConfig) {
