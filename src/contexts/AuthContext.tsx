@@ -4,7 +4,6 @@ import type { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import type { UserRole } from '@/lib/supabase/types';
 import type { UserProfile } from '@/lib/auth';
-
 interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
@@ -13,6 +12,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
+
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
