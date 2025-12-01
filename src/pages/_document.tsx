@@ -25,7 +25,6 @@ export default function Document() {
                   'theme-primary': 'pink',
                   'theme-radius': '1'
                 };
-
                 for (var key in themeConfig) {
                   var value = localStorage.getItem('tabler-' + key) || themeConfig[key];
                   document.documentElement.setAttribute('data-bs-' + key, value);
