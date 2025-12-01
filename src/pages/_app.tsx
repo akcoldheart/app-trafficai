@@ -13,7 +13,8 @@ export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
     // Dynamically import Bootstrap JS for client-side functionality
     if (typeof window !== 'undefined') {
-      import('bootstrap');
+      // @ts-ignore - Bootstrap JS is imported for side effects only
+      import('bootstrap/dist/js/bootstrap.bundle.min.js');
     }
   }, []);
 
