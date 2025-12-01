@@ -1,3 +1,4 @@
+// Traffic AI Dashboard
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
