@@ -12,8 +12,6 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
-
-
 const AuthContext = createContext<AuthContextType>({
   user: null,
   userProfile: null,
