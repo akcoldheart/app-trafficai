@@ -1,7 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { getAuthenticatedUser, logAuditAction } from '@/lib/api-helpers';
-import type { IntegrationType } from '@/lib/supabase/types';
+import type { IntegrationType, Database } from '@/lib/supabase/types';
+
+type IntegrationUpdate = Database['public']['Tables']['integrations']['Update'];
 
 const VALID_TYPES: IntegrationType[] = ['facebook', 'google', 'email', 'crm', 'webhook'];
 
@@ -37,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'PUT' || req.method === 'PATCH') {
       // Update integration config
       const { config, is_connected } = req.body;
-      const updates: Record<string, unknown> = {};
+      const updates: IntegrationUpdate = {};
 
       if (config !== undefined) updates.config = config;
       if (is_connected !== undefined) updates.is_connected = is_connected;
@@ -60,9 +62,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'DELETE') {
       // Disconnect integration
+      const disconnectUpdate: IntegrationUpdate = { is_connected: false, config: {} };
       const { error } = await supabase
         .from('integrations')
-        .update({ is_connected: false, config: {} })
+        .update(disconnectUpdate)
         .eq('user_id', user.id)
         .eq('type', integrationType);
 

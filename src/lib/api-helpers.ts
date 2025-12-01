@@ -115,7 +115,6 @@ export async function logAuditAction(
   metadata?: Record<string, unknown>
 ) {
   const supabase = createClient(req, res);
-  // @ts-expect-error - Supabase client type inference issue with Insert type
   await supabase.from('audit_logs').insert({
     user_id: userId,
     action,
