@@ -29,9 +29,15 @@ export default function PageHeader({ title, pretitle, children }: PageHeaderProp
   const roleLabel = userProfile ? getRoleLabel(userProfile.role) : '';
   const roleBadgeClass = userProfile ? getRoleBadgeClass(userProfile.role) : 'bg-secondary';
 
-  const handleLogout = async () => {
+  const handleLogout = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setDropdownOpen(false);
-    await signOut();
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   return (
@@ -102,7 +108,11 @@ export default function PageHeader({ title, pretitle, children }: PageHeaderProp
                     </Link>
                   )}
                   <div className="dropdown-divider"></div>
-                  <button onClick={handleLogout} className="dropdown-item text-danger">
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="dropdown-item text-danger"
+                  >
                     <IconLogout className="icon dropdown-item-icon" />
                     Logout
                   </button>

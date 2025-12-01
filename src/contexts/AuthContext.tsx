@@ -91,13 +91,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) {
+        console.error('Supabase signOut error:', error);
+      }
       setUser(null);
       setUserProfile(null);
       setSession(null);
       router.push('/auth/login');
     } catch (error) {
       console.error('Error signing out:', error);
+      // Still redirect even if there's an error
+      router.push('/auth/login');
     }
   };
 
