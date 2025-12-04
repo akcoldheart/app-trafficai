@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode } from '@tabler/icons-react';
+import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode, IconLogout, IconChevronUp } from '@tabler/icons-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface MenuItem {
   title: string;
@@ -48,12 +50,37 @@ const menuItems: MenuItem[] = [
 
 export default function Sidebar() {
   const router = useRouter();
+  const { user, signOut } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Get display name from user metadata or email
+  const getUserDisplayName = () => {
+    if (user?.user_metadata?.full_name) {
+      return user.user_metadata.full_name;
+    }
+    if (user?.user_metadata?.name) {
+      return user.user_metadata.name;
+    }
+    if (user?.email) {
+      // Return part before @ if no name
+      return user.email;
+    }
+    return 'User';
+  };
+
+ 
 
   const isActive = (href: string) => {
     if (href === '/') {
       return router.pathname === '/';
     }
     return router.pathname.startsWith(href);
+  };
+
+  const handleLogout = async () => {
+    console.log('Logout clicked - calling signOut');
+    setShowUserMenu(false);
+    await signOut();
   };
 
   return (
@@ -93,6 +120,36 @@ export default function Sidebar() {
               </li>
             ))}
           </ul>
+
+          {/* User Profile Section at Bottom */}
+          <div className="sidebar-user-section">
+            <div
+              className="sidebar-user-trigger"
+              onClick={() => setShowUserMenu(!showUserMenu)}
+            >
+              <div className="sidebar-user-info">
+                <span className="sidebar-user-name">{getUserDisplayName()}</span>
+              </div>
+              <IconChevronUp
+                size={18}
+                className={`sidebar-user-chevron ${showUserMenu ? 'open' : ''}`}
+              />
+            </div>
+
+            {/* Dropdown Menu */}
+            {showUserMenu && (
+              <div className="sidebar-user-menu">
+                <button
+                  type="button"
+                  onClick={() => handleLogout()}
+                  className="sidebar-user-menu-item"
+                >
+                  <IconLogout size={18} />
+                  <span>Logout</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </aside>

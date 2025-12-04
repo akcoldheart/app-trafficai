@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
+import Head from 'next/head';
 import { createClient } from '@/lib/supabase/client';
-import { IconMail, IconCheck } from '@tabler/icons-react';
+import { IconCheck, IconBolt, IconShieldCheck, IconChartBar } from '@tabler/icons-react';
 
 export default function ResetPassword() {
   const [email, setEmail] = useState('');
@@ -32,82 +33,127 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="page page-center">
-      <div className="container container-tight py-4">
-        <div className="text-center mb-4">
-          <Link href="/" className="navbar-brand navbar-brand-autodark">
-            <img src="/images/logo.webp" height="48" alt="Traffic AI" />
-          </Link>
-        </div>
-        <div className="card card-md">
-          <div className="card-body">
-            <h2 className="h2 text-center mb-4">Reset Password</h2>
+    <>
+      <Head>
+        <title>Reset Password - Traffic AI</title>
+      </Head>
 
-            {success ? (
-              <div className="alert alert-success" role="alert">
-                <div className="d-flex">
-                  <div>
-                    <IconCheck className="icon alert-icon" />
-                  </div>
-                  <div>
-                    <h4 className="alert-title">Check your email</h4>
-                    <div className="text-muted">
-                      We've sent a password reset link to <strong>{email}</strong>
-                    </div>
-                  </div>
+      <div className="auth-page">
+        {/* Left Brand Panel */}
+        <div className="auth-brand-panel">
+          <div className="auth-brand-content">
+            <div className="auth-brand-logo">
+              <img src="/images/logo.webp" alt="Traffic AI" />
+            </div>
+            <p className="auth-brand-tagline">
+              Automate smarter, integrate faster, and drive rapid scale.
+            </p>
+            <div className="auth-brand-divider"></div>
+            <div className="auth-brand-features">
+              <div className="auth-brand-feature">
+                <div className="auth-brand-feature-icon">
+                  <IconBolt stroke={1.5} />
                 </div>
+                <span>Real-time audience insights and analytics</span>
               </div>
-            ) : (
-              <>
-                {error && (
-                  <div className="alert alert-danger" role="alert">
-                    {error}
+              <div className="auth-brand-feature">
+                <div className="auth-brand-feature-icon">
+                  <IconShieldCheck stroke={1.5} />
+                </div>
+                <span>Enterprise-grade security and compliance</span>
+              </div>
+              <div className="auth-brand-feature">
+                <div className="auth-brand-feature-icon">
+                  <IconChartBar stroke={1.5} />
+                </div>
+                <span>Advanced data enrichment and targeting</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Form Panel */}
+        <div className="auth-form-panel">
+          <div className="auth-form-container">
+            {/* Logo for mobile */}
+            <div className="auth-mobile-logo">
+              <img src="/images/logo.webp" alt="Traffic AI" height="40" />
+            </div>
+
+            <h1 className="auth-form-title">Reset Password</h1>
+
+            {/* Form Card */}
+            <div className="auth-card">
+              {success ? (
+                <div className="text-center py-3">
+                  <div style={{
+                    width: 48,
+                    height: 48,
+                    background: '#dcfce7',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 1rem'
+                  }}>
+                    <IconCheck size={24} style={{ color: '#16a34a' }} />
                   </div>
-                )}
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.5rem', color: '#1c1917' }}>
+                    Check your email
+                  </h3>
+                  <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: 0 }}>
+                    We&apos;ve sent a password reset link to <strong>{email}</strong>
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {error && (
+                    <div className="alert alert-danger" role="alert">
+                      {error}
+                    </div>
+                  )}
 
-                <p className="text-muted mb-4">
-                  Enter your email address and we'll send you a link to reset your password.
-                </p>
+                  <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
+                    Enter your email address and we&apos;ll send you a link to reset your password.
+                  </p>
 
-                <form onSubmit={handleResetPassword}>
-                  <div className="mb-3">
-                    <label className="form-label">Email address</label>
-                    <div className="input-icon">
-                      <span className="input-icon-addon">
-                        <IconMail className="icon" />
-                      </span>
+                  <form onSubmit={handleResetPassword} className="auth-form">
+                    <div className="mb-3">
+                      <label className="form-label">Email</label>
                       <input
                         type="email"
                         className="form-control"
-                        placeholder="your@email.com"
+                        placeholder="Enter your email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
                         autoComplete="email"
                       />
                     </div>
-                  </div>
-                  <div className="form-footer">
-                    <button type="submit" className="btn btn-primary w-100" disabled={loading}>
+
+                    <button type="submit" className="btn btn-primary" disabled={loading}>
                       {loading ? (
                         <>
                           <span className="spinner-border spinner-border-sm me-2" role="status"></span>
                           Sending...
                         </>
                       ) : (
-                        'Send reset link'
+                        'Send Reset Link'
                       )}
                     </button>
-                  </div>
-                </form>
-              </>
-            )}
+                  </form>
+                </>
+              )}
+            </div>
+
+            <div className="auth-form-footer">
+              <Link href="/auth/login" className="auth-form-link">
+                Back to login
+              </Link>
+            </div>
           </div>
         </div>
-        <div className="text-center text-muted mt-3">
-          <Link href="/auth/login">Back to login</Link>
-        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -90,20 +90,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase.auth]);
 
   const signOut = async () => {
+    // Redirect immediately to prevent any further API calls
+    // The supabase signOut will still execute before navigation completes
     try {
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
-      if (error) {
-        console.error('Supabase signOut error:', error);
-      }
-      setUser(null);
-      setUserProfile(null);
-      setSession(null);
-      router.push('/auth/login');
+      await supabase.auth.signOut({ scope: 'global' });
     } catch (error) {
       console.error('Error signing out:', error);
-      // Still redirect even if there's an error
-      router.push('/auth/login');
     }
+    // Force full page reload to login - this clears all state
+    window.location.replace('/auth/login');
   };
 
   const refreshUser = async () => {

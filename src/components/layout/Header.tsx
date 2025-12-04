@@ -33,9 +33,14 @@ export default function Header() {
   const roleLabel = userProfile ? getRoleLabel(userProfile.role) : '';
   const roleBadgeClass = userProfile ? getRoleBadgeClass(userProfile.role) : 'bg-secondary';
 
-  const handleLogout = async () => {
+  const handleLogout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setDropdownOpen(false);
-    await signOut();
+    // Use setTimeout to ensure the click completes before redirect
+    setTimeout(() => {
+      signOut();
+    }, 0);
   };
 
   return (
@@ -60,7 +65,7 @@ export default function Header() {
               </div>
               <IconChevronDown size={16} className="ms-2 d-none d-xl-block" />
             </button>
-            <div className={`dropdown-menu dropdown-menu-end dropdown-menu-arrow ${dropdownOpen ? 'show' : ''}`}>
+            <div className={`dropdown-menu dropdown-menu-end dropdown-menu-arrow ${dropdownOpen ? 'show' : ''}`} style={{ zIndex: 1050 }}>
               <div className="dropdown-header">
                 <span className="text-muted">{user.email}</span>
                 {userProfile && (
@@ -91,10 +96,15 @@ export default function Header() {
                 </Link>
               )}
               <div className="dropdown-divider"></div>
-              <button onClick={handleLogout} className="dropdown-item text-danger">
+              <a
+                href="#"
+                onClick={handleLogout}
+                className="dropdown-item text-danger"
+                role="button"
+              >
                 <IconLogout className="icon dropdown-item-icon" />
                 Logout
-              </button>
+              </a>
             </div>
           </div>
         </div>

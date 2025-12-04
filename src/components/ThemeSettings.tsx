@@ -11,9 +11,9 @@ interface ThemeConfig {
 
 const defaultConfig: ThemeConfig = {
   theme: 'dark',
-  'theme-base': 'purple',
+  'theme-base': 'stone',
   'theme-font': 'sans-serif',
-  'theme-primary': 'violet',
+  'theme-primary': 'pink',
   'theme-radius': '1',
 };
 
@@ -111,10 +111,6 @@ export default function ThemeSettings() {
       {/* Offcanvas Settings Panel */}
       {isOpen && (
         <>
-          <div
-            className="offcanvas-backdrop fade show"
-            onClick={() => setIsOpen(false)}
-          ></div>
           <div
             className="offcanvas offcanvas-start offcanvas-narrow show"
             tabIndex={-1}
@@ -291,10 +287,20 @@ export default function ThemeSettings() {
           position: fixed;
           top: 0;
           left: 0;
-          z-index: 1040;
+          z-index: 1030;
           width: 100vw;
           height: 100vh;
           background-color: rgba(24, 36, 51, 0.24);
+          pointer-events: auto;
+        }
+
+        .page-header .dropdown {
+          position: relative;
+          z-index: 1060;
+        }
+
+        .page-header .dropdown-menu {
+          z-index: 1070 !important;
         }
 
         .form-colorinput {

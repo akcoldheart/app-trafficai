@@ -1,13 +1,7 @@
 import Head from 'next/head';
-import dynamic from 'next/dynamic';
 import Sidebar from './Sidebar';
 import Footer from './Footer';
 import PageHeader from './PageHeader';
-
-// Dynamically import ThemeSettings to avoid SSR issues
-const ThemeSettings = dynamic(() => import('@/components/ThemeSettings'), {
-  ssr: false,
-});
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -49,8 +43,6 @@ export default function Layout({
           <Footer />
         </div>
       </div>
-
-      <ThemeSettings />
     </>
   );
 }
