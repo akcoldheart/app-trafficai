@@ -234,15 +234,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .update(updates)
           .eq('id', existingVisitor.id);
 
-        // If identify event, update email
+        // If identify event, update visitor with captured info
         if (payload.eventType === 'identify' && payload.eventData.email) {
+          const identifyData: Record<string, unknown> = {
+            email: payload.eventData.email as string,
+            is_identified: true,
+            identified_at: new Date().toISOString(),
+          };
+
+          // Also save name if provided
+          if (payload.eventData.name) {
+            identifyData.full_name = payload.eventData.name as string;
+          }
+
+          // Save phone if provided
+          if (payload.eventData.phone) {
+            identifyData.phone = payload.eventData.phone as string;
+          }
+
           await supabaseAdmin
             .from('visitors')
-            .update({
-              email: payload.eventData.email as string,
-              is_identified: true,
-              identified_at: new Date().toISOString(),
-            })
+            .update(identifyData)
             .eq('id', existingVisitor.id);
         }
 

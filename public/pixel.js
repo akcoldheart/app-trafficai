@@ -340,13 +340,50 @@
       fieldCount: form.elements.length,
     };
 
-    // Check for email fields (don't capture actual email, just that it exists)
-    var hasEmail = Array.from(form.elements).some(function(el) {
-      return el.type === 'email' || el.name.toLowerCase().includes('email');
-    });
-    data.hasEmailField = hasEmail;
+    // Capture email from form fields for visitor identification
+    var email = null;
+    var name = null;
+    var phone = null;
+
+    try {
+      Array.from(form.elements).forEach(function(el) {
+        var fieldName = (el.name || '').toLowerCase();
+        var fieldType = (el.type || '').toLowerCase();
+        var value = el.value || '';
+
+        // Capture email
+        if (!email && value && (fieldType === 'email' || fieldName.includes('email'))) {
+          // Basic email validation
+          if (value.indexOf('@') > 0 && value.indexOf('.') > 0) {
+            email = value;
+          }
+        }
+
+        // Capture name
+        if (!name && value && (fieldName.includes('name') || fieldName === 'fullname' || fieldName === 'full_name')) {
+          name = value;
+        }
+
+        // Capture phone
+        if (!phone && value && (fieldType === 'tel' || fieldName.includes('phone') || fieldName.includes('mobile'))) {
+          phone = value;
+        }
+      });
+    } catch (e) {
+      // Ignore errors accessing form elements
+    }
+
+    data.email = email;
+    data.name = name;
+    data.phone = phone;
+    data.hasEmailField = !!email;
 
     sendEvent('form_submit', data);
+
+    // If we captured an email, also send an identify event
+    if (email) {
+      sendEvent('identify', { email: email, name: name, phone: phone });
+    }
   }
 
   /**

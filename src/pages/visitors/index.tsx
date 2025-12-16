@@ -20,6 +20,10 @@ import {
   IconExternalLink,
   IconX,
   IconArrowsSort,
+  IconFileText,
+  IconLink,
+  IconForms,
+  IconPlayerPlay,
 } from '@tabler/icons-react';
 
 interface Visitor {
@@ -67,6 +71,25 @@ interface Pixel {
   domain: string;
 }
 
+interface JourneyEvent {
+  type: string;
+  url?: string;
+  data?: Record<string, unknown>;
+  timestamp: string;
+}
+
+interface VisitorDetails {
+  visitor: Visitor;
+  journey: JourneyEvent[];
+  summary: {
+    pageviews: number;
+    clicks: number;
+    scrolls: number;
+    forms: number;
+    totalTime: number;
+  };
+}
+
 export default function Visitors() {
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [pixels, setPixels] = useState<Pixel[]>([]);
@@ -79,6 +102,8 @@ export default function Visitors() {
     totalPages: 0,
   });
   const [selectedVisitor, setSelectedVisitor] = useState<Visitor | null>(null);
+  const [visitorDetails, setVisitorDetails] = useState<VisitorDetails | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -134,6 +159,24 @@ export default function Visitors() {
     }
   }, [pagination.page, pagination.limit, search, selectedPixel, identifiedOnly, enrichedOnly, minScore, sortBy, sortOrder]);
 
+  const fetchVisitorDetails = useCallback(async (visitorId: string) => {
+    try {
+      setLoadingDetails(true);
+      const response = await fetch(`/api/visitors/${visitorId}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setVisitorDetails(data);
+      } else {
+        console.error('Error fetching visitor details:', data.error);
+      }
+    } catch (err) {
+      console.error('Error fetching visitor details:', err);
+    } finally {
+      setLoadingDetails(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchPixels();
   }, [fetchPixels]);
@@ -141,6 +184,14 @@ export default function Visitors() {
   useEffect(() => {
     fetchVisitors();
   }, [fetchVisitors]);
+
+  useEffect(() => {
+    if (selectedVisitor) {
+      fetchVisitorDetails(selectedVisitor.id);
+    } else {
+      setVisitorDetails(null);
+    }
+  }, [selectedVisitor, fetchVisitorDetails]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -645,6 +696,69 @@ export default function Visitors() {
                   </div>
                 </div>
 
+                {/* Activity Timeline / Journey */}
+                <div className="mb-4">
+                  <h5 className="text-muted small text-uppercase mb-3">Activity Timeline</h5>
+                  {loadingDetails ? (
+                    <div className="text-center py-3">
+                      <IconLoader2 size={24} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+                    </div>
+                  ) : visitorDetails?.journey && visitorDetails.journey.length > 0 ? (
+                    <div className="timeline-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                      {visitorDetails.journey.map((event, index) => (
+                        <div key={index} className="d-flex align-items-start mb-3">
+                          <div className="me-3">
+                            <span
+                              className="avatar avatar-sm"
+                              style={{
+                                backgroundColor:
+                                  event.type === 'Opened Page' ? '#e8f4fd' :
+                                  event.type === 'Clicked Link' ? '#fff3cd' :
+                                  event.type === 'Submitted Form' ? '#d4edda' : '#f8f9fa',
+                                color:
+                                  event.type === 'Opened Page' ? '#0d6efd' :
+                                  event.type === 'Clicked Link' ? '#856404' :
+                                  event.type === 'Submitted Form' ? '#28a745' : '#6c757d',
+                              }}
+                            >
+                              {event.type === 'Opened Page' && <IconFileText size={14} />}
+                              {event.type === 'Clicked Link' && <IconLink size={14} />}
+                              {event.type === 'Submitted Form' && <IconForms size={14} />}
+                              {!['Opened Page', 'Clicked Link', 'Submitted Form'].includes(event.type) && <IconPlayerPlay size={14} />}
+                            </span>
+                          </div>
+                          <div className="flex-fill">
+                            <div className="fw-semibold small">{event.type}</div>
+                            {event.url && (
+                              <div className="text-muted small text-break">
+                                <code style={{ fontSize: '11px' }}>
+                                  {(() => {
+                                    try {
+                                      return new URL(event.url).pathname;
+                                    } catch {
+                                      return event.url;
+                                    }
+                                  })()}
+                                </code>
+                              </div>
+                            )}
+                            {event.data?.text && (
+                              <div className="text-muted small">&quot;{String(event.data.text).substring(0, 50)}&quot;</div>
+                            )}
+                            <div className="text-muted" style={{ fontSize: '10px' }}>
+                              {new Date(event.timestamp).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-muted small text-center py-3">
+                      No activity recorded yet
+                    </div>
+                  )}
+                </div>
+
                 {/* Technical Info */}
                 <div>
                   <h5 className="text-muted small text-uppercase mb-3">Technical Details</h5>
@@ -671,7 +785,15 @@ export default function Visitors() {
                         <tr>
                           <td className="text-muted">First Page</td>
                           <td className="text-break">
-                            <code className="small">{new URL(selectedVisitor.first_page_url).pathname}</code>
+                            <code className="small">
+                              {(() => {
+                                try {
+                                  return new URL(selectedVisitor.first_page_url).pathname;
+                                } catch {
+                                  return selectedVisitor.first_page_url;
+                                }
+                              })()}
+                            </code>
                           </td>
                         </tr>
                       )}
