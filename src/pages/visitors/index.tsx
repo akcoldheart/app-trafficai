@@ -575,50 +575,50 @@ export default function Visitors() {
                     <div className="col-6">
                       <div className="card bg-primary-lt border-0">
                         <div className="card-body text-center py-3">
-                          <div className="h2 mb-0 text-primary">{selectedVisitor.total_pageviews}</div>
-                          <div className="text-muted small">Page Views</div>
+                          <div className="h2 mb-0 fw-bold text-primary">{selectedVisitor.total_pageviews}</div>
+                          <div className="small fw-semibold">Page Views</div>
                         </div>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="card bg-success-lt border-0">
                         <div className="card-body text-center py-3">
-                          <div className="h2 mb-0 text-success">{selectedVisitor.total_sessions}</div>
-                          <div className="text-muted small">Sessions</div>
+                          <div className="h2 mb-0 fw-bold text-success">{selectedVisitor.total_sessions}</div>
+                          <div className="small fw-semibold">Sessions</div>
                         </div>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="card bg-info-lt border-0">
                         <div className="card-body text-center py-3">
-                          <div className="h2 mb-0 text-info">{formatDuration(selectedVisitor.total_time_on_site)}</div>
-                          <div className="text-muted small">Time on Site</div>
+                          <div className="h2 mb-0 fw-bold text-info">{formatDuration(selectedVisitor.total_time_on_site)}</div>
+                          <div className="small fw-semibold">Time on Site</div>
                         </div>
                       </div>
                     </div>
                     <div className="col-6">
                       <div className="card bg-warning-lt border-0">
                         <div className="card-body text-center py-3">
-                          <div className="h2 mb-0 text-warning">{selectedVisitor.max_scroll_depth}%</div>
-                          <div className="text-muted small">Max Scroll</div>
+                          <div className="h2 mb-0 fw-bold text-warning">{selectedVisitor.max_scroll_depth}%</div>
+                          <div className="small fw-semibold">Max Scroll</div>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="row g-3 mt-1">
                     <div className="col-6">
-                      <div className="card border-0" style={{ backgroundColor: '#f8f9fa' }}>
+                      <div className="card bg-secondary-lt border-0">
                         <div className="card-body text-center py-3">
-                          <div className="h3 mb-0">{selectedVisitor.total_clicks}</div>
-                          <div className="text-muted small">Total Clicks</div>
+                          <div className="h2 mb-0 fw-bold">{selectedVisitor.total_clicks}</div>
+                          <div className="small fw-semibold">Total Clicks</div>
                         </div>
                       </div>
                     </div>
                     <div className="col-6">
-                      <div className="card border-0" style={{ backgroundColor: '#f8f9fa' }}>
+                      <div className="card bg-purple-lt border-0">
                         <div className="card-body text-center py-3">
-                          <div className="h3 mb-0">{selectedVisitor.form_submissions}</div>
-                          <div className="text-muted small">Form Submissions</div>
+                          <div className="h2 mb-0 fw-bold text-purple">{selectedVisitor.form_submissions}</div>
+                          <div className="small fw-semibold">Form Submissions</div>
                         </div>
                       </div>
                     </div>
