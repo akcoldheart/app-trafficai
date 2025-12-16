@@ -123,6 +123,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const pageCount: Record<string, number> = {};
     topPagesData?.forEach(e => {
+      if (!e.page_url) return;
       try {
         const url = new URL(e.page_url);
         const path = url.pathname;
