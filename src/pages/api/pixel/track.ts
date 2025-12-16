@@ -198,9 +198,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const updates: Record<string, unknown> = {
           last_seen_at: new Date().toISOString(),
           total_pageviews: existingVisitor.total_pageviews + (payload.eventType === 'pageview' ? 1 : 0),
-          total_time_on_site: existingVisitor.total_time_on_site + timeOnPage,
+          // For time on site: use the max of current session time (from heartbeat/exit) vs stored time
+          // This prevents over-accumulation while still tracking longest session
+          total_time_on_site: payload.eventType === 'heartbeat' || payload.eventType === 'exit'
+            ? Math.max(existingVisitor.total_time_on_site || 0, timeOnPage)
+            : existingVisitor.total_time_on_site,
           max_scroll_depth: Math.max(existingVisitor.max_scroll_depth || 0, scrollDepth),
-          total_clicks: existingVisitor.total_clicks + (payload.eventType === 'click' ? 1 : clickCount),
+          total_clicks: existingVisitor.total_clicks + (payload.eventType === 'click' ? 1 : 0),
           form_submissions: existingVisitor.form_submissions + (payload.eventType === 'form_submit' ? 1 : 0),
           ip_address: ip,
           user_agent: payload.fingerprint.userAgent,

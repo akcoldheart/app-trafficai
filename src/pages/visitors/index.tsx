@@ -14,11 +14,12 @@ import {
   IconFilter,
   IconChevronLeft,
   IconChevronRight,
-  IconStar,
   IconStarFilled,
   IconBrandLinkedin,
   IconDeviceDesktop,
   IconExternalLink,
+  IconX,
+  IconArrowsSort,
 } from '@tabler/icons-react';
 
 interface Visitor {
@@ -171,15 +172,9 @@ export default function Visitors() {
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 70) return 'bg-green';
-    if (score >= 40) return 'bg-yellow';
-    return 'bg-red';
-  };
-
-  const getScoreBadgeClass = (score: number) => {
-    if (score >= 70) return 'bg-green-lt text-green';
-    if (score >= 40) return 'bg-yellow-lt text-yellow';
-    return 'bg-red-lt text-red';
+    if (score >= 70) return '#2fb344';
+    if (score >= 40) return '#f59f00';
+    return '#d63939';
   };
 
   const getVisitorName = (visitor: Visitor) => {
@@ -213,166 +208,149 @@ export default function Visitors() {
 
   return (
     <Layout title="Visitors" pageTitle="Visitors" pagePretitle="Pixel Tracking">
-      <div className="row g-4">
-        {/* Filters */}
-        <div className="col-12">
-          <div className="card">
-            <div className="card-body">
-              <form onSubmit={handleSearch}>
-                <div className="row g-3 align-items-end">
-                  <div className="col-md-3">
-                    <label className="form-label">Search</label>
-                    <div className="input-icon">
-                      <span className="input-icon-addon">
-                        <IconSearch size={16} />
-                      </span>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Email, name, or company..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="col-md-2">
-                    <label className="form-label">Pixel</label>
-                    <select
-                      className="form-select"
-                      value={selectedPixel}
-                      onChange={(e) => {
-                        setSelectedPixel(e.target.value);
-                        setPagination(prev => ({ ...prev, page: 1 }));
-                      }}
-                    >
-                      <option value="">All Pixels</option>
-                      {pixels.map((pixel) => (
-                        <option key={pixel.id} value={pixel.id}>
-                          {pixel.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-md-2">
-                    <label className="form-label">Min Score</label>
-                    <select
-                      className="form-select"
-                      value={minScore}
-                      onChange={(e) => {
-                        setMinScore(e.target.value);
-                        setPagination(prev => ({ ...prev, page: 1 }));
-                      }}
-                    >
-                      <option value="">Any</option>
-                      <option value="20">20+</option>
-                      <option value="40">40+</option>
-                      <option value="60">60+</option>
-                      <option value="80">80+</option>
-                    </select>
-                  </div>
-                  <div className="col-md-2">
-                    <label className="form-label">Sort By</label>
-                    <select
-                      className="form-select"
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value)}
-                    >
-                      <option value="last_seen_at">Last Seen</option>
-                      <option value="first_seen_at">First Seen</option>
-                      <option value="lead_score">Lead Score</option>
-                      <option value="total_pageviews">Page Views</option>
-                    </select>
-                  </div>
-                  <div className="col-md-1">
-                    <label className="form-label">&nbsp;</label>
-                    <div className="btn-group w-100">
-                      <button
-                        type="button"
-                        className={`btn ${sortOrder === 'desc' ? 'btn-primary' : 'btn-outline-primary'}`}
-                        onClick={() => setSortOrder('desc')}
-                        title="Descending"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn ${sortOrder === 'asc' ? 'btn-primary' : 'btn-outline-primary'}`}
-                        onClick={() => setSortOrder('asc')}
-                        title="Ascending"
-                      >
-                        ↑
-                      </button>
-                    </div>
-                  </div>
-                  <div className="col-md-2">
-                    <label className="form-label">&nbsp;</label>
-                    <div className="d-flex gap-2">
-                      <button type="submit" className="btn btn-primary flex-fill">
-                        <IconFilter size={16} className="me-1" />
-                        Filter
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary"
-                        onClick={fetchVisitors}
-                        title="Refresh"
-                      >
-                        <IconRefresh size={16} />
-                      </button>
-                    </div>
-                  </div>
+      {/* Filters Card */}
+      <div className="card mb-4">
+        <div className="card-body py-3">
+          <form onSubmit={handleSearch}>
+            <div className="row g-3 align-items-end">
+              <div className="col-lg-3 col-md-6">
+                <label className="form-label small text-muted">Search</label>
+                <div className="input-icon">
+                  <span className="input-icon-addon">
+                    <IconSearch size={16} />
+                  </span>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Email, name, or company..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
                 </div>
-                <div className="row mt-3">
-                  <div className="col-12">
-                    <div className="form-check form-check-inline">
-                      <input
-                        type="checkbox"
-                        className="form-check-input"
-                        id="identifiedOnly"
-                        checked={identifiedOnly}
-                        onChange={(e) => {
-                          setIdentifiedOnly(e.target.checked);
-                          setPagination(prev => ({ ...prev, page: 1 }));
-                        }}
-                      />
-                      <label className="form-check-label" htmlFor="identifiedOnly">
-                        Identified only
-                      </label>
-                    </div>
-                    <div className="form-check form-check-inline">
-                      <input
-                        type="checkbox"
-                        className="form-check-input"
-                        id="enrichedOnly"
-                        checked={enrichedOnly}
-                        onChange={(e) => {
-                          setEnrichedOnly(e.target.checked);
-                          setPagination(prev => ({ ...prev, page: 1 }));
-                        }}
-                      />
-                      <label className="form-check-label" htmlFor="enrichedOnly">
-                        Enriched only
-                      </label>
-                    </div>
-                  </div>
+              </div>
+              <div className="col-lg-2 col-md-6">
+                <label className="form-label small text-muted">Pixel</label>
+                <select
+                  className="form-select"
+                  value={selectedPixel}
+                  onChange={(e) => {
+                    setSelectedPixel(e.target.value);
+                    setPagination(prev => ({ ...prev, page: 1 }));
+                  }}
+                >
+                  <option value="">All Pixels</option>
+                  {pixels.map((pixel) => (
+                    <option key={pixel.id} value={pixel.id}>
+                      {pixel.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-lg-2 col-md-4">
+                <label className="form-label small text-muted">Min Score</label>
+                <select
+                  className="form-select"
+                  value={minScore}
+                  onChange={(e) => {
+                    setMinScore(e.target.value);
+                    setPagination(prev => ({ ...prev, page: 1 }));
+                  }}
+                >
+                  <option value="">Any</option>
+                  <option value="20">20+</option>
+                  <option value="40">40+</option>
+                  <option value="60">60+</option>
+                  <option value="80">80+</option>
+                </select>
+              </div>
+              <div className="col-lg-2 col-md-4">
+                <label className="form-label small text-muted">Sort By</label>
+                <select
+                  className="form-select"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                >
+                  <option value="last_seen_at">Last Seen</option>
+                  <option value="first_seen_at">First Seen</option>
+                  <option value="lead_score">Lead Score</option>
+                  <option value="total_pageviews">Page Views</option>
+                </select>
+              </div>
+              <div className="col-lg-3 col-md-4">
+                <label className="form-label small text-muted">&nbsp;</label>
+                <div className="d-flex gap-2">
+                  <button
+                    type="button"
+                    className={`btn btn-icon ${sortOrder === 'desc' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setSortOrder('desc')}
+                    title="Newest first"
+                  >
+                    <IconArrowsSort size={18} />
+                  </button>
+                  <button type="submit" className="btn btn-primary flex-fill">
+                    <IconFilter size={16} className="me-1" />
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-icon"
+                    onClick={fetchVisitors}
+                    title="Refresh"
+                  >
+                    <IconRefresh size={16} />
+                  </button>
                 </div>
-              </form>
+              </div>
             </div>
-          </div>
+            <div className="row mt-3">
+              <div className="col-12">
+                <label className="form-check form-check-inline">
+                  <input
+                    type="checkbox"
+                    className="form-check-input"
+                    checked={identifiedOnly}
+                    onChange={(e) => {
+                      setIdentifiedOnly(e.target.checked);
+                      setPagination(prev => ({ ...prev, page: 1 }));
+                    }}
+                  />
+                  <span className="form-check-label">Identified only</span>
+                </label>
+                <label className="form-check form-check-inline">
+                  <input
+                    type="checkbox"
+                    className="form-check-input"
+                    checked={enrichedOnly}
+                    onChange={(e) => {
+                      setEnrichedOnly(e.target.checked);
+                      setPagination(prev => ({ ...prev, page: 1 }));
+                    }}
+                  />
+                  <span className="form-check-label">Enriched only</span>
+                </label>
+              </div>
+            </div>
+          </form>
         </div>
+      </div>
 
+      <div className="row g-4">
         {/* Visitors List */}
         <div className={selectedVisitor ? 'col-lg-7' : 'col-12'}>
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">
-                {loading ? 'Loading...' : `${pagination.total} Visitors`}
+                {loading ? (
+                  <span className="text-muted">Loading...</span>
+                ) : (
+                  <>{pagination.total.toLocaleString()} Visitor{pagination.total !== 1 ? 's' : ''}</>
+                )}
               </h3>
             </div>
             {loading ? (
               <div className="card-body text-center py-5">
-                <IconLoader2 size={48} className="text-muted mb-3" style={{ animation: 'spin 1s linear infinite' }} />
-                <p className="text-muted">Loading visitors...</p>
+                <IconLoader2 size={40} className="text-primary mb-3" style={{ animation: 'spin 1s linear infinite' }} />
+                <p className="text-muted mb-0">Loading visitors...</p>
               </div>
             ) : error ? (
               <div className="card-body">
@@ -380,96 +358,93 @@ export default function Visitors() {
               </div>
             ) : visitors.length === 0 ? (
               <div className="card-body text-center py-5">
-                <IconUser size={48} className="text-muted mb-3" />
+                <div className="mb-3">
+                  <span className="avatar avatar-xl bg-primary-lt">
+                    <IconUser size={32} />
+                  </span>
+                </div>
                 <h4>No visitors found</h4>
-                <p className="text-muted">Visitors will appear here once your pixel starts tracking.</p>
+                <p className="text-muted mb-0">Visitors will appear here once your pixel starts tracking.</p>
               </div>
             ) : (
               <>
-                <div className="table-responsive">
-                  <table className="table table-vcenter card-table table-hover">
-                    <thead>
-                      <tr>
-                        <th>Visitor</th>
-                        <th>Score</th>
-                        <th>Activity</th>
-                        <th>Last Seen</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visitors.map((visitor) => (
-                        <tr
-                          key={visitor.id}
-                          className={selectedVisitor?.id === visitor.id ? 'bg-primary-lt' : ''}
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => setSelectedVisitor(visitor)}
-                        >
-                          <td>
-                            <div className="d-flex align-items-center">
-                              <span className={`avatar avatar-sm me-2 ${visitor.is_identified ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
-                                {visitor.is_identified ? (
-                                  <IconUser size={16} />
-                                ) : (
-                                  <IconUser size={16} className="text-muted" />
-                                )}
-                              </span>
-                              <div>
-                                <div className="d-flex align-items-center">
-                                  <span className="fw-semibold">{getVisitorName(visitor)}</span>
-                                  {visitor.is_enriched && (
-                                    <IconStarFilled size={12} className="ms-1 text-yellow" title="Enriched" />
-                                  )}
-                                </div>
-                                {visitor.email && (
-                                  <div className="text-muted small">{visitor.email}</div>
-                                )}
-                                {visitor.company && (
-                                  <div className="text-muted small">{visitor.company}</div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            <span className={`badge ${getScoreBadgeClass(visitor.lead_score)}`}>
-                              {visitor.lead_score}
+                <div className="list-group list-group-flush list-group-hoverable">
+                  {visitors.map((visitor) => (
+                    <div
+                      key={visitor.id}
+                      className={`list-group-item ${selectedVisitor?.id === visitor.id ? 'bg-primary-lt' : ''}`}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => setSelectedVisitor(visitor)}
+                    >
+                      <div className="row align-items-center g-3">
+                        <div className="col-auto">
+                          <span
+                            className="avatar"
+                            style={{
+                              backgroundColor: visitor.is_identified ? '#d4edda' : '#e9ecef',
+                              color: visitor.is_identified ? '#28a745' : '#6c757d'
+                            }}
+                          >
+                            <IconUser size={20} />
+                          </span>
+                        </div>
+                        <div className="col">
+                          <div className="d-flex align-items-center mb-1">
+                            <span className="fw-semibold">{getVisitorName(visitor)}</span>
+                            {visitor.is_enriched && (
+                              <IconStarFilled size={14} className="ms-2 text-warning" title="Enriched" />
+                            )}
+                          </div>
+                          <div className="text-muted small">
+                            {visitor.email || visitor.company || `Visitor ${visitor.visitor_id.substring(0, 8)}`}
+                          </div>
+                        </div>
+                        <div className="col-auto">
+                          <div
+                            className="badge"
+                            style={{
+                              backgroundColor: `${getScoreColor(visitor.lead_score)}20`,
+                              color: getScoreColor(visitor.lead_score),
+                              fontWeight: 600,
+                              fontSize: '13px',
+                              padding: '6px 10px'
+                            }}
+                          >
+                            {visitor.lead_score}
+                          </div>
+                        </div>
+                        <div className="col-auto d-none d-md-block">
+                          <div className="d-flex gap-3 text-muted small">
+                            <span title="Page Views" className="d-flex align-items-center">
+                              <IconEye size={14} className="me-1" />
+                              {visitor.total_pageviews}
                             </span>
-                          </td>
-                          <td>
-                            <div className="d-flex gap-3 text-muted small">
-                              <span title="Page Views">
-                                <IconEye size={14} className="me-1" />
-                                {visitor.total_pageviews}
-                              </span>
-                              <span title="Clicks">
-                                <IconClick size={14} className="me-1" />
-                                {visitor.total_clicks}
-                              </span>
-                              <span title="Sessions">
-                                <IconClock size={14} className="me-1" />
-                                {visitor.total_sessions}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="text-muted">
-                            {formatTimeAgo(visitor.last_seen_at)}
-                          </td>
-                          <td>
-                            <IconChevronRight size={16} className="text-muted" />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            <span title="Clicks" className="d-flex align-items-center">
+                              <IconClick size={14} className="me-1" />
+                              {visitor.total_clicks}
+                            </span>
+                            <span title="Sessions" className="d-flex align-items-center">
+                              <IconClock size={14} className="me-1" />
+                              {visitor.total_sessions}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="col-auto">
+                          <span className="text-muted small">{formatTimeAgo(visitor.last_seen_at)}</span>
+                        </div>
+                        <div className="col-auto">
+                          <IconChevronRight size={16} className="text-muted" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Pagination */}
                 {pagination.totalPages > 1 && (
                   <div className="card-footer d-flex align-items-center justify-content-between">
-                    <p className="m-0 text-muted">
-                      Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
-                      {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
-                      {pagination.total} visitors
+                    <p className="m-0 text-muted small">
+                      Showing {((pagination.page - 1) * pagination.limit) + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
                     </p>
                     <div className="btn-group">
                       <button
@@ -478,14 +453,12 @@ export default function Visitors() {
                         onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                       >
                         <IconChevronLeft size={16} />
-                        Prev
                       </button>
                       <button
                         className="btn btn-sm"
                         disabled={pagination.page === pagination.totalPages}
                         onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                       >
-                        Next
                         <IconChevronRight size={16} />
                       </button>
                     </div>
@@ -504,171 +477,220 @@ export default function Visitors() {
                 <h3 className="card-title">Visitor Details</h3>
                 <div className="card-actions">
                   <button
-                    className="btn btn-ghost-secondary btn-sm"
+                    className="btn btn-ghost-secondary btn-icon btn-sm"
                     onClick={() => setSelectedVisitor(null)}
                   >
-                    Close
+                    <IconX size={18} />
                   </button>
                 </div>
               </div>
               <div className="card-body">
                 {/* Header */}
-                <div className="d-flex align-items-center mb-4">
-                  <span className={`avatar avatar-lg me-3 ${selectedVisitor.is_identified ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
-                    <IconUser size={24} />
+                <div className="text-center mb-4 pb-4 border-bottom">
+                  <span
+                    className="avatar avatar-xl mb-3"
+                    style={{
+                      backgroundColor: selectedVisitor.is_identified ? '#d4edda' : '#e9ecef',
+                      color: selectedVisitor.is_identified ? '#28a745' : '#6c757d'
+                    }}
+                  >
+                    <IconUser size={32} />
                   </span>
-                  <div>
-                    <h4 className="mb-0">{getVisitorName(selectedVisitor)}</h4>
-                    {selectedVisitor.job_title && (
-                      <div className="text-muted">{selectedVisitor.job_title}</div>
+                  <h3 className="mb-1">{getVisitorName(selectedVisitor)}</h3>
+                  {selectedVisitor.job_title && (
+                    <div className="text-muted mb-2">{selectedVisitor.job_title}</div>
+                  )}
+                  <div className="d-flex justify-content-center gap-2">
+                    <span
+                      className="badge"
+                      style={{
+                        backgroundColor: `${getScoreColor(selectedVisitor.lead_score)}20`,
+                        color: getScoreColor(selectedVisitor.lead_score),
+                        fontWeight: 600,
+                        padding: '6px 12px'
+                      }}
+                    >
+                      Score: {selectedVisitor.lead_score}
+                    </span>
+                    {selectedVisitor.is_identified && (
+                      <span className="badge bg-success-lt text-success">Identified</span>
                     )}
-                    <div className="mt-1">
-                      <span className={`badge ${getScoreBadgeClass(selectedVisitor.lead_score)} me-1`}>
-                        Score: {selectedVisitor.lead_score}
-                      </span>
-                      {selectedVisitor.is_identified && (
-                        <span className="badge bg-green-lt text-green me-1">Identified</span>
-                      )}
-                      {selectedVisitor.is_enriched && (
-                        <span className="badge bg-yellow-lt text-yellow">Enriched</span>
-                      )}
-                    </div>
+                    {selectedVisitor.is_enriched && (
+                      <span className="badge bg-warning-lt text-warning">Enriched</span>
+                    )}
                   </div>
                 </div>
 
                 {/* Contact Info */}
-                <div className="mb-4">
-                  <h5 className="mb-2">Contact</h5>
-                  <div className="list-group list-group-flush">
-                    {selectedVisitor.email && (
-                      <div className="list-group-item px-0 d-flex align-items-center">
-                        <IconMail size={16} className="text-muted me-2" />
-                        <a href={`mailto:${selectedVisitor.email}`}>{selectedVisitor.email}</a>
-                      </div>
-                    )}
-                    {selectedVisitor.company && (
-                      <div className="list-group-item px-0 d-flex align-items-center">
-                        <IconBuilding size={16} className="text-muted me-2" />
-                        {selectedVisitor.company}
-                      </div>
-                    )}
-                    {selectedVisitor.linkedin_url && (
-                      <div className="list-group-item px-0 d-flex align-items-center">
-                        <IconBrandLinkedin size={16} className="text-muted me-2" />
-                        <a href={selectedVisitor.linkedin_url} target="_blank" rel="noopener noreferrer">
-                          LinkedIn Profile <IconExternalLink size={12} />
-                        </a>
-                      </div>
-                    )}
-                    {(selectedVisitor.city || selectedVisitor.country) && (
-                      <div className="list-group-item px-0 d-flex align-items-center">
-                        <IconWorld size={16} className="text-muted me-2" />
-                        {[selectedVisitor.city, selectedVisitor.state, selectedVisitor.country]
-                          .filter(Boolean)
-                          .join(', ')}
-                      </div>
-                    )}
+                {(selectedVisitor.email || selectedVisitor.company || selectedVisitor.linkedin_url || selectedVisitor.city) && (
+                  <div className="mb-4">
+                    <h5 className="text-muted small text-uppercase mb-3">Contact Information</h5>
+                    <div className="list-group list-group-flush">
+                      {selectedVisitor.email && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-primary-lt me-3">
+                            <IconMail size={14} />
+                          </span>
+                          <a href={`mailto:${selectedVisitor.email}`} className="text-reset">
+                            {selectedVisitor.email}
+                          </a>
+                        </div>
+                      )}
+                      {selectedVisitor.company && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-azure-lt me-3">
+                            <IconBuilding size={14} />
+                          </span>
+                          {selectedVisitor.company}
+                        </div>
+                      )}
+                      {selectedVisitor.linkedin_url && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-blue-lt me-3">
+                            <IconBrandLinkedin size={14} />
+                          </span>
+                          <a href={selectedVisitor.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-reset">
+                            LinkedIn <IconExternalLink size={12} className="ms-1" />
+                          </a>
+                        </div>
+                      )}
+                      {(selectedVisitor.city || selectedVisitor.country) && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-green-lt me-3">
+                            <IconWorld size={14} />
+                          </span>
+                          {[selectedVisitor.city, selectedVisitor.state, selectedVisitor.country]
+                            .filter(Boolean)
+                            .join(', ')}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Activity Stats */}
                 <div className="mb-4">
-                  <h5 className="mb-2">Activity</h5>
-                  <div className="row g-2">
+                  <h5 className="text-muted small text-uppercase mb-3">Activity Overview</h5>
+                  <div className="row g-3">
                     <div className="col-6">
-                      <div className="card card-sm bg-primary-lt">
-                        <div className="card-body text-center">
-                          <div className="h3 mb-0">{selectedVisitor.total_pageviews}</div>
+                      <div className="card bg-primary-lt border-0">
+                        <div className="card-body text-center py-3">
+                          <div className="h2 mb-0 text-primary">{selectedVisitor.total_pageviews}</div>
                           <div className="text-muted small">Page Views</div>
                         </div>
                       </div>
                     </div>
                     <div className="col-6">
-                      <div className="card card-sm bg-green-lt">
-                        <div className="card-body text-center">
-                          <div className="h3 mb-0">{selectedVisitor.total_sessions}</div>
+                      <div className="card bg-success-lt border-0">
+                        <div className="card-body text-center py-3">
+                          <div className="h2 mb-0 text-success">{selectedVisitor.total_sessions}</div>
                           <div className="text-muted small">Sessions</div>
                         </div>
                       </div>
                     </div>
                     <div className="col-6">
-                      <div className="card card-sm bg-azure-lt">
-                        <div className="card-body text-center">
-                          <div className="h3 mb-0">{formatDuration(selectedVisitor.total_time_on_site)}</div>
+                      <div className="card bg-info-lt border-0">
+                        <div className="card-body text-center py-3">
+                          <div className="h2 mb-0 text-info">{formatDuration(selectedVisitor.total_time_on_site)}</div>
                           <div className="text-muted small">Time on Site</div>
                         </div>
                       </div>
                     </div>
                     <div className="col-6">
-                      <div className="card card-sm bg-yellow-lt">
-                        <div className="card-body text-center">
-                          <div className="h3 mb-0">{selectedVisitor.max_scroll_depth}%</div>
+                      <div className="card bg-warning-lt border-0">
+                        <div className="card-body text-center py-3">
+                          <div className="h2 mb-0 text-warning">{selectedVisitor.max_scroll_depth}%</div>
                           <div className="text-muted small">Max Scroll</div>
                         </div>
                       </div>
                     </div>
                   </div>
+                  <div className="row g-3 mt-1">
+                    <div className="col-6">
+                      <div className="card border-0" style={{ backgroundColor: '#f8f9fa' }}>
+                        <div className="card-body text-center py-3">
+                          <div className="h3 mb-0">{selectedVisitor.total_clicks}</div>
+                          <div className="text-muted small">Total Clicks</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-6">
+                      <div className="card border-0" style={{ backgroundColor: '#f8f9fa' }}>
+                        <div className="card-body text-center py-3">
+                          <div className="h3 mb-0">{selectedVisitor.form_submissions}</div>
+                          <div className="text-muted small">Form Submissions</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lead Score Progress */}
+                <div className="mb-4">
+                  <h5 className="text-muted small text-uppercase mb-3">Lead Score</h5>
+                  <div className="progress mb-2" style={{ height: '12px', borderRadius: '6px' }}>
+                    <div
+                      className="progress-bar"
+                      style={{
+                        width: `${selectedVisitor.lead_score}%`,
+                        backgroundColor: getScoreColor(selectedVisitor.lead_score),
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </div>
+                  <div className="d-flex justify-content-between text-muted small">
+                    <span>0</span>
+                    <span className="fw-semibold">{selectedVisitor.lead_score}/100</span>
+                    <span>100</span>
+                  </div>
                 </div>
 
                 {/* Technical Info */}
-                <div className="mb-4">
-                  <h5 className="mb-2">Technical</h5>
-                  <div className="list-group list-group-flush">
-                    <div className="list-group-item px-0">
-                      <div className="d-flex justify-content-between">
-                        <span className="text-muted">First Seen</span>
-                        <span>{new Date(selectedVisitor.first_seen_at).toLocaleString()}</span>
-                      </div>
-                    </div>
-                    <div className="list-group-item px-0">
-                      <div className="d-flex justify-content-between">
-                        <span className="text-muted">Last Seen</span>
-                        <span>{new Date(selectedVisitor.last_seen_at).toLocaleString()}</span>
-                      </div>
-                    </div>
-                    {selectedVisitor.user_agent && (
-                      <div className="list-group-item px-0">
-                        <div className="d-flex justify-content-between">
-                          <span className="text-muted">Device</span>
-                          <span>
+                <div>
+                  <h5 className="text-muted small text-uppercase mb-3">Technical Details</h5>
+                  <table className="table table-sm mb-0">
+                    <tbody>
+                      <tr>
+                        <td className="text-muted" style={{ width: '40%' }}>First Seen</td>
+                        <td>{new Date(selectedVisitor.first_seen_at).toLocaleString()}</td>
+                      </tr>
+                      <tr>
+                        <td className="text-muted">Last Seen</td>
+                        <td>{new Date(selectedVisitor.last_seen_at).toLocaleString()}</td>
+                      </tr>
+                      {selectedVisitor.user_agent && (
+                        <tr>
+                          <td className="text-muted">Device</td>
+                          <td>
                             <IconDeviceDesktop size={14} className="me-1" />
                             {parseUserAgent(selectedVisitor.user_agent).browser} / {parseUserAgent(selectedVisitor.user_agent).os}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                    {selectedVisitor.first_page_url && (
-                      <div className="list-group-item px-0">
-                        <div className="text-muted small mb-1">First Page</div>
-                        <code className="small">{selectedVisitor.first_page_url}</code>
-                      </div>
-                    )}
-                    {selectedVisitor.first_referrer && (
-                      <div className="list-group-item px-0">
-                        <div className="text-muted small mb-1">Referrer</div>
-                        <code className="small">{selectedVisitor.first_referrer || 'Direct'}</code>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Lead Score Breakdown */}
-                <div>
-                  <h5 className="mb-2">Lead Score Breakdown</h5>
-                  <div className="progress mb-2" style={{ height: '24px' }}>
-                    <div
-                      className={`progress-bar ${getScoreColor(selectedVisitor.lead_score)}`}
-                      style={{ width: `${selectedVisitor.lead_score}%` }}
-                    >
-                      {selectedVisitor.lead_score}/100
-                    </div>
-                  </div>
-                  <div className="text-muted small">
-                    Based on: {selectedVisitor.total_pageviews} pageviews,{' '}
-                    {selectedVisitor.total_sessions} sessions,{' '}
-                    {formatDuration(selectedVisitor.total_time_on_site)} time on site,{' '}
-                    {selectedVisitor.form_submissions} form submissions
-                  </div>
+                          </td>
+                        </tr>
+                      )}
+                      {selectedVisitor.first_page_url && (
+                        <tr>
+                          <td className="text-muted">First Page</td>
+                          <td className="text-break">
+                            <code className="small">{new URL(selectedVisitor.first_page_url).pathname}</code>
+                          </td>
+                        </tr>
+                      )}
+                      {selectedVisitor.first_referrer && (
+                        <tr>
+                          <td className="text-muted">Referrer</td>
+                          <td className="text-break">
+                            <code className="small">{selectedVisitor.first_referrer || 'Direct'}</code>
+                          </td>
+                        </tr>
+                      )}
+                      <tr>
+                        <td className="text-muted">Visitor ID</td>
+                        <td>
+                          <code className="small">{selectedVisitor.visitor_id.substring(0, 12)}...</code>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
