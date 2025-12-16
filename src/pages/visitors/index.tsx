@@ -742,9 +742,9 @@ export default function Visitors() {
                                 </code>
                               </div>
                             )}
-                            {event.data?.text && (
+                            {event.data?.text ? (
                               <div className="text-muted small">&quot;{String(event.data.text).substring(0, 50)}&quot;</div>
-                            )}
+                            ) : null}
                             <div className="text-muted" style={{ fontSize: '10px' }}>
                               {new Date(event.timestamp).toLocaleString()}
                             </div>
