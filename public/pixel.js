@@ -10,7 +10,7 @@
   // Configuration - endpoint can be overridden via TrafficAI config
   var CONFIG = {
     endpoint: null, // Will be set from config or default
-    version: '1.0.0',
+    version: '1.1.0',
     sessionTimeout: 30 * 60 * 1000, // 30 minutes
     heartbeatInterval: 30 * 1000, // 30 seconds
     scrollThreshold: 25, // Track scroll at 25%, 50%, 75%, 100%
@@ -348,24 +348,49 @@
     try {
       Array.from(form.elements).forEach(function(el) {
         var fieldName = (el.name || '').toLowerCase();
+        var fieldId = (el.id || '').toLowerCase();
         var fieldType = (el.type || '').toLowerCase();
+        var placeholder = (el.placeholder || '').toLowerCase();
         var value = el.value || '';
 
-        // Capture email
-        if (!email && value && (fieldType === 'email' || fieldName.includes('email'))) {
+        // Capture email - check type, name, id, and placeholder
+        if (!email && value && (
+          fieldType === 'email' ||
+          fieldName.includes('email') ||
+          fieldId.includes('email') ||
+          placeholder.includes('email')
+        )) {
           // Basic email validation
           if (value.indexOf('@') > 0 && value.indexOf('.') > 0) {
             email = value;
           }
         }
 
-        // Capture name
-        if (!name && value && (fieldName.includes('name') || fieldName === 'fullname' || fieldName === 'full_name')) {
-          name = value;
+        // Capture name - check various patterns
+        if (!name && value && (
+          fieldName.includes('name') ||
+          fieldId.includes('name') ||
+          fieldName === 'fullname' ||
+          fieldName === 'full_name' ||
+          fieldName === 'your_name' ||
+          fieldName === 'yourname' ||
+          placeholder.includes('name')
+        )) {
+          // Skip if it's an email field that happens to have "name" in it
+          if (!fieldName.includes('email') && !fieldId.includes('email')) {
+            name = value;
+          }
         }
 
         // Capture phone
-        if (!phone && value && (fieldType === 'tel' || fieldName.includes('phone') || fieldName.includes('mobile'))) {
+        if (!phone && value && (
+          fieldType === 'tel' ||
+          fieldName.includes('phone') ||
+          fieldName.includes('mobile') ||
+          fieldName.includes('tel') ||
+          fieldId.includes('phone') ||
+          fieldId.includes('mobile')
+        )) {
           phone = value;
         }
       });

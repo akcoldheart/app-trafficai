@@ -63,6 +63,7 @@ export default function Pixels() {
 
   const generatePixelCode = (pixel: Pixel) => {
     const baseUrl = getBaseUrl();
+    const version = '1.1.0'; // Increment this when pixel.js is updated
     return `<!-- Traffic AI Pixel - ${pixel.name} -->
 <script>
   (function(t,r,a,f,i,c){
@@ -73,7 +74,7 @@ export default function Pixels() {
     });
     var s=r.createElement('script');
     s.async=true;
-    s.src='${baseUrl}/pixel.js';
+    s.src='${baseUrl}/pixel.js?v=${version}';
     var x=r.getElementsByTagName('script')[0];
     x.parentNode.insertBefore(s,x);
   })(window,document);
