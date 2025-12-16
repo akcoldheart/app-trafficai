@@ -234,8 +234,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .update(updates)
           .eq('id', existingVisitor.id);
 
-        // If identify event, update visitor with captured info
-        if (payload.eventType === 'identify' && payload.eventData.email) {
+        // If identify or form_submit event with email, update visitor with captured info
+        const capturedEmail = payload.eventData.email as string | undefined;
+        if ((payload.eventType === 'identify' || payload.eventType === 'form_submit') && capturedEmail) {
           const identifyData: Record<string, unknown> = {
             email: payload.eventData.email as string,
             is_identified: true,
@@ -247,15 +248,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             identifyData.full_name = payload.eventData.name as string;
           }
 
-          // Save phone if provided
-          if (payload.eventData.phone) {
-            identifyData.phone = payload.eventData.phone as string;
-          }
+          console.log('Updating visitor with identify data:', existingVisitor.id, identifyData);
 
-          await supabaseAdmin
+          const { error: identifyError } = await supabaseAdmin
             .from('visitors')
             .update(identifyData)
             .eq('id', existingVisitor.id);
+
+          if (identifyError) {
+            console.error('Error updating visitor with identify data:', identifyError);
+          } else {
+            console.log('Successfully identified visitor:', existingVisitor.id);
+          }
         }
 
         // Try to enrich if not yet enriched and we have IP
