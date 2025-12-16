@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode, IconLogout, IconChevronUp } from '@tabler/icons-react';
+import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode, IconLogout, IconChevronUp, IconEye } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface MenuItem {
@@ -20,6 +20,11 @@ const menuItems: MenuItem[] = [
     title: 'Pixel Creation',
     href: '/pixels',
     icon: <IconCode className="icon" />,
+  },
+  {
+    title: 'Visitors',
+    href: '/visitors',
+    icon: <IconEye className="icon" />,
   },
   {
     title: 'Audiences',

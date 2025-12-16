@@ -12,12 +12,43 @@ import {
   IconArrowUpRight,
   IconArrowDownRight,
   IconCode,
-  IconBrandFacebook,
   IconWorld,
-  IconDeviceDesktop,
-  IconDeviceMobile,
-  IconChartBar
+  IconLoader2,
+  IconStarFilled,
+  IconUser,
+  IconChartBar,
 } from '@tabler/icons-react';
+
+interface DashboardStats {
+  overview: {
+    totalVisitors: number;
+    identifiedVisitors: number;
+    enrichedVisitors: number;
+    visitorsToday: number;
+    visitorChange: number;
+    totalEvents: number;
+    eventsToday: number;
+    activePixels: number;
+    avgLeadScore: number;
+  };
+  charts: {
+    eventsByDay: { date: string; day: string; events: number }[];
+    pageviewsByDay: { date: string; day: string; pageviews: number }[];
+    eventTypes: { type: string; count: number; percentage: number }[];
+  };
+  topPages: { page: string; views: number }[];
+  recentVisitors: {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+    company: string | null;
+    lead_score: number;
+    last_seen_at: string;
+    is_identified: boolean;
+    is_enriched: boolean;
+  }[];
+  pixels: { id: string; name: string; domain: string; status: string; events_count: number }[];
+}
 
 export default function Dashboard() {
   const [audiences, setAudiences] = useState<Audience[]>([]);
@@ -25,16 +56,24 @@ export default function Dashboard() {
   const [credits, setCredits] = useState<number | null>(null);
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [loading, setLoading] = useState(true);
-  const [pixelCount, setPixelCount] = useState(0);
-
-  // Static demo data for charts
-  const visitorData = [30, 40, 35, 50, 49, 60, 70, 91, 85, 95, 100, 120];
-  const conversionData = [10, 15, 12, 18, 22, 19, 25, 30, 28, 35, 32, 40];
+  const [stats, setStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
     loadDashboardData();
-    loadPixelCount();
+    loadDashboardStats();
   }, []);
+
+  const loadDashboardStats = async () => {
+    try {
+      const response = await fetch('/api/dashboard/stats');
+      const data = await response.json();
+      if (response.ok) {
+        setStats(data);
+      }
+    } catch (error) {
+      console.error('Error loading dashboard stats:', error);
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -62,50 +101,39 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  const loadPixelCount = async () => {
-    try {
-      const response = await fetch('/api/pixels');
-      const data = await response.json();
-      if (response.ok) {
-        setPixelCount(data.pixels?.length || 0);
-      }
-    } catch (error) {
-      console.error('Error loading pixels:', error);
-    }
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
   };
 
-  // Demo stats
-  const stats = {
-    totalVisitors: 75782,
-    visitorChange: 2,
-    activeUsers: 25782,
-    activeUserChange: -1,
-    pageViews: 156420,
-    pageViewChange: 5,
-    conversionRate: 78,
+  const getScoreBadgeClass = (score: number) => {
+    if (score >= 70) return 'bg-green-lt text-green';
+    if (score >= 40) return 'bg-yellow-lt text-yellow';
+    return 'bg-red-lt text-red';
   };
 
-  const trafficSources = [
-    { name: 'Direct', value: 4250, percentage: 35, color: 'bg-primary' },
-    { name: 'Organic Search', value: 3120, percentage: 26, color: 'bg-green' },
-    { name: 'Social Media', value: 2440, percentage: 20, color: 'bg-azure' },
-    { name: 'Referral', value: 1580, percentage: 13, color: 'bg-yellow' },
-    { name: 'Email', value: 730, percentage: 6, color: 'bg-red' },
-  ];
+  const maxEvents = stats?.charts.eventsByDay
+    ? Math.max(...stats.charts.eventsByDay.map(d => d.events), 1)
+    : 1;
 
-  const recentActivity = [
-    { type: 'pixel', message: 'New visitor captured from example.com', time: '2 min ago', icon: <IconEye size={16} /> },
-    { type: 'audience', message: 'Audience "High Intent Buyers" updated', time: '15 min ago', icon: <IconUsers size={16} /> },
-    { type: 'integration', message: 'Facebook Ads sync completed', time: '1 hour ago', icon: <IconBrandFacebook size={16} /> },
-    { type: 'pixel', message: '142 new events tracked', time: '2 hours ago', icon: <IconClick size={16} /> },
-  ];
-
-  const topPages = [
-    { page: '/products', views: 12453, unique: 8234 },
-    { page: '/pricing', views: 8721, unique: 6102 },
-    { page: '/about', views: 5432, unique: 4521 },
-    { page: '/contact', views: 3214, unique: 2876 },
-  ];
+  const eventTypeColors: Record<string, string> = {
+    pageview: 'bg-primary',
+    click: 'bg-green',
+    scroll: 'bg-azure',
+    heartbeat: 'bg-yellow',
+    exit: 'bg-red',
+    form_submit: 'bg-purple',
+  };
 
   return (
     <Layout title="Dashboard" pageTitle="Dashboard" pagePretitle="Overview">
@@ -116,33 +144,33 @@ export default function Dashboard() {
             <div className="col-lg-7">
               <h2 className="text-white mb-2">Welcome back!</h2>
               <p className="text-white opacity-75 mb-3">
-                You have {pixelCount} active pixel{pixelCount !== 1 ? 's' : ''} tracking visitor data.
-                {totalAudiences !== null && totalAudiences > 0 && ` ${totalAudiences} audience${totalAudiences !== 1 ? 's' : ''} created.`}
+                You have {stats?.overview.activePixels || 0} active pixel{(stats?.overview.activePixels || 0) !== 1 ? 's' : ''} tracking visitor data.
+                {stats?.overview.totalVisitors ? ` ${stats.overview.totalVisitors} visitors captured.` : ''}
               </p>
               <div className="btn-list">
                 <Link href="/pixels" className="btn bg-white text-primary">
                   <IconCode size={18} className="me-1" />
                   Manage Pixels
                 </Link>
-                <Link href="/audiences/create" className="btn btn-outline-light">
-                  <IconPlus size={18} className="me-1" />
-                  Create Audience
+                <Link href="/visitors" className="btn btn-outline-light">
+                  <IconEye size={18} className="me-1" />
+                  View Visitors
                 </Link>
               </div>
             </div>
             <div className="col-lg-5 d-none d-lg-block text-end">
               <div className="row text-white text-center">
                 <div className="col-4">
-                  <div className="display-6 fw-bold">{stats.totalVisitors.toLocaleString()}</div>
+                  <div className="display-6 fw-bold">{stats?.overview.totalVisitors?.toLocaleString() || 0}</div>
                   <div className="opacity-75 small">Total Visitors</div>
                 </div>
                 <div className="col-4">
-                  <div className="display-6 fw-bold">{stats.pageViews.toLocaleString()}</div>
-                  <div className="opacity-75 small">Page Views</div>
+                  <div className="display-6 fw-bold">{stats?.overview.totalEvents?.toLocaleString() || 0}</div>
+                  <div className="opacity-75 small">Total Events</div>
                 </div>
                 <div className="col-4">
-                  <div className="display-6 fw-bold">{stats.conversionRate}%</div>
-                  <div className="opacity-75 small">Conversion</div>
+                  <div className="display-6 fw-bold">{stats?.overview.avgLeadScore || 0}</div>
+                  <div className="opacity-75 small">Avg Score</div>
                 </div>
               </div>
             </div>
@@ -156,27 +184,36 @@ export default function Dashboard() {
           <div className="card">
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between">
-                <div className="subheader text-muted">Total Visitors</div>
-                <span className={`badge ${stats.visitorChange >= 0 ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`}>
-                  {stats.visitorChange >= 0 ? <IconArrowUpRight size={14} /> : <IconArrowDownRight size={14} />}
-                  {Math.abs(stats.visitorChange)}%
-                </span>
+                <div className="subheader text-muted">Visitors Today</div>
+                {stats?.overview.visitorChange !== 0 && (
+                  <span className={`badge ${(stats?.overview.visitorChange || 0) >= 0 ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`}>
+                    {(stats?.overview.visitorChange || 0) >= 0 ? <IconArrowUpRight size={14} /> : <IconArrowDownRight size={14} />}
+                    {Math.abs(stats?.overview.visitorChange || 0)}%
+                  </span>
+                )}
               </div>
               <div className="d-flex align-items-baseline mt-2">
-                <div className="h1 mb-0 me-2">{stats.totalVisitors.toLocaleString()}</div>
+                <div className="h1 mb-0 me-2">{stats?.overview.visitorsToday?.toLocaleString() || 0}</div>
               </div>
               <div className="mt-3">
                 <div className="d-flex gap-1">
-                  {visitorData.map((val, i) => (
+                  {stats?.charts.eventsByDay.map((day, i) => (
                     <div
-                      key={i}
+                      key={day.date}
                       className="bg-primary rounded"
-                      style={{ width: '8%', height: `${val / 3}px`, opacity: 0.3 + (i / visitorData.length) * 0.7 }}
+                      style={{
+                        width: '14%',
+                        height: `${Math.max((day.events / maxEvents) * 40, 4)}px`,
+                        opacity: 0.3 + (i / 7) * 0.7
+                      }}
+                      title={`${day.day}: ${day.events} events`}
                     />
                   ))}
                 </div>
               </div>
-              <div className="mt-2 text-muted small">24,635 users increased from last month</div>
+              <div className="mt-2 text-muted small">
+                {stats?.overview.totalVisitors || 0} total visitors captured
+              </div>
             </div>
           </div>
         </div>
@@ -185,39 +222,28 @@ export default function Dashboard() {
           <div className="card">
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between">
-                <div className="subheader text-muted">Active Users</div>
-                <span className={`badge ${stats.activeUserChange >= 0 ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`}>
-                  {stats.activeUserChange >= 0 ? <IconArrowUpRight size={14} /> : <IconArrowDownRight size={14} />}
-                  {Math.abs(stats.activeUserChange)}%
-                </span>
+                <div className="subheader text-muted">Identified Visitors</div>
               </div>
               <div className="d-flex align-items-baseline mt-2">
-                <div className="h1 mb-0 me-2">{stats.activeUsers.toLocaleString()}</div>
+                <div className="h1 mb-0 me-2">{stats?.overview.identifiedVisitors?.toLocaleString() || 0}</div>
               </div>
               <div className="mt-3">
-                {/* Circular Progress */}
-                <div className="d-flex justify-content-center">
-                  <div className="position-relative" style={{ width: '80px', height: '80px' }}>
-                    <svg viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
-                      <path
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="var(--tblr-border-color)"
-                        strokeWidth="3"
-                      />
-                      <path
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="var(--tblr-primary)"
-                        strokeWidth="3"
-                        strokeDasharray={`${stats.conversionRate}, 100`}
-                      />
-                    </svg>
-                    <div className="position-absolute top-50 start-50 translate-middle fw-bold">
-                      {stats.conversionRate}%
-                    </div>
-                  </div>
+                <div className="progress" style={{ height: '8px' }}>
+                  <div
+                    className="progress-bar bg-green"
+                    style={{
+                      width: stats?.overview.totalVisitors
+                        ? `${(stats.overview.identifiedVisitors / stats.overview.totalVisitors) * 100}%`
+                        : '0%'
+                    }}
+                  />
                 </div>
+              </div>
+              <div className="mt-2 text-muted small">
+                {stats?.overview.totalVisitors
+                  ? `${Math.round((stats.overview.identifiedVisitors / stats.overview.totalVisitors) * 100)}% identification rate`
+                  : 'No visitors yet'
+                }
               </div>
             </div>
           </div>
@@ -227,26 +253,18 @@ export default function Dashboard() {
           <div className="card">
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between">
-                <div className="subheader text-muted">Total Audiences</div>
+                <div className="subheader text-muted">Events Today</div>
               </div>
               <div className="d-flex align-items-baseline mt-2">
-                <div className="h1 mb-0 me-2">
-                  {loading ? <div className="placeholder col-4"></div> : (totalAudiences ?? 0)}
-                </div>
+                <div className="h1 mb-0 me-2">{stats?.overview.eventsToday?.toLocaleString() || 0}</div>
               </div>
               <div className="mt-3 d-flex gap-2">
-                <Link href="/audiences" className="btn btn-sm btn-outline-primary flex-fill">
-                  View All
-                </Link>
-                <Link href="/audiences/create" className="btn btn-sm btn-primary flex-fill">
-                  <IconPlus size={14} className="me-1" />
-                  New
+                <Link href="/visitors" className="btn btn-sm btn-outline-primary flex-fill">
+                  View Visitors
                 </Link>
               </div>
               <div className="mt-2 text-muted small">
-                {apiStatus === 'connected' && <span className="status status-green">API Connected</span>}
-                {apiStatus === 'error' && <span className="status status-red">API Error</span>}
-                {apiStatus === 'checking' && <span className="status">Checking...</span>}
+                {stats?.overview.totalEvents?.toLocaleString() || 0} total events tracked
               </div>
             </div>
           </div>
@@ -269,7 +287,11 @@ export default function Dashboard() {
                   style={{ width: credits ? `${Math.min((credits / 10000) * 100, 100)}%` : '0%' }}
                 />
               </div>
-              <div className="mt-2 text-muted small">API usage credits remaining</div>
+              <div className="mt-2 text-muted small">
+                {apiStatus === 'connected' && <span className="status status-green">API Connected</span>}
+                {apiStatus === 'error' && <span className="status status-red">API Error</span>}
+                {apiStatus === 'checking' && <span className="status">Checking...</span>}
+              </div>
             </div>
           </div>
         </div>
@@ -277,87 +299,96 @@ export default function Dashboard() {
 
       {/* Main Content Row */}
       <div className="row row-deck row-cards">
-        {/* Traffic Overview Chart */}
+        {/* Events Chart */}
         <div className="col-lg-8">
           <div className="card">
             <div className="card-header border-0">
-              <h3 className="card-title">Traffic Overview</h3>
-              <div className="card-actions">
-                <div className="btn-group">
-                  <button className="btn btn-sm active">7 Days</button>
-                  <button className="btn btn-sm">30 Days</button>
-                  <button className="btn btn-sm">90 Days</button>
-                </div>
-              </div>
+              <h3 className="card-title">Events (Last 7 Days)</h3>
             </div>
             <div className="card-body pt-0">
-              <div className="row mb-3">
-                <div className="col-auto">
-                  <div className="d-flex align-items-center">
-                    <span className="bg-primary rounded me-2" style={{ width: '12px', height: '12px' }}></span>
-                    <span className="text-muted">Visitors</span>
-                  </div>
+              {!stats ? (
+                <div className="text-center py-4">
+                  <IconLoader2 size={32} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
                 </div>
-                <div className="col-auto">
-                  <div className="d-flex align-items-center">
-                    <span className="bg-green rounded me-2" style={{ width: '12px', height: '12px' }}></span>
-                    <span className="text-muted">Conversions</span>
-                  </div>
+              ) : stats.charts.eventsByDay.every(d => d.events === 0) ? (
+                <div className="text-center py-4 text-muted">
+                  <IconChartBar size={48} className="mb-2 opacity-50" />
+                  <p>No events recorded yet. Events will appear here once your pixel starts tracking.</p>
                 </div>
-              </div>
-              {/* Simple Bar Chart */}
-              <div className="d-flex align-items-end justify-content-between" style={{ height: '200px' }}>
-                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => (
-                  <div key={day} className="d-flex flex-column align-items-center" style={{ flex: 1 }}>
-                    <div className="d-flex gap-1 mb-2" style={{ height: '150px', alignItems: 'flex-end' }}>
-                      <div
-                        className="bg-primary rounded"
-                        style={{ width: '16px', height: `${visitorData[i] * 1.2}px` }}
-                      />
-                      <div
-                        className="bg-green rounded"
-                        style={{ width: '16px', height: `${conversionData[i] * 2.5}px` }}
-                      />
+              ) : (
+                <>
+                  <div className="row mb-3">
+                    <div className="col-auto">
+                      <div className="d-flex align-items-center">
+                        <span className="bg-primary rounded me-2" style={{ width: '12px', height: '12px' }}></span>
+                        <span className="text-muted">Events</span>
+                      </div>
                     </div>
-                    <span className="text-muted small">{day}</span>
                   </div>
-                ))}
-              </div>
+                  <div className="d-flex align-items-end justify-content-between" style={{ height: '200px' }}>
+                    {stats.charts.eventsByDay.map((day) => (
+                      <div key={day.date} className="d-flex flex-column align-items-center" style={{ flex: 1 }}>
+                        <div className="d-flex gap-1 mb-2" style={{ height: '150px', alignItems: 'flex-end' }}>
+                          <div
+                            className="bg-primary rounded"
+                            style={{
+                              width: '24px',
+                              height: `${Math.max((day.events / maxEvents) * 150, 4)}px`
+                            }}
+                            title={`${day.events} events`}
+                          />
+                        </div>
+                        <span className="text-muted small">{day.day}</span>
+                        <span className="text-muted small fw-semibold">{day.events}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Traffic Sources */}
+        {/* Event Types */}
         <div className="col-lg-4">
           <div className="card">
             <div className="card-header border-0">
-              <h3 className="card-title">Traffic Sources</h3>
+              <h3 className="card-title">Event Types</h3>
             </div>
             <div className="card-body pt-0">
-              <div className="mb-4">
-                {trafficSources.map((source, i) => (
-                  <div key={source.name} className={i > 0 ? 'mt-3' : ''}>
-                    <div className="d-flex justify-content-between mb-1">
-                      <span className="text-muted">{source.name}</span>
-                      <span className="fw-semibold">{source.value.toLocaleString()}</span>
+              {!stats || stats.charts.eventTypes.length === 0 ? (
+                <div className="text-center py-4 text-muted">
+                  <p>No events yet</p>
+                </div>
+              ) : (
+                <div className="mb-4">
+                  {stats.charts.eventTypes.map((eventType, i) => (
+                    <div key={eventType.type} className={i > 0 ? 'mt-3' : ''}>
+                      <div className="d-flex justify-content-between mb-1">
+                        <span className="text-muted text-capitalize">{eventType.type.replace('_', ' ')}</span>
+                        <span className="fw-semibold">{eventType.count.toLocaleString()}</span>
+                      </div>
+                      <div className="progress" style={{ height: '6px' }}>
+                        <div
+                          className={`progress-bar ${eventTypeColors[eventType.type] || 'bg-secondary'}`}
+                          style={{ width: `${eventType.percentage}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="progress" style={{ height: '6px' }}>
-                      <div className={`progress-bar ${source.color}`} style={{ width: `${source.percentage}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Recent Audiences Table */}
+        {/* Recent Visitors */}
         <div className="col-lg-8">
           <div className="card">
             <div className="card-header border-0">
-              <h3 className="card-title">Recent Audiences</h3>
+              <h3 className="card-title">Recent Visitors</h3>
               <div className="card-actions">
-                <Link href="/audiences" className="btn btn-sm btn-outline-primary">
+                <Link href="/visitors" className="btn btn-sm btn-outline-primary">
                   View all
                 </Link>
               </div>
@@ -366,58 +397,57 @@ export default function Dashboard() {
               <table className="table table-vcenter card-table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>ID</th>
-                    <th>Records</th>
-                    <th>Created</th>
-                    <th className="w-1"></th>
+                    <th>Visitor</th>
+                    <th>Score</th>
+                    <th>Company</th>
+                    <th>Last Seen</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {loading ? (
+                  {loading || !stats ? (
                     <tr>
-                      <td colSpan={5} className="text-center text-muted py-4">
+                      <td colSpan={4} className="text-center text-muted py-4">
                         <div className="spinner-border spinner-border-sm me-2" role="status"></div>
-                        Loading audiences...
+                        Loading visitors...
                       </td>
                     </tr>
-                  ) : audiences.length === 0 ? (
+                  ) : stats.recentVisitors.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="text-center text-muted py-4">
-                        No audiences found.{' '}
-                        <Link href="/audiences/create" className="text-primary">Create your first audience</Link>
+                      <td colSpan={4} className="text-center text-muted py-4">
+                        No visitors yet.{' '}
+                        <Link href="/pixels" className="text-primary">Set up your pixel</Link> to start tracking.
                       </td>
                     </tr>
                   ) : (
-                    audiences.map((audience) => (
-                      <tr key={audience.id || audience.audienceId}>
+                    stats.recentVisitors.map((visitor) => (
+                      <tr key={visitor.id}>
                         <td>
                           <div className="d-flex align-items-center">
-                            <span className="avatar avatar-sm bg-primary-lt me-2">
-                              <IconUsers size={16} />
+                            <span className={`avatar avatar-sm me-2 ${visitor.is_identified ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                              <IconUser size={16} />
                             </span>
-                            <span className="text-reset">{audience.name || 'Unnamed'}</span>
+                            <div>
+                              <div className="d-flex align-items-center">
+                                <span className="text-reset">
+                                  {visitor.full_name || visitor.email?.split('@')[0] || 'Anonymous'}
+                                </span>
+                                {visitor.is_enriched && (
+                                  <IconStarFilled size={12} className="ms-1 text-yellow" />
+                                )}
+                              </div>
+                              {visitor.email && (
+                                <div className="text-muted small">{visitor.email}</div>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td>
-                          <code className="small text-muted">
-                            {(audience.id || audience.audienceId || '').substring(0, 8)}...
-                          </code>
+                          <span className={`badge ${getScoreBadgeClass(visitor.lead_score)}`}>
+                            {visitor.lead_score}
+                          </span>
                         </td>
-                        <td>{audience.total_records?.toLocaleString() || '-'}</td>
-                        <td className="text-muted">
-                          {audience.created_at
-                            ? new Date(audience.created_at).toLocaleDateString()
-                            : '-'}
-                        </td>
-                        <td>
-                          <Link
-                            href={`/audiences/${audience.id || audience.audienceId}`}
-                            className="btn btn-sm btn-ghost-primary"
-                          >
-                            View
-                          </Link>
-                        </td>
+                        <td className="text-muted">{visitor.company || '-'}</td>
+                        <td className="text-muted">{formatTimeAgo(visitor.last_seen_at)}</td>
                       </tr>
                     ))
                   )}
@@ -427,113 +457,48 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Recent Activity */}
+        {/* Active Pixels */}
         <div className="col-lg-4">
           <div className="card">
             <div className="card-header border-0">
-              <h3 className="card-title">Recent Activity</h3>
+              <h3 className="card-title">Your Pixels</h3>
+              <div className="card-actions">
+                <Link href="/pixels" className="btn btn-sm btn-outline-primary">
+                  Manage
+                </Link>
+              </div>
             </div>
             <div className="list-group list-group-flush">
-              {recentActivity.map((activity, i) => (
-                <div key={i} className="list-group-item">
-                  <div className="d-flex align-items-center">
-                    <span className="avatar avatar-sm bg-primary-lt me-3">
-                      {activity.icon}
-                    </span>
-                    <div className="flex-fill">
-                      <div className="small">{activity.message}</div>
-                      <div className="text-muted small">{activity.time}</div>
+              {!stats || stats.pixels.length === 0 ? (
+                <div className="list-group-item text-center py-4">
+                  <IconCode size={32} className="text-muted mb-2" />
+                  <p className="text-muted mb-2">No pixels yet</p>
+                  <Link href="/pixels" className="btn btn-primary btn-sm">
+                    <IconPlus size={16} className="me-1" />
+                    Create Pixel
+                  </Link>
+                </div>
+              ) : (
+                stats.pixels.map((pixel) => (
+                  <div key={pixel.id} className="list-group-item">
+                    <div className="d-flex align-items-center">
+                      <span className={`avatar avatar-sm me-3 ${pixel.status === 'active' ? 'bg-green-lt' : 'bg-yellow-lt'}`}>
+                        <IconCode size={16} />
+                      </span>
+                      <div className="flex-fill">
+                        <div className="fw-semibold">{pixel.name}</div>
+                        <div className="text-muted small">{pixel.domain}</div>
+                      </div>
+                      <div className="text-end">
+                        <div className={`badge ${pixel.status === 'active' ? 'bg-green-lt text-green' : 'bg-yellow-lt text-yellow'}`}>
+                          {pixel.status}
+                        </div>
+                        <div className="text-muted small">{pixel.events_count} events</div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            <div className="card-footer text-center">
-              <a href="#" className="text-muted small">View all activity</a>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Stats Row */}
-        <div className="col-12">
-          <div className="row row-cards">
-            <div className="col-6 col-sm-4 col-lg-2">
-              <div className="card card-sm">
-                <div className="card-body d-flex align-items-center">
-                  <span className="avatar bg-primary-lt me-3">
-                    <IconCode size={20} />
-                  </span>
-                  <div>
-                    <div className="fw-semibold">{pixelCount} Pixels</div>
-                    <div className="text-muted small">Active tracking</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="col-6 col-sm-4 col-lg-2">
-              <div className="card card-sm">
-                <div className="card-body d-flex align-items-center">
-                  <span className="avatar bg-green-lt me-3">
-                    <IconClick size={20} />
-                  </span>
-                  <div>
-                    <div className="fw-semibold">15,694</div>
-                    <div className="text-muted small">Events today</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="col-6 col-sm-4 col-lg-2">
-              <div className="card card-sm">
-                <div className="card-body d-flex align-items-center">
-                  <span className="avatar bg-azure-lt me-3">
-                    <IconWorld size={20} />
-                  </span>
-                  <div>
-                    <div className="fw-semibold">42</div>
-                    <div className="text-muted small">Countries</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="col-6 col-sm-4 col-lg-2">
-              <div className="card card-sm">
-                <div className="card-body d-flex align-items-center">
-                  <span className="avatar bg-yellow-lt me-3">
-                    <IconDeviceDesktop size={20} />
-                  </span>
-                  <div>
-                    <div className="fw-semibold">68%</div>
-                    <div className="text-muted small">Desktop</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="col-6 col-sm-4 col-lg-2">
-              <div className="card card-sm">
-                <div className="card-body d-flex align-items-center">
-                  <span className="avatar bg-red-lt me-3">
-                    <IconDeviceMobile size={20} />
-                  </span>
-                  <div>
-                    <div className="fw-semibold">32%</div>
-                    <div className="text-muted small">Mobile</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="col-6 col-sm-4 col-lg-2">
-              <div className="card card-sm">
-                <div className="card-body d-flex align-items-center">
-                  <span className="avatar bg-purple-lt me-3">
-                    <IconChartBar size={20} />
-                  </span>
-                  <div>
-                    <div className="fw-semibold">4.2%</div>
-                    <div className="text-muted small">Bounce Rate</div>
-                  </div>
-                </div>
-              </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -542,7 +507,7 @@ export default function Dashboard() {
         <div className="col-lg-6">
           <div className="card">
             <div className="card-header border-0">
-              <h3 className="card-title">Top Pages</h3>
+              <h3 className="card-title">Top Pages (Last 7 Days)</h3>
             </div>
             <div className="table-responsive">
               <table className="table table-vcenter card-table">
@@ -550,28 +515,34 @@ export default function Dashboard() {
                   <tr>
                     <th>Page</th>
                     <th>Views</th>
-                    <th>Unique</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {topPages.map((page) => (
-                    <tr key={page.page}>
-                      <td>
-                        <code className="text-muted">{page.page}</code>
-                      </td>
-                      <td>{page.views.toLocaleString()}</td>
-                      <td>{page.unique.toLocaleString()}</td>
-                      <td>
-                        <div className="progress" style={{ width: '100px', height: '4px' }}>
-                          <div
-                            className="progress-bar bg-primary"
-                            style={{ width: `${(page.views / topPages[0].views) * 100}%` }}
-                          />
-                        </div>
+                  {!stats || stats.topPages.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="text-center text-muted py-4">
+                        No page views recorded yet
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    stats.topPages.map((page) => (
+                      <tr key={page.page}>
+                        <td>
+                          <code className="text-muted">{page.page}</code>
+                        </td>
+                        <td>{page.views.toLocaleString()}</td>
+                        <td>
+                          <div className="progress" style={{ width: '100px', height: '4px' }}>
+                            <div
+                              className="progress-bar bg-primary"
+                              style={{ width: `${(page.views / stats.topPages[0].views) * 100}%` }}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -617,10 +588,25 @@ export default function Dashboard() {
                   </Link>
                 </div>
                 <div className="col-6">
-                  <Link href="/pixels" className="card card-sm card-link card-link-pop">
+                  <Link href="/visitors" className="card card-sm card-link card-link-pop">
                     <div className="card-body">
                       <div className="d-flex align-items-center">
                         <span className="avatar bg-azure me-3">
+                          <IconEye size={20} className="text-white" />
+                        </span>
+                        <div>
+                          <div className="fw-semibold">View Visitors</div>
+                          <div className="text-muted small">See who visited</div>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                </div>
+                <div className="col-6">
+                  <Link href="/pixels" className="card card-sm card-link card-link-pop">
+                    <div className="card-body">
+                      <div className="d-flex align-items-center">
+                        <span className="avatar bg-yellow me-3">
                           <IconCode size={20} className="text-white" />
                         </span>
                         <div>
@@ -631,26 +617,18 @@ export default function Dashboard() {
                     </div>
                   </Link>
                 </div>
-                <div className="col-6">
-                  <Link href="/settings" className="card card-sm card-link card-link-pop">
-                    <div className="card-body">
-                      <div className="d-flex align-items-center">
-                        <span className="avatar bg-yellow me-3">
-                          <IconWorld size={20} className="text-white" />
-                        </span>
-                        <div>
-                          <div className="fw-semibold">Settings</div>
-                          <div className="text-muted small">Configure API</div>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </Layout>
   );
 }
