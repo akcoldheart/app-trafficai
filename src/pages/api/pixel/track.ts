@@ -104,7 +104,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const payload: TrackPayload = req.body;
+    // Handle both JSON and text/plain content types (sendBeacon sends text/plain)
+    let payload: TrackPayload;
+    if (typeof req.body === 'string') {
+      try {
+        payload = JSON.parse(req.body);
+      } catch {
+        return res.status(400).json({ error: 'Invalid JSON payload' });
+      }
+    } else {
+      payload = req.body;
+    }
 
     if (!payload.pixelIds || !payload.visitorId || !payload.eventType) {
       return res.status(400).json({ error: 'Missing required fields' });

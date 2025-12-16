@@ -217,7 +217,9 @@
     var data = JSON.stringify(payload);
 
     if (navigator.sendBeacon) {
-      navigator.sendBeacon(CONFIG.endpoint, data);
+      // Use Blob with correct MIME type for sendBeacon
+      var blob = new Blob([data], { type: 'application/json' });
+      navigator.sendBeacon(CONFIG.endpoint, blob);
     } else {
       fetch(CONFIG.endpoint, {
         method: 'POST',
