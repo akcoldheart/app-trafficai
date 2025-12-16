@@ -90,10 +90,12 @@ function calculateLeadScore(visitor: {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Enable CORS for pixel requests
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Enable CORS for pixel requests - use specific origin instead of wildcard
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();

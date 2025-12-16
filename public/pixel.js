@@ -198,6 +198,29 @@
   }
 
   /**
+   * Safe JSON stringify that handles circular references
+   */
+  function safeStringify(obj) {
+    var seen = new WeakSet();
+    return JSON.stringify(obj, function(key, value) {
+      // Skip React internal properties and DOM nodes
+      if (key.startsWith('__react') || key.startsWith('_react')) {
+        return undefined;
+      }
+      if (value instanceof Node || value instanceof Element) {
+        return '[DOM Element]';
+      }
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) {
+          return '[Circular]';
+        }
+        seen.add(value);
+      }
+      return value;
+    });
+  }
+
+  /**
    * Send event to Traffic AI
    */
   function sendEvent(eventType, eventData) {
@@ -214,7 +237,7 @@
     };
 
     // Use sendBeacon for reliability, fallback to fetch
-    var data = JSON.stringify(payload);
+    var data = safeStringify(payload);
 
     if (navigator.sendBeacon) {
       // Use Blob with correct MIME type for sendBeacon
@@ -264,17 +287,43 @@
   function trackClick(event) {
     clickCount++;
     var target = event.target;
+
+    // Safely get className as string (could be DOMTokenList)
+    var className = '';
+    try {
+      className = typeof target.className === 'string'
+        ? target.className
+        : (target.className && target.className.toString ? target.className.toString() : '');
+    } catch (e) {
+      className = '';
+    }
+
+    // Safely get href
+    var href = null;
+    try {
+      href = target.href || (target.closest && target.closest('a') ? target.closest('a').href : null);
+    } catch (e) {
+      href = null;
+    }
+
     var data = {
-      tagName: target.tagName,
+      tagName: target.tagName || null,
       id: target.id || null,
-      className: target.className || null,
+      className: className || null,
       text: (target.innerText || '').substring(0, 100),
-      href: target.href || target.closest('a')?.href || null,
+      href: href,
     };
 
     // Only send click events for important elements
-    if (target.tagName === 'A' || target.tagName === 'BUTTON' ||
-        target.closest('a') || target.closest('button')) {
+    var isImportant = false;
+    try {
+      isImportant = target.tagName === 'A' || target.tagName === 'BUTTON' ||
+          (target.closest && (target.closest('a') || target.closest('button')));
+    } catch (e) {
+      isImportant = false;
+    }
+
+    if (isImportant) {
       sendEvent('click', data);
     }
   }
