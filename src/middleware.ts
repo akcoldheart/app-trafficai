@@ -1,7 +1,14 @@
 import { updateSession } from '@/lib/supabase/middleware';
-import { type NextRequest } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Skip auth for pixel tracking routes (public API)
+  if (pathname === '/pixel.js' || pathname.startsWith('/api/pixel')) {
+    return NextResponse.next();
+  }
+
   return await updateSession(request);
 }
 
