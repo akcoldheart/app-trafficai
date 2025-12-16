@@ -13,8 +13,10 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - images/ (public images)
-     * - public folder
+     * - pixel.js (tracking pixel script)
+     * - api/pixel (pixel tracking API)
+     * - public folder assets
      */
-    '/((?!_next/static|_next/image|favicon.ico|images/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|images/|pixel\\.js|api/pixel|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
