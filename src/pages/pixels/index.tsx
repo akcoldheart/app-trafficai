@@ -356,10 +356,20 @@ export default function Pixels() {
                           <span className="avatar bg-primary-lt me-3">
                             <IconCode size={20} />
                           </span>
-                          <div>
+                          <div className="flex-fill">
                             <div className="text-muted" style={{ fontSize: '12px' }}>Pixel ID</div>
-                            <div className="fw-semibold" style={{ fontSize: '13px', fontFamily: 'monospace' }}>
-                              {selectedPixel.pixel_code.substring(0, 12)}...
+                            <div className="d-flex align-items-center gap-2">
+                              <code className="fw-semibold" style={{ fontSize: '12px' }}>
+                                {selectedPixel.pixel_code}
+                              </code>
+                              <button
+                                className={`btn btn-icon btn-sm ${copiedId === 'pixelId' ? 'btn-success' : 'btn-ghost-secondary'}`}
+                                onClick={() => copyToClipboard(selectedPixel.pixel_code, 'pixelId')}
+                                title="Copy Pixel ID"
+                                style={{ padding: '2px 6px' }}
+                              >
+                                {copiedId === 'pixelId' ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                              </button>
                             </div>
                           </div>
                         </div>
