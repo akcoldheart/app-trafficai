@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode, IconLogout, IconChevronUp, IconEye } from '@tabler/icons-react';
+import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode, IconLogout, IconChevronUp, IconEye, IconShieldCheck } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface MenuItem {
   title: string;
   href: string;
   icon: React.ReactNode;
+  adminOnly?: boolean;
 }
 
 const menuItems: MenuItem[] = [
@@ -51,12 +52,26 @@ const menuItems: MenuItem[] = [
     href: '/settings',
     icon: <IconSettings className="icon" />,
   },
+  {
+    title: 'Admin Users',
+    href: '/admin/users',
+    icon: <IconShieldCheck className="icon" />,
+    adminOnly: true,
+  },
 ];
 
 export default function Sidebar() {
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, userProfile, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Filter menu items based on user role
+  const visibleMenuItems = menuItems.filter(item => {
+    if (item.adminOnly) {
+      return userProfile?.role === 'admin';
+    }
+    return true;
+  });
 
   // Get display name from user metadata or email
   const getUserDisplayName = () => {
@@ -79,7 +94,22 @@ export default function Sidebar() {
     if (href === '/') {
       return router.pathname === '/';
     }
-    return router.pathname.startsWith(href);
+    // Exact match for specific menu items
+    if (router.pathname === href) {
+      return true;
+    }
+    // For /audiences, only match dynamic routes like /audiences/[id] but not /audiences/create or /audiences/custom
+    if (href === '/audiences') {
+      return router.pathname === '/audiences' ||
+        (router.pathname.startsWith('/audiences/') &&
+         router.pathname !== '/audiences/create' &&
+         router.pathname !== '/audiences/custom');
+    }
+    // For admin routes
+    if (href.startsWith('/admin')) {
+      return router.pathname === href || router.pathname.startsWith(href + '/');
+    }
+    return false;
   };
 
   const handleLogout = async () => {
@@ -114,7 +144,7 @@ export default function Sidebar() {
         {/* Sidebar Menu */}
         <div className="collapse navbar-collapse" id="sidebar-menu">
           <ul className="navbar-nav pt-lg-3">
-            {menuItems.map((item) => (
+            {visibleMenuItems.map((item) => (
               <li key={item.href} className={`nav-item ${isActive(item.href) ? 'active' : ''}`}>
                 <Link href={item.href} className={`nav-link ${isActive(item.href) ? 'active' : ''}`}>
                   <span className="nav-link-icon d-md-none d-lg-inline-block">

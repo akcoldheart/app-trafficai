@@ -12,16 +12,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     if (req.method === 'GET') {
-      // List all users
-      const { data, error } = await supabase
+      // List all users with API key status
+      const { data: users, error } = await supabase
         .from('users')
-        .select('id, email, role, created_at')
+        .select('id, email, role, company_website, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
+      // Get all API keys to check which users have them
+      const { data: apiKeys } = await supabase
+        .from('user_api_keys')
+        .select('user_id');
+
+      const usersWithApiKeyIds = new Set(apiKeys?.map(k => k.user_id) || []);
+
+      // Add has_api_key flag to each user
+      const usersWithStatus = users?.map(u => ({
+        ...u,
+        has_api_key: usersWithApiKeyIds.has(u.id),
+      })) || [];
+
       await logAuditAction(user.id, 'list_users', req, res);
-      return res.status(200).json(data);
+      return res.status(200).json({ users: usersWithStatus });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
