@@ -26,6 +26,7 @@ export interface Database {
           id: string;
           email: string;
           role: UserRole;
+          company_website: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -33,6 +34,7 @@ export interface Database {
           id: string;
           email: string;
           role?: UserRole;
+          company_website?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -40,6 +42,43 @@ export interface Database {
           id?: string;
           email?: string;
           role?: UserRole;
+          company_website?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      user_websites: {
+        Row: {
+          id: string;
+          user_id: string;
+          url: string;
+          name: string | null;
+          is_primary: boolean;
+          is_verified: boolean;
+          verified_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          url: string;
+          name?: string | null;
+          is_primary?: boolean;
+          is_verified?: boolean;
+          verified_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          url?: string;
+          name?: string | null;
+          is_primary?: boolean;
+          is_verified?: boolean;
+          verified_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -356,6 +395,7 @@ export interface Database {
 
 // Convenience types
 export type User = Database['public']['Tables']['users']['Row'];
+export type UserWebsite = Database['public']['Tables']['user_websites']['Row'];
 export type Pixel = Database['public']['Tables']['pixels']['Row'];
 export type Integration = Database['public']['Tables']['integrations']['Row'];
 export type PixelEvent = Database['public']['Tables']['pixel_events']['Row'];

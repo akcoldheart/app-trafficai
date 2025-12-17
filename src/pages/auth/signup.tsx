@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Head from 'next/head';
 import { createClient } from '@/lib/supabase/client';
-import { IconEye, IconEyeOff, IconBolt, IconShieldCheck, IconChartBar } from '@tabler/icons-react';
+import { IconEye, IconEyeOff, IconBolt, IconShieldCheck, IconChartBar, IconWorldWww } from '@tabler/icons-react';
 
 // Google "G" logo
 const GoogleLogo = () => (
@@ -20,6 +20,7 @@ export default function Signup() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [companyWebsite, setCompanyWebsite] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +49,9 @@ export default function Signup() {
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: {
+            company_website: companyWebsite || null,
+          },
         },
       });
 
@@ -168,6 +172,24 @@ export default function Signup() {
                     required
                     autoComplete="email"
                   />
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label">Company Website</label>
+                  <div className="input-group">
+                    <span className="input-group-text">
+                      <IconWorldWww size={18} />
+                    </span>
+                    <input
+                      type="url"
+                      className="form-control"
+                      placeholder="https://example.com"
+                      value={companyWebsite}
+                      onChange={(e) => setCompanyWebsite(e.target.value)}
+                      autoComplete="url"
+                    />
+                  </div>
+                  <small className="form-hint">Enter your company website URL</small>
                 </div>
 
                 <div className="mb-3">
