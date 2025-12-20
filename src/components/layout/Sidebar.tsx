@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode, IconLogout, IconChevronUp, IconEye, IconShieldCheck, IconMessage, IconRobot } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { createClient } from '@/lib/supabase/client';
 
 interface MenuItem {
   title: string;
@@ -131,10 +132,43 @@ export default function Sidebar() {
     return false;
   };
 
-  const handleLogout = async () => {
-    console.log('Logout clicked - calling signOut');
+  const handleLogout = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Logout clicked');
     setShowUserMenu(false);
-    await signOut();
+
+    // Clear all auth data directly
+    const supabase = createClient();
+
+    // Clear cookies
+    document.cookie.split(';').forEach((c) => {
+      const name = c.trim().split('=')[0];
+      if (name.startsWith('sb-') || name.includes('supabase')) {
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+      }
+    });
+
+    // Clear storage
+    ['localStorage', 'sessionStorage'].forEach((storage) => {
+      const store = storage === 'localStorage' ? localStorage : sessionStorage;
+      Object.keys(store).forEach((key) => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          store.removeItem(key);
+        }
+      });
+    });
+
+    // Sign out from Supabase
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (err) {
+      console.error('Supabase signOut error:', err);
+    }
+
+    // Redirect to login
+    console.log('Redirecting to login...');
+    window.location.href = '/auth/login';
   };
 
   return (
@@ -195,7 +229,7 @@ export default function Sidebar() {
               <div className="sidebar-user-menu">
                 <button
                   type="button"
-                  onClick={() => handleLogout()}
+                  onClick={handleLogout}
                   className="sidebar-user-menu-item"
                 >
                   <IconLogout size={18} />

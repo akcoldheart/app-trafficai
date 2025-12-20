@@ -90,15 +90,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase.auth]);
 
   const signOut = async () => {
-    // Redirect immediately to prevent any further API calls
-    // The supabase signOut will still execute before navigation completes
     try {
-      await supabase.auth.signOut({ scope: 'global' });
-    } catch (error) {
-      console.error('Error signing out:', error);
+      // Clear all Supabase cookies immediately
+      document.cookie.split(';').forEach((c) => {
+        const name = c.trim().split('=')[0];
+        if (name.startsWith('sb-') || name.includes('supabase')) {
+          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${window.location.hostname}`;
+        }
+      });
+
+      // Clear localStorage items related to supabase
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          localStorage.removeItem(key);
+        }
+      });
+
+      // Clear sessionStorage as well
+      Object.keys(sessionStorage).forEach((key) => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          sessionStorage.removeItem(key);
+        }
+      });
+
+      // Try to sign out from Supabase (non-blocking)
+      supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+    } catch (err) {
+      console.error('Error during signOut cleanup:', err);
     }
-    // Force full page reload to login - this clears all state
-    window.location.replace('/auth/login');
+
+    // Use multiple redirect methods to ensure navigation happens
+    // Method 1: Try Next.js router first
+    router.push('/auth/login').then(() => {
+      // Method 2: Force a full page reload after router navigation
+      window.location.reload();
+    }).catch(() => {
+      // Method 3: Fallback to direct location change
+      window.location.href = '/auth/login';
+    });
   };
 
   const refreshUser = async () => {
