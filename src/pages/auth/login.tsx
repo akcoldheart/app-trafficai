@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Head from 'next/head';
@@ -22,9 +22,59 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isProcessingOAuth, setIsProcessingOAuth] = useState(false);
   const supabase = createClient();
 
-  const { redirect } = router.query;
+  const { redirect, code } = router.query;
+
+  // Handle OAuth code if present in URL (happens when OAuth redirects here)
+  useEffect(() => {
+    const handleOAuthCode = async () => {
+      // Check if there's a code in the URL (OAuth callback)
+      if (code && typeof code === 'string') {
+        setIsProcessingOAuth(true);
+        try {
+          // Exchange the code for a session (PKCE flow)
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+          if (exchangeError) {
+            console.error('Code exchange error:', exchangeError);
+            setError(exchangeError.message);
+            setIsProcessingOAuth(false);
+            return;
+          }
+
+          // Verify we have a session
+          const { data, error: sessionError } = await supabase.auth.getSession();
+
+          if (sessionError) {
+            console.error('Session error:', sessionError);
+            setError(sessionError.message);
+            setIsProcessingOAuth(false);
+            return;
+          }
+
+          if (data.session) {
+            // Successfully authenticated, redirect to dashboard
+            const redirectTo = (redirect as string) || '/';
+            window.location.href = redirectTo;
+            return;
+          } else {
+            setError('No session found. Please try again.');
+            setIsProcessingOAuth(false);
+          }
+        } catch (err) {
+          console.error('OAuth handling error:', err);
+          setError('Failed to complete sign in. Please try again.');
+          setIsProcessingOAuth(false);
+        }
+      }
+    };
+
+    if (router.isReady) {
+      handleOAuthCode();
+    }
+  }, [router.isReady, code, redirect, supabase.auth]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,6 +117,22 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  // Show loading state when processing OAuth
+  if (isProcessingOAuth) {
+    return (
+      <div className="page page-center" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="text-center">
+          <div className="mb-3">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+          <div className="text-muted">Completing sign in...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
