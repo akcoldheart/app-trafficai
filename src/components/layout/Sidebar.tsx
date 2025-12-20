@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode, IconLogout, IconChevronUp, IconEye, IconShieldCheck } from '@tabler/icons-react';
+import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode, IconLogout, IconChevronUp, IconEye, IconShieldCheck, IconMessage, IconRobot } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface MenuItem {
@@ -46,6 +46,16 @@ const menuItems: MenuItem[] = [
     title: 'Contact Enrichment',
     href: '/enrich',
     icon: <IconSearch className="icon" />,
+  },
+  {
+    title: 'Messages',
+    href: '/chat',
+    icon: <IconMessage className="icon" />,
+  },
+  {
+    title: 'Auto Replies',
+    href: '/chat/auto-replies',
+    icon: <IconRobot className="icon" />,
   },
   {
     title: 'Settings',
@@ -108,6 +118,15 @@ export default function Sidebar() {
     // For admin routes
     if (href.startsWith('/admin')) {
       return router.pathname === href || router.pathname.startsWith(href + '/');
+    }
+    // For chat routes
+    if (href === '/chat') {
+      return router.pathname === '/chat' ||
+        (router.pathname.startsWith('/chat/') && router.pathname !== '/chat/auto-replies');
+    }
+    // For auto-replies
+    if (href === '/chat/auto-replies') {
+      return router.pathname === '/chat/auto-replies';
     }
     return false;
   };

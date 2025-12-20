@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { AuthProvider } from '@/contexts/AuthContext';
+import ChatBubble from '@/components/ChatBubble';
 
 // Import Bootstrap and Tabler CSS
 import '@tabler/core/dist/css/tabler.min.css';
@@ -26,6 +27,7 @@ export default function App({ Component, pageProps }: AppProps) {
       </Head>
       <AuthProvider>
         <Component {...pageProps} />
+        <ChatBubble />
       </AuthProvider>
     </>
   );
