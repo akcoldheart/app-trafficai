@@ -132,16 +132,12 @@ export default function Sidebar() {
     return false;
   };
 
-  const handleLogout = async (e: React.MouseEvent) => {
+  const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('Logout clicked');
     setShowUserMenu(false);
 
-    // Clear all auth data directly
-    const supabase = createClient();
-
-    // Clear cookies
+    // Clear cookies synchronously
     document.cookie.split(';').forEach((c) => {
       const name = c.trim().split('=')[0];
       if (name.startsWith('sb-') || name.includes('supabase')) {
@@ -149,26 +145,24 @@ export default function Sidebar() {
       }
     });
 
-    // Clear storage
-    ['localStorage', 'sessionStorage'].forEach((storage) => {
-      const store = storage === 'localStorage' ? localStorage : sessionStorage;
-      Object.keys(store).forEach((key) => {
-        if (key.startsWith('sb-') || key.includes('supabase')) {
-          store.removeItem(key);
-        }
-      });
+    // Clear storage synchronously
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('sb-') || key.includes('supabase')) {
+        localStorage.removeItem(key);
+      }
+    });
+    Object.keys(sessionStorage).forEach((key) => {
+      if (key.startsWith('sb-') || key.includes('supabase')) {
+        sessionStorage.removeItem(key);
+      }
     });
 
-    // Sign out from Supabase
-    try {
-      await supabase.auth.signOut({ scope: 'local' });
-    } catch (err) {
-      console.error('Supabase signOut error:', err);
-    }
+    // Sign out from Supabase (fire and forget - don't wait)
+    const supabase = createClient();
+    supabase.auth.signOut({ scope: 'local' }).catch(() => {});
 
-    // Redirect to login
-    console.log('Redirecting to login...');
-    window.location.href = '/auth/login';
+    // Redirect immediately
+    window.location.replace('/auth/login');
   };
 
   return (
