@@ -75,7 +75,8 @@ export default function Signup() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          // Use API route for server-side code exchange (handles PKCE properly)
+          redirectTo: `${window.location.origin}/api/auth/callback?redirect=/`,
         },
       });
 

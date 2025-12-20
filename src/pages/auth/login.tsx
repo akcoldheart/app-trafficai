@@ -30,21 +30,72 @@ export default function Login() {
   // Handle OAuth code if present in URL (happens when OAuth redirects here)
   useEffect(() => {
     const handleOAuthCode = async () => {
-      // Check if there's a code in the URL (OAuth callback)
-      if (code && typeof code === 'string') {
-        setIsProcessingOAuth(true);
-        try {
-          // Exchange the code for a session (PKCE flow)
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
-          if (exchangeError) {
-            console.error('Code exchange error:', exchangeError);
-            setError(exchangeError.message);
+      // First, check if there's a hash fragment with access_token (implicit flow)
+      if (typeof window !== 'undefined' && window.location.hash) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        if (accessToken) {
+          console.log('Found access token in hash, setting session...');
+          setIsProcessingOAuth(true);
+          // The Supabase client should automatically pick up the hash and set the session
+          const { data, error } = await supabase.auth.getSession();
+          if (data.session) {
+            window.location.href = (redirect as string) || '/';
+            return;
+          }
+          if (error) {
+            setError(error.message);
             setIsProcessingOAuth(false);
             return;
           }
+        }
+      }
 
-          // Verify we have a session
+      // Check if there's a code in the URL (OAuth callback)
+      if (code && typeof code === 'string') {
+        setIsProcessingOAuth(true);
+
+        // Set a timeout to prevent infinite loading
+        const timeout = setTimeout(() => {
+          console.error('OAuth timeout - taking too long');
+          setError('Sign in is taking too long. Please try again.');
+          setIsProcessingOAuth(false);
+          // Clear the code from URL to prevent retry loops
+          router.replace('/auth/login', undefined, { shallow: true });
+        }, 10000);
+
+        try {
+          console.log('Exchanging code for session...');
+
+          // Exchange the code for a session (PKCE flow)
+          const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+          clearTimeout(timeout);
+
+          if (exchangeError) {
+            console.error('Code exchange error:', exchangeError);
+            // Check for specific error types
+            if (exchangeError.message.includes('code') || exchangeError.message.includes('expired')) {
+              setError('Sign in link has expired. Please try again.');
+            } else {
+              setError(exchangeError.message);
+            }
+            setIsProcessingOAuth(false);
+            router.replace('/auth/login', undefined, { shallow: true });
+            return;
+          }
+
+          console.log('Code exchanged, checking session...');
+
+          // Check if we got a session from the exchange
+          if (exchangeData?.session) {
+            console.log('Session obtained, redirecting...');
+            const redirectTo = (redirect as string) || '/';
+            window.location.href = redirectTo;
+            return;
+          }
+
+          // Fallback: try to get session
           const { data, error: sessionError } = await supabase.auth.getSession();
 
           if (sessionError) {
@@ -55,18 +106,21 @@ export default function Login() {
           }
 
           if (data.session) {
-            // Successfully authenticated, redirect to dashboard
+            console.log('Session found, redirecting...');
             const redirectTo = (redirect as string) || '/';
             window.location.href = redirectTo;
             return;
           } else {
-            setError('No session found. Please try again.');
+            setError('Authentication failed. Please try again.');
             setIsProcessingOAuth(false);
+            router.replace('/auth/login', undefined, { shallow: true });
           }
         } catch (err) {
+          clearTimeout(timeout);
           console.error('OAuth handling error:', err);
           setError('Failed to complete sign in. Please try again.');
           setIsProcessingOAuth(false);
+          router.replace('/auth/login', undefined, { shallow: true });
         }
       }
     };
@@ -74,7 +128,7 @@ export default function Login() {
     if (router.isReady) {
       handleOAuthCode();
     }
-  }, [router.isReady, code, redirect, supabase.auth]);
+  }, [router.isReady, code, redirect, supabase.auth, router]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,7 +161,8 @@ export default function Login() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?redirect=${redirect || '/'}`,
+          // Use API route for server-side code exchange (handles PKCE properly)
+          redirectTo: `${window.location.origin}/api/auth/callback?redirect=${encodeURIComponent((redirect as string) || '/')}`,
         },
       });
 
