@@ -201,7 +201,7 @@ export default function ConversationDetail() {
   }
 
   const customerName = conversation.customer_name || conversation.customer_email || 'Anonymous';
-  const metadata = conversation.customer_metadata || {};
+  const metadata = (conversation.customer_metadata || {}) as Record<string, string | undefined>;
 
   return (
     <Layout

@@ -255,6 +255,147 @@ export interface Database {
         };
         Relationships: [];
       };
+      chat_conversations: {
+        Row: {
+          id: string;
+          customer_name: string | null;
+          customer_email: string | null;
+          customer_metadata: Json | null;
+          visitor_id: string | null;
+          source: string | null;
+          page_url: string | null;
+          status: string;
+          read: boolean;
+          last_message_at: string | null;
+          closed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_name?: string | null;
+          customer_email?: string | null;
+          customer_metadata?: Json | null;
+          visitor_id?: string | null;
+          source?: string | null;
+          page_url?: string | null;
+          status?: string;
+          read?: boolean;
+          last_message_at?: string | null;
+          closed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          customer_name?: string | null;
+          customer_email?: string | null;
+          customer_metadata?: Json | null;
+          visitor_id?: string | null;
+          source?: string | null;
+          page_url?: string | null;
+          status?: string;
+          read?: boolean;
+          last_message_at?: string | null;
+          closed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      chat_messages: {
+        Row: {
+          id: string;
+          conversation_id: string;
+          body: string;
+          sender_type: 'customer' | 'agent' | 'bot';
+          sender_id: string | null;
+          sender_name: string | null;
+          is_private: boolean;
+          attachments: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          conversation_id: string;
+          body: string;
+          sender_type?: 'customer' | 'agent' | 'bot';
+          sender_id?: string | null;
+          sender_name?: string | null;
+          is_private?: boolean;
+          attachments?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          conversation_id?: string;
+          body?: string;
+          sender_type?: 'customer' | 'agent' | 'bot';
+          sender_id?: string | null;
+          sender_name?: string | null;
+          is_private?: boolean;
+          attachments?: Json | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      chat_auto_replies: {
+        Row: {
+          id: string;
+          question: string;
+          answer: string;
+          keywords: string[];
+          is_active: boolean;
+          priority: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          question: string;
+          answer: string;
+          keywords?: string[];
+          is_active?: boolean;
+          priority?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          question?: string;
+          answer?: string;
+          keywords?: string[];
+          is_active?: boolean;
+          priority?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      chat_settings: {
+        Row: {
+          id: string;
+          key: string;
+          value: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          key: string;
+          value: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          key?: string;
+          value?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       visitors: {
         Row: {
           id: string;

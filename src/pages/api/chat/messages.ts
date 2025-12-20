@@ -193,15 +193,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'GET') {
       // Get messages for a conversation
       const { conversation_id } = req.query;
+      const convIdStr = Array.isArray(conversation_id) ? conversation_id[0] : conversation_id;
 
-      if (!conversation_id) {
+      if (!convIdStr) {
         return res.status(400).json({ error: 'conversation_id is required' });
       }
 
       const { data, error } = await supabase
         .from('chat_messages')
         .select('*')
-        .eq('conversation_id', conversation_id)
+        .eq('conversation_id', convIdStr)
         .order('created_at', { ascending: true });
 
       if (error) {

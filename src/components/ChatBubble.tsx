@@ -10,15 +10,15 @@ interface Message {
   conversation_id: string;
   body: string;
   sender_type: 'customer' | 'agent' | 'bot';
-  sender_name?: string;
+  sender_name: string | null;
   is_private: boolean;
   created_at: string;
 }
 
 interface Conversation {
   id: string;
-  customer_name?: string;
-  customer_email?: string;
+  customer_name: string | null;
+  customer_email: string | null;
   status: string;
 }
 

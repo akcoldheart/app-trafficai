@@ -95,15 +95,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'DELETE') {
       // Delete auto-reply
       const { id } = req.query;
+      const idString = Array.isArray(id) ? id[0] : id;
 
-      if (!id) {
+      if (!idString) {
         return res.status(400).json({ error: 'id is required' });
       }
 
       const { error } = await supabase
         .from('chat_auto_replies')
         .delete()
-        .eq('id', id);
+        .eq('id', idString);
 
       if (error) {
         return res.status(500).json({ error: error.message });

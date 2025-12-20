@@ -12,8 +12,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!user) return;
 
       const { status = 'open', page = '1', page_size = '20' } = req.query;
-      const pageNum = parseInt(page as string, 10);
-      const pageSize = parseInt(page_size as string, 10);
+      const statusStr = Array.isArray(status) ? status[0] : status;
+      const pageNum = parseInt(Array.isArray(page) ? page[0] : page, 10);
+      const pageSize = parseInt(Array.isArray(page_size) ? page_size[0] : page_size, 10);
       const offset = (pageNum - 1) * pageSize;
 
       let query = supabase
@@ -23,8 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .order('created_at', { ascending: false })
         .range(offset, offset + pageSize - 1);
 
-      if (status !== 'all') {
-        query = query.eq('status', status);
+      if (statusStr !== 'all') {
+        query = query.eq('status', statusStr);
       }
 
       const { data, error, count } = await query;
