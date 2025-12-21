@@ -150,36 +150,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(201).json({ data });
           }
 
-          // Count existing customer messages to determine if this is the first
-          const { count, error: countError } = await supabase
-            .from('chat_messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('conversation_id', conversation_id)
-            .eq('sender_type', 'customer');
+          // Find matching auto-reply based on keywords for EVERY message
+          const matchedReply = await findMatchingAutoReply(supabase, body);
 
-          // Only auto-reply to the first customer message
-          if (!countError && count === 1) {
-            // Find matching auto-reply based on keywords
-            const matchedReply = await findMatchingAutoReply(supabase, body);
+          if (matchedReply) {
+            // Only reply if we have a matching keyword/question
             const botName = await getBotName(supabase);
-
-            let replyMessage: string;
-            if (matchedReply) {
-              replyMessage = matchedReply.answer;
-            } else {
-              replyMessage = await getDefaultAcknowledgment(supabase);
-            }
 
             // Insert the bot reply
             await supabase
               .from('chat_messages')
               .insert({
                 conversation_id,
-                body: replyMessage,
+                body: matchedReply.answer,
                 sender_type: 'bot',
                 sender_name: botName,
                 is_private: false,
               });
+          } else {
+            // For messages without keyword match, check if this is the first message
+            // and send default acknowledgment only for the first message
+            const { count, error: countError } = await supabase
+              .from('chat_messages')
+              .select('*', { count: 'exact', head: true })
+              .eq('conversation_id', conversation_id)
+              .eq('sender_type', 'customer');
+
+            // Only send default acknowledgment for the first customer message
+            if (!countError && count === 1) {
+              const botName = await getBotName(supabase);
+              const defaultReply = await getDefaultAcknowledgment(supabase);
+
+              await supabase
+                .from('chat_messages')
+                .insert({
+                  conversation_id,
+                  body: defaultReply,
+                  sender_type: 'bot',
+                  sender_name: botName,
+                  is_private: false,
+                });
+            }
           }
         } catch (autoReplyError) {
           // Log but don't fail the request if auto-reply fails

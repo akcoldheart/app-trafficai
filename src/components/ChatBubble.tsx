@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconMessage, IconX, IconSend, IconMinus } from '@tabler/icons-react';
@@ -59,6 +59,9 @@ export default function ChatBubble() {
     }
   }, []);
 
+  // Track message IDs we've already processed to prevent duplicates
+  const processedMessageIds = useRef<Set<string>>(new Set());
+
   // Subscribe to realtime messages
   useEffect(() => {
     if (!conversation?.id) return;
@@ -76,12 +79,18 @@ export default function ChatBubble() {
         (payload) => {
           const newMsg = payload.new as Message;
           // Only add if not private (customer shouldn't see agent notes)
-          if (!newMsg.is_private) {
-            setMessages((prev) => {
-              // Avoid duplicates
-              if (prev.some(m => m.id === newMsg.id)) return prev;
-              return [...prev, newMsg];
-            });
+          // AND not already processed (prevents duplicates from our own sends)
+          if (!newMsg.is_private && !processedMessageIds.current.has(newMsg.id)) {
+            // Only add messages from agents/bots via realtime
+            // Customer messages are handled by sendMessage directly
+            if (newMsg.sender_type !== 'customer') {
+              processedMessageIds.current.add(newMsg.id);
+              setMessages((prev) => {
+                // Double-check for duplicates
+                if (prev.some(m => m.id === newMsg.id)) return prev;
+                return [...prev, newMsg];
+              });
+            }
           }
         }
       )
@@ -147,49 +156,79 @@ export default function ChatBubble() {
     setLoading(true);
     setError(null);
     try {
-      // Create conversation
-      const { data: conv, error: convError } = await supabase
+      // First, check if there's an existing OPEN conversation for this email
+      const { data: existingConv } = await supabase
         .from('chat_conversations')
-        .insert({
-          customer_name: customerName || null,
-          customer_email: customerEmail,
-          customer_metadata: {
+        .select('*')
+        .eq('customer_email', customerEmail.toLowerCase().trim())
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      let conv = existingConv;
+
+      if (existingConv) {
+        // Use existing conversation
+        setConversation(existingConv);
+        localStorage.setItem('chat_conversation_id', existingConv.id);
+        setShowForm(false);
+
+        // Load existing messages
+        const { data: msgs } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('conversation_id', existingConv.id)
+          .eq('is_private', false)
+          .order('created_at', { ascending: true });
+
+        setMessages(msgs || []);
+      } else {
+        // Create new conversation
+        const { data: newConv, error: convError } = await supabase
+          .from('chat_conversations')
+          .insert({
+            customer_name: customerName || null,
+            customer_email: customerEmail.toLowerCase().trim(),
+            customer_metadata: {
+              page_url: window.location.href,
+              user_agent: navigator.userAgent,
+            },
+            source: 'widget',
             page_url: window.location.href,
-            user_agent: navigator.userAgent,
-          },
-          source: 'widget',
-          page_url: window.location.href,
-        })
-        .select()
-        .single();
+          })
+          .select()
+          .single();
 
-      if (convError) {
-        console.error('Supabase error:', convError);
-        throw new Error(convError.message || 'Failed to start conversation');
-      }
+        if (convError) {
+          console.error('Supabase error:', convError);
+          throw new Error(convError.message || 'Failed to start conversation');
+        }
 
-      if (!conv) {
-        throw new Error('No conversation data returned');
-      }
+        if (!newConv) {
+          throw new Error('No conversation data returned');
+        }
 
-      setConversation(conv);
-      localStorage.setItem('chat_conversation_id', conv.id);
-      setShowForm(false);
+        conv = newConv;
+        setConversation(newConv);
+        localStorage.setItem('chat_conversation_id', newConv.id);
+        setShowForm(false);
 
-      // Add greeting message as bot
-      const { data: greeting } = await supabase
-        .from('chat_messages')
-        .insert({
-          conversation_id: conv.id,
-          body: CHAT_CONFIG.greeting,
-          sender_type: 'bot',
-          sender_name: 'Traffic AI',
-        })
-        .select()
-        .single();
+        // Add greeting message as bot
+        const { data: greeting } = await supabase
+          .from('chat_messages')
+          .insert({
+            conversation_id: newConv.id,
+            body: CHAT_CONFIG.greeting,
+            sender_type: 'bot',
+            sender_name: 'Traffic AI',
+          })
+          .select()
+          .single();
 
-      if (greeting) {
-        setMessages([greeting]);
+        if (greeting) {
+          setMessages([greeting]);
+        }
       }
     } catch (err) {
       console.error('Error starting conversation:', err);
@@ -222,22 +261,27 @@ export default function ChatBubble() {
     setMessages((prev) => [...prev, tempMessage]);
 
     try {
-      const { data, error } = await supabase
-        .from('chat_messages')
-        .insert({
+      // Send via API to trigger auto-reply logic
+      const response = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           conversation_id: conversation.id,
           body: messageBody,
           sender_type: 'customer',
           sender_name: customerName || customerEmail,
-        })
-        .select()
-        .single();
+        }),
+      });
 
-      if (error) throw error;
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send message');
+      }
 
       // Replace temp message with real one
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? data : m))
+        prev.map((m) => (m.id === tempId ? result.data : m))
       );
     } catch (error) {
       console.error('Error sending message:', error);
