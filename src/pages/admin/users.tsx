@@ -325,16 +325,12 @@ export default function AdminUsers() {
                     <td>
                       <select
                         className={`form-select form-select-sm ${getRoleBadgeClass(user.role)}`}
-                        value={user.role_id || ''}
+                        value={user.role_id || roles.find(r => r.name === user.role)?.id || ''}
                         onChange={(e) => handleRoleChange(user.id, e.target.value)}
                         style={{ width: '120px' }}
                       >
                         {roles.length === 0 ? (
-                          <>
-                            <option value="admin">Admin</option>
-                            <option value="team">Team</option>
-                            <option value="partner">Partner</option>
-                          </>
+                          <option value="">{user.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Unknown'}</option>
                         ) : (
                           roles.map((role) => (
                             <option key={role.id} value={role.id}>

@@ -1,6 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createClient } from '@/lib/supabase/api';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { requireRole } from '@/lib/api-helpers';
+
+// Service role client to bypass RLS - admins need to see ALL data
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -11,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const auth = await requireRole(req, res, 'admin');
   if (!auth) return;
 
-  const supabase = createClient(req, res);
+  const supabase = supabaseAdmin;
 
   try {
     const now = new Date();

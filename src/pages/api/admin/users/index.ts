@@ -1,6 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { requireRole, logAuditAction } from '@/lib/api-helpers';
-import { createClient } from '@/lib/supabase/api';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
+
+// Use service role to bypass RLS and see all users
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Only admins can manage users
@@ -8,20 +14,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!auth) return;
 
   const { user } = auth;
-  const supabase = createClient(req, res);
 
   try {
     if (req.method === 'GET') {
-      // List all users with API key status
-      const { data: users, error } = await supabase
+      // List all users with API key status (include role_id for dropdown)
+      const { data: users, error } = await supabaseAdmin
         .from('users')
-        .select('id, email, role, company_website, created_at, updated_at')
+        .select('id, email, role, role_id, company_website, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       // Get all API keys to check which users have them
-      const { data: apiKeys } = await supabase
+      const { data: apiKeys } = await supabaseAdmin
         .from('user_api_keys')
         .select('user_id');
 
