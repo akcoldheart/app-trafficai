@@ -257,7 +257,10 @@ export default function RoleEdit() {
                           type="checkbox"
                           className="form-check-input me-2 m-0"
                           checked={selectedPermissions.includes(menuItem.id)}
-                          onChange={() => togglePermission(menuItem.id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            togglePermission(menuItem.id);
+                          }}
                           style={{ minWidth: '16px' }}
                         />
                         <span className={`fw-medium ${

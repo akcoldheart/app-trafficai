@@ -51,27 +51,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', userId)
         .single();
 
-      if (userError) throw userError;
-      if (!userData) return { profile: null, role: null, menuItems: [] };
+      if (userError) {
+        console.error('Error fetching user profile:', userError);
+        throw userError;
+      }
+      if (!userData) {
+        console.error('No user data found for userId:', userId);
+        return { profile: null, role: null, menuItems: [] };
+      }
 
       let roleId = userData.role_id;
+      console.log('User data:', { email: userData.email, role: userData.role, role_id: userData.role_id });
 
       // If user doesn't have role_id, assign default role based on their string role or 'team'
       if (!roleId) {
         const roleName = userData.role || 'team';
-        const { data: defaultRole } = await supabase
+        console.log('Looking up role by name:', roleName);
+
+        const { data: defaultRole, error: roleError } = await supabase
           .from('roles')
           .select('id')
           .eq('name', roleName)
           .single();
 
+        if (roleError) {
+          console.error('Error looking up role:', roleError);
+        }
+
         if (defaultRole) {
           roleId = defaultRole.id;
+          console.log('Found role, assigning role_id:', roleId);
+
           // Update the user's role_id in the database
-          await supabase
+          const { error: updateError } = await supabase
             .from('users')
             .update({ role_id: roleId })
             .eq('id', userId);
+
+          if (updateError) {
+            console.error('Error updating user role_id:', updateError);
+          }
+        } else {
+          console.error('No role found with name:', roleName);
         }
       }
 
@@ -80,14 +101,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // If user has role_id, fetch role and menu items from database
       if (roleId) {
         // Fetch role details
-        const { data: roleData } = await supabase
+        const { data: roleData, error: roleDetailError } = await supabase
           .from('roles')
           .select('*')
           .eq('id', roleId)
           .single();
 
+        if (roleDetailError) {
+          console.error('Error fetching role details:', roleDetailError);
+        }
+
         // Fetch menu items for this role via role_permissions
-        const { data: permissionsData } = await supabase
+        const { data: permissionsData, error: permError } = await supabase
           .from('role_permissions')
           .select(`
             menu_item_id,
@@ -95,10 +120,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           `)
           .eq('role_id', roleId);
 
+        if (permError) {
+          console.error('Error fetching permissions:', permError);
+        }
+
+        console.log('Permissions data:', permissionsData);
+
         const menuItems = (permissionsData || [])
           .map((p: any) => p.menu_items)
           .filter((m: MenuItem | null): m is MenuItem => m !== null && m.is_active)
           .sort((a: MenuItem, b: MenuItem) => a.display_order - b.display_order);
+
+        console.log('Menu items:', menuItems);
 
         return {
           profile,
@@ -108,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Fallback: no role_id set, return empty menu items
+      console.warn('No role_id found for user');
       return { profile, role: null, menuItems: [] };
     } catch (error) {
       console.error('Error fetching user data:', error);
