@@ -54,15 +54,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (userError) throw userError;
       if (!userData) return { profile: null, role: null, menuItems: [] };
 
-      const profile = userData as UserProfile;
+      let roleId = userData.role_id;
+
+      // If user doesn't have role_id, assign default role based on their string role or 'team'
+      if (!roleId) {
+        const roleName = userData.role || 'team';
+        const { data: defaultRole } = await supabase
+          .from('roles')
+          .select('id')
+          .eq('name', roleName)
+          .single();
+
+        if (defaultRole) {
+          roleId = defaultRole.id;
+          // Update the user's role_id in the database
+          await supabase
+            .from('users')
+            .update({ role_id: roleId })
+            .eq('id', userId);
+        }
+      }
+
+      const profile = { ...userData, role_id: roleId } as UserProfile;
 
       // If user has role_id, fetch role and menu items from database
-      if (userData.role_id) {
+      if (roleId) {
         // Fetch role details
         const { data: roleData } = await supabase
           .from('roles')
           .select('*')
-          .eq('id', userData.role_id)
+          .eq('id', roleId)
           .single();
 
         // Fetch menu items for this role via role_permissions
@@ -72,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             menu_item_id,
             menu_items (*)
           `)
-          .eq('role_id', userData.role_id);
+          .eq('role_id', roleId);
 
         const menuItems = (permissionsData || [])
           .map((p: any) => p.menu_items)
