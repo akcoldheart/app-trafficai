@@ -37,112 +37,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const supabase = createClient();
 
-  // Fetch user profile, role, and menu permissions from database
+  // Fetch user profile, role, and menu permissions via API (bypasses RLS)
   const fetchUserData = async (userId: string): Promise<{
     profile: UserProfile | null;
     role: Role | null;
     menuItems: MenuItem[];
   }> => {
     try {
-      // Fetch user profile
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id, email, role, role_id')
-        .eq('id', userId)
-        .single();
+      // Use the assign-role API endpoint which uses service role to bypass RLS
+      const response = await fetch('/api/auth/assign-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
 
-      if (userError) {
-        console.error('Error fetching user profile:', userError);
-        throw userError;
-      }
-      if (!userData) {
-        console.error('No user data found for userId:', userId);
-        return { profile: null, role: null, menuItems: [] };
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error from assign-role API:', errorData);
+        throw new Error(errorData.error || 'Failed to fetch user data');
       }
 
-      let roleId = userData.role_id;
-      console.log('User data:', { email: userData.email, role: userData.role, role_id: userData.role_id });
+      const data = await response.json();
+      console.log('User data from API:', data);
 
-      // If user doesn't have role_id, assign default role based on their string role or 'team'
-      if (!roleId) {
-        const roleName = userData.role || 'team';
-        console.log('Looking up role by name:', roleName);
-
-        const { data: defaultRole, error: roleError } = await supabase
-          .from('roles')
-          .select('id')
-          .eq('name', roleName)
-          .single();
-
-        if (roleError) {
-          console.error('Error looking up role:', roleError);
-        }
-
-        if (defaultRole) {
-          roleId = defaultRole.id;
-          console.log('Found role, assigning role_id:', roleId);
-
-          // Update the user's role_id in the database
-          const { error: updateError } = await supabase
-            .from('users')
-            .update({ role_id: roleId })
-            .eq('id', userId);
-
-          if (updateError) {
-            console.error('Error updating user role_id:', updateError);
-          }
-        } else {
-          console.error('No role found with name:', roleName);
-        }
-      }
-
-      const profile = { ...userData, role_id: roleId } as UserProfile;
-
-      // If user has role_id, fetch role and menu items from database
-      if (roleId) {
-        // Fetch role details
-        const { data: roleData, error: roleDetailError } = await supabase
-          .from('roles')
-          .select('*')
-          .eq('id', roleId)
-          .single();
-
-        if (roleDetailError) {
-          console.error('Error fetching role details:', roleDetailError);
-        }
-
-        // Fetch menu items for this role via role_permissions
-        const { data: permissionsData, error: permError } = await supabase
-          .from('role_permissions')
-          .select(`
-            menu_item_id,
-            menu_items (*)
-          `)
-          .eq('role_id', roleId);
-
-        if (permError) {
-          console.error('Error fetching permissions:', permError);
-        }
-
-        console.log('Permissions data:', permissionsData);
-
-        const menuItems = (permissionsData || [])
-          .map((p: any) => p.menu_items)
-          .filter((m: MenuItem | null): m is MenuItem => m !== null && m.is_active)
-          .sort((a: MenuItem, b: MenuItem) => a.display_order - b.display_order);
-
-        console.log('Menu items:', menuItems);
-
-        return {
-          profile,
-          role: roleData as Role,
-          menuItems,
-        };
-      }
-
-      // Fallback: no role_id set, return empty menu items
-      console.warn('No role_id found for user');
-      return { profile, role: null, menuItems: [] };
+      return {
+        profile: data.profile as UserProfile,
+        role: data.role as Role,
+        menuItems: (data.menuItems || []) as MenuItem[],
+      };
     } catch (error) {
       console.error('Error fetching user data:', error);
       return { profile: null, role: null, menuItems: [] };
