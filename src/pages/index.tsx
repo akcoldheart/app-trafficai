@@ -180,7 +180,7 @@ export default function Dashboard() {
   return (
     <Layout title="Dashboard" pageTitle={isAdmin ? "Admin Dashboard" : "Dashboard"} pagePretitle="Overview">
       {/* Welcome Banner */}
-      <div className="card mb-4" style={{ background: isAdmin ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)' : 'linear-gradient(135deg, var(--tblr-primary) 0%, #1a56db 100%)' }}>
+      <div className="card mb-4" style={{ background: isAdmin ? 'linear-gradient(135deg, rgb(137, 38, 220) 0%, rgb(153, 27, 27) 100%)' : 'linear-gradient(135deg, var(--tblr-primary) 0%, #1a56db 100%)' }}>
         <div className="card-body">
           <div className="row align-items-center">
             <div className="col-lg-7">
@@ -203,7 +203,7 @@ export default function Dashboard() {
               <div className="btn-list">
                 {isAdmin ? (
                   <>
-                    <Link href="/admin/users" className="btn bg-white text-danger">
+                    <Link href="/admin/users" className="btn bg-white text-purple">
                       <IconUsersGroup size={18} className="me-1" />
                       Manage Users
                     </Link>
