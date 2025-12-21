@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
+import { useAuth } from '@/contexts/AuthContext';
 import { TrafficAPI, Audience } from '@/lib/api';
 import {
   IconPlus,
@@ -17,6 +18,10 @@ import {
   IconStarFilled,
   IconUser,
   IconChartBar,
+  IconUsersGroup,
+  IconShieldCheck,
+  IconTrophy,
+  IconBuildingSkyscraper,
 } from '@tabler/icons-react';
 
 interface DashboardStats {
@@ -30,6 +35,11 @@ interface DashboardStats {
     eventsToday: number;
     activePixels: number;
     avgLeadScore: number;
+    // Admin-only fields
+    totalUsers?: number;
+    adminCount?: number;
+    teamCount?: number;
+    partnerCount?: number;
   };
   charts: {
     eventsByDay: { date: string; day: string; events: number }[];
@@ -46,11 +56,28 @@ interface DashboardStats {
     last_seen_at: string;
     is_identified: boolean;
     is_enriched: boolean;
+    user_id?: string;
   }[];
-  pixels: { id: string; name: string; domain: string; status: string; events_count: number }[];
+  pixels: { id: string; name: string; domain: string; status: string; events_count: number; user_id?: string }[];
+  // Admin-only: partner performance breakdown
+  partnerPerformance?: {
+    id: string;
+    email: string;
+    role: string;
+    company: string | null;
+    joinedAt: string;
+    stats: {
+      pixels: number;
+      activePixels: number;
+      visitors: number;
+      events: number;
+    };
+  }[];
 }
 
 export default function Dashboard() {
+  const { userProfile, loading: authLoading } = useAuth();
+  const isAdmin = userProfile?.role === 'admin';
   const [audiences, setAudiences] = useState<Audience[]>([]);
   const [totalAudiences, setTotalAudiences] = useState<number | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
@@ -59,13 +86,18 @@ export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
+    // Wait for auth to finish loading before fetching data
+    if (authLoading) return;
+
     loadDashboardData();
     loadDashboardStats();
-  }, []);
+  }, [authLoading, isAdmin]);
 
   const loadDashboardStats = async () => {
     try {
-      const response = await fetch('/api/dashboard/stats');
+      // Admin users get all-partners data
+      const endpoint = isAdmin ? '/api/admin/dashboard/stats' : '/api/dashboard/stats';
+      const response = await fetch(endpoint);
       const data = await response.json();
       if (response.ok) {
         setStats(data);
@@ -136,47 +168,162 @@ export default function Dashboard() {
   };
 
   return (
-    <Layout title="Dashboard" pageTitle="Dashboard" pagePretitle="Overview">
+    <Layout title="Dashboard" pageTitle={isAdmin ? "Admin Dashboard" : "Dashboard"} pagePretitle="Overview">
       {/* Welcome Banner */}
-      <div className="card mb-4" style={{ background: 'linear-gradient(135deg, var(--tblr-primary) 0%, #1a56db 100%)' }}>
+      <div className="card mb-4" style={{ background: isAdmin ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)' : 'linear-gradient(135deg, var(--tblr-primary) 0%, #1a56db 100%)' }}>
         <div className="card-body">
           <div className="row align-items-center">
             <div className="col-lg-7">
-              <h2 className="text-white mb-2">Welcome back!</h2>
+              <h2 className="text-white mb-2">
+                {isAdmin ? 'Admin Overview' : 'Welcome back!'}
+              </h2>
               <p className="text-white opacity-75 mb-3">
-                You have {stats?.overview.activePixels || 0} active pixel{(stats?.overview.activePixels || 0) !== 1 ? 's' : ''} tracking visitor data.
-                {stats?.overview.totalVisitors ? ` ${stats.overview.totalVisitors} visitors captured.` : ''}
+                {isAdmin ? (
+                  <>
+                    Monitoring {stats?.overview.totalUsers || 0} users across the platform.
+                    {stats?.overview.totalVisitors ? ` ${stats.overview.totalVisitors.toLocaleString()} total visitors captured.` : ''}
+                  </>
+                ) : (
+                  <>
+                    You have {stats?.overview.activePixels || 0} active pixel{(stats?.overview.activePixels || 0) !== 1 ? 's' : ''} tracking visitor data.
+                    {stats?.overview.totalVisitors ? ` ${stats.overview.totalVisitors} visitors captured.` : ''}
+                  </>
+                )}
               </p>
               <div className="btn-list">
-                <Link href="/pixels" className="btn bg-white text-primary">
-                  <IconCode size={18} className="me-1" />
-                  Manage Pixels
-                </Link>
-                <Link href="/visitors" className="btn btn-outline-light">
-                  <IconEye size={18} className="me-1" />
-                  View Visitors
-                </Link>
+                {isAdmin ? (
+                  <>
+                    <Link href="/admin/users" className="btn bg-white text-danger">
+                      <IconUsersGroup size={18} className="me-1" />
+                      Manage Users
+                    </Link>
+                    <Link href="/admin/roles" className="btn btn-outline-light">
+                      <IconShieldCheck size={18} className="me-1" />
+                      Manage Roles
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/pixels" className="btn bg-white text-primary">
+                      <IconCode size={18} className="me-1" />
+                      Manage Pixels
+                    </Link>
+                    <Link href="/visitors" className="btn btn-outline-light">
+                      <IconEye size={18} className="me-1" />
+                      View Visitors
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
             <div className="col-lg-5 d-none d-lg-block text-end">
               <div className="row text-white text-center">
-                <div className="col-4">
-                  <div className="display-6 fw-bold">{stats?.overview.totalVisitors?.toLocaleString() || 0}</div>
-                  <div className="opacity-75 small">Total Visitors</div>
-                </div>
-                <div className="col-4">
-                  <div className="display-6 fw-bold">{stats?.overview.totalEvents?.toLocaleString() || 0}</div>
-                  <div className="opacity-75 small">Total Events</div>
-                </div>
-                <div className="col-4">
-                  <div className="display-6 fw-bold">{stats?.overview.avgLeadScore || 0}</div>
-                  <div className="opacity-75 small">Avg Score</div>
-                </div>
+                {isAdmin ? (
+                  <>
+                    <div className="col-3">
+                      <div className="display-6 fw-bold">{stats?.overview.totalUsers || 0}</div>
+                      <div className="opacity-75 small">Users</div>
+                    </div>
+                    <div className="col-3">
+                      <div className="display-6 fw-bold">{stats?.overview.activePixels || 0}</div>
+                      <div className="opacity-75 small">Pixels</div>
+                    </div>
+                    <div className="col-3">
+                      <div className="display-6 fw-bold">{stats?.overview.totalVisitors?.toLocaleString() || 0}</div>
+                      <div className="opacity-75 small">Visitors</div>
+                    </div>
+                    <div className="col-3">
+                      <div className="display-6 fw-bold">{stats?.overview.totalEvents?.toLocaleString() || 0}</div>
+                      <div className="opacity-75 small">Events</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="col-4">
+                      <div className="display-6 fw-bold">{stats?.overview.totalVisitors?.toLocaleString() || 0}</div>
+                      <div className="opacity-75 small">Total Visitors</div>
+                    </div>
+                    <div className="col-4">
+                      <div className="display-6 fw-bold">{stats?.overview.totalEvents?.toLocaleString() || 0}</div>
+                      <div className="opacity-75 small">Total Events</div>
+                    </div>
+                    <div className="col-4">
+                      <div className="display-6 fw-bold">{stats?.overview.avgLeadScore || 0}</div>
+                      <div className="opacity-75 small">Avg Score</div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Admin: User Role Stats */}
+      {isAdmin && (
+        <div className="row row-deck row-cards mb-4">
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <span className="avatar bg-red-lt me-3">
+                    <IconShieldCheck size={24} />
+                  </span>
+                  <div>
+                    <div className="subheader text-muted">Admin Users</div>
+                    <div className="h2 mb-0">{stats?.overview.adminCount || 0}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <span className="avatar bg-blue-lt me-3">
+                    <IconUsersGroup size={24} />
+                  </span>
+                  <div>
+                    <div className="subheader text-muted">Team Members</div>
+                    <div className="h2 mb-0">{stats?.overview.teamCount || 0}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <span className="avatar bg-green-lt me-3">
+                    <IconBuildingSkyscraper size={24} />
+                  </span>
+                  <div>
+                    <div className="subheader text-muted">Partners</div>
+                    <div className="h2 mb-0">{stats?.overview.partnerCount || 0}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <span className="avatar bg-purple-lt me-3">
+                    <IconTrophy size={24} />
+                  </span>
+                  <div>
+                    <div className="subheader text-muted">Avg Lead Score</div>
+                    <div className="h2 mb-0">{stats?.overview.avgLeadScore || 0}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="row row-deck row-cards mb-4">
@@ -461,7 +608,7 @@ export default function Dashboard() {
         <div className="col-lg-4">
           <div className="card">
             <div className="card-header border-0">
-              <h3 className="card-title">Your Pixels</h3>
+              <h3 className="card-title">{isAdmin ? 'All Pixels' : 'Your Pixels'}</h3>
               <div className="card-actions">
                 <Link href="/pixels" className="btn btn-sm btn-outline-primary">
                   Manage
@@ -622,6 +769,111 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Admin: Partner Performance */}
+      {isAdmin && stats?.partnerPerformance && stats.partnerPerformance.length > 0 && (
+        <div className="row row-deck row-cards">
+          <div className="col-12">
+            <div className="card">
+              <div className="card-header border-0">
+                <h3 className="card-title">
+                  <IconTrophy size={20} className="me-2 text-yellow" />
+                  User Performance
+                </h3>
+                <div className="card-actions">
+                  <Link href="/admin/users" className="btn btn-sm btn-outline-primary">
+                    Manage Users
+                  </Link>
+                </div>
+              </div>
+              <div className="table-responsive">
+                <table className="table table-vcenter card-table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Role</th>
+                      <th className="text-center">Pixels</th>
+                      <th className="text-center">Visitors</th>
+                      <th className="text-center">Events</th>
+                      <th>Performance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.partnerPerformance.slice(0, 10).map((partner, index) => {
+                      const maxEvents = stats.partnerPerformance?.[0]?.stats.events || 1;
+                      const performancePercent = (partner.stats.events / maxEvents) * 100;
+                      return (
+                        <tr key={partner.id}>
+                          <td>
+                            <div className="d-flex align-items-center">
+                              <span className={`avatar avatar-sm me-2 ${
+                                partner.role === 'admin' ? 'bg-red-lt' :
+                                partner.role === 'team' ? 'bg-blue-lt' : 'bg-green-lt'
+                              }`}>
+                                {index === 0 ? (
+                                  <IconTrophy size={16} className="text-yellow" />
+                                ) : (
+                                  <IconUser size={16} />
+                                )}
+                              </span>
+                              <div>
+                                <div className="fw-semibold">{partner.email}</div>
+                                {partner.company && (
+                                  <div className="text-muted small">{partner.company}</div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`badge ${
+                              partner.role === 'admin' ? 'bg-red-lt text-red' :
+                              partner.role === 'team' ? 'bg-blue-lt text-blue' : 'bg-green-lt text-green'
+                            }`}>
+                              {partner.role}
+                            </span>
+                          </td>
+                          <td className="text-center">
+                            <span className="fw-semibold">{partner.stats.activePixels}</span>
+                            <span className="text-muted">/{partner.stats.pixels}</span>
+                          </td>
+                          <td className="text-center fw-semibold">{partner.stats.visitors.toLocaleString()}</td>
+                          <td className="text-center fw-semibold">{partner.stats.events.toLocaleString()}</td>
+                          <td>
+                            <div className="d-flex align-items-center">
+                              <div className="flex-fill me-2">
+                                <div className="progress" style={{ height: '8px' }}>
+                                  <div
+                                    className={`progress-bar ${
+                                      index === 0 ? 'bg-yellow' :
+                                      index === 1 ? 'bg-secondary' :
+                                      index === 2 ? 'bg-orange' : 'bg-primary'
+                                    }`}
+                                    style={{ width: `${performancePercent}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <span className="text-muted small" style={{ width: '40px' }}>
+                                {Math.round(performancePercent)}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {stats.partnerPerformance.length > 10 && (
+                <div className="card-footer text-center">
+                  <Link href="/admin/users" className="text-primary">
+                    View all {stats.partnerPerformance.length} users
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         @keyframes spin {

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import type { UserRole, Database, Json } from './supabase/types';
+import type { UserRole, Database, Json, Role } from './supabase/types';
 
 export interface ApiError {
   error: string;
@@ -11,6 +11,11 @@ export interface UserProfile {
   id: string;
   email: string;
   role: UserRole;
+  role_id: string | null;
+}
+
+export interface UserProfileWithRole extends UserProfile {
+  roleData: Role | null;
 }
 
 /**
@@ -48,7 +53,7 @@ export async function getUserProfile(
   const supabase = createClient(req, res);
   const { data, error } = await supabase
     .from('users')
-    .select('id, email, role')
+    .select('id, email, role, role_id')
     .eq('id', userId)
     .single();
 
@@ -57,26 +62,97 @@ export async function getUserProfile(
 }
 
 /**
+ * Get user profile with full role data from database
+ */
+export async function getUserProfileWithRole(
+  userId: string,
+  req: NextApiRequest,
+  res: NextApiResponse
+): Promise<UserProfileWithRole | null> {
+  const supabase = createClient(req, res);
+
+  // Get user with role_id
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select('id, email, role, role_id')
+    .eq('id', userId)
+    .single();
+
+  if (userError || !userData) return null;
+
+  // If user has role_id, fetch the role data
+  let roleData: Role | null = null;
+  if (userData.role_id) {
+    const { data: role } = await supabase
+      .from('roles')
+      .select('*')
+      .eq('id', userData.role_id)
+      .single();
+    roleData = role;
+  }
+
+  return {
+    ...(userData as UserProfile),
+    roleData,
+  };
+}
+
+/**
  * Check if user has required role
+ * Supports both string role names and database role IDs
  */
 export async function requireRole(
   req: NextApiRequest,
   res: NextApiResponse,
-  requiredRole: UserRole | UserRole[]
+  requiredRole: UserRole | UserRole[] | string | string[]
 ) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return null;
 
   try {
-    const profile = await getUserProfile(user.id, req, res);
+    const supabase = createClient(req, res);
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
 
-    if (!roles.includes(profile.role)) {
-      res.status(403).json({ error: 'Insufficient permissions' });
+    // Get user with role information
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id, email, role, role_id')
+      .eq('id', user.id)
+      .single();
+
+    if (userError || !userData) {
+      res.status(500).json({ error: 'Failed to fetch user profile' });
       return null;
     }
 
-    return { user, profile };
+    // Check role_id first (database-driven)
+    if (userData.role_id) {
+      const { data: roleData } = await supabase
+        .from('roles')
+        .select('name')
+        .eq('id', userData.role_id)
+        .single();
+
+      if (roleData && roles.includes(roleData.name)) {
+        return {
+          user,
+          profile: userData as UserProfile,
+          roleName: roleData.name
+        };
+      }
+    }
+
+    // Fallback to string role field for backward compatibility
+    if (userData.role && roles.includes(userData.role)) {
+      return {
+        user,
+        profile: userData as UserProfile,
+        roleName: userData.role
+      };
+    }
+
+    res.status(403).json({ error: 'Insufficient permissions' });
+    return null;
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
     return null;

@@ -2,19 +2,25 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import type { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
-import type { UserRole } from '@/lib/supabase/types';
+import type { Role, MenuItem } from '@/lib/supabase/types';
 import type { UserProfile } from '@/lib/auth';
+
 interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
+  userRole: Role | null;
+  userMenuItems: MenuItem[];
   session: Session | null;
   loading: boolean;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
+
 const AuthContext = createContext<AuthContextType>({
   user: null,
   userProfile: null,
+  userRole: null,
+  userMenuItems: [],
   session: null,
   loading: true,
   signOut: async () => {},
@@ -24,25 +30,67 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userRole, setUserRole] = useState<Role | null>(null);
+  const [userMenuItems, setUserMenuItems] = useState<MenuItem[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createClient();
 
-  // Fetch user profile from database
-  const fetchUserProfile = async (userId: string): Promise<UserProfile | null> => {
+  // Fetch user profile, role, and menu permissions from database
+  const fetchUserData = async (userId: string): Promise<{
+    profile: UserProfile | null;
+    role: Role | null;
+    menuItems: MenuItem[];
+  }> => {
     try {
-      const { data, error } = await supabase
+      // Fetch user profile
+      const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('id, email, role')
+        .select('id, email, role, role_id')
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
-      return data as UserProfile;
+      if (userError) throw userError;
+      if (!userData) return { profile: null, role: null, menuItems: [] };
+
+      const profile = userData as UserProfile;
+
+      // If user has role_id, fetch role and menu items from database
+      if (userData.role_id) {
+        // Fetch role details
+        const { data: roleData } = await supabase
+          .from('roles')
+          .select('*')
+          .eq('id', userData.role_id)
+          .single();
+
+        // Fetch menu items for this role via role_permissions
+        const { data: permissionsData } = await supabase
+          .from('role_permissions')
+          .select(`
+            menu_item_id,
+            menu_items (*)
+          `)
+          .eq('role_id', userData.role_id);
+
+        const menuItems = (permissionsData || [])
+          .map((p: any) => p.menu_items)
+          .filter((m: MenuItem | null): m is MenuItem => m !== null && m.is_active)
+          .sort((a: MenuItem, b: MenuItem) => a.display_order - b.display_order);
+
+        return {
+          profile,
+          role: roleData as Role,
+          menuItems,
+        };
+      }
+
+      // Fallback: no role_id set, return empty menu items
+      return { profile, role: null, menuItems: [] };
     } catch (error) {
-      console.error('Error fetching user profile:', error);
-      return null;
+      console.error('Error fetching user data:', error);
+      return { profile: null, role: null, menuItems: [] };
     }
   };
 
@@ -55,8 +103,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          const profile = await fetchUserProfile(session.user.id);
+          const { profile, role, menuItems } = await fetchUserData(session.user.id);
           setUserProfile(profile);
+          setUserRole(role);
+          setUserMenuItems(menuItems);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -74,10 +124,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          const profile = await fetchUserProfile(session.user.id);
+          const { profile, role, menuItems } = await fetchUserData(session.user.id);
           setUserProfile(profile);
+          setUserRole(role);
+          setUserMenuItems(menuItems);
         } else {
           setUserProfile(null);
+          setUserRole(null);
+          setUserMenuItems([]);
         }
 
         setLoading(false);
@@ -133,14 +187,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = async () => {
     if (user) {
-      const profile = await fetchUserProfile(user.id);
+      const { profile, role, menuItems } = await fetchUserData(user.id);
       setUserProfile(profile);
+      setUserRole(role);
+      setUserMenuItems(menuItems);
     }
   };
 
   const value = {
     user,
     userProfile,
+    userRole,
+    userMenuItems,
     session,
     loading,
     signOut,

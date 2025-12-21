@@ -18,6 +18,48 @@ export type UserRole = 'admin' | 'team' | 'partner';
 export type PixelStatus = 'active' | 'inactive' | 'pending';
 export type IntegrationType = 'facebook' | 'google' | 'email' | 'crm' | 'webhook';
 
+// RBAC Types
+export interface Role {
+  id: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MenuItem {
+  id: string;
+  name: string;
+  href: string;
+  icon: string;
+  display_order: number;
+  parent_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RolePermission {
+  id: string;
+  role_id: string;
+  menu_item_id: string;
+  created_at: string;
+}
+
+// Extended types with relations
+export interface RoleWithPermissions extends Role {
+  permissions: MenuItem[];
+}
+
+export interface RoleWithUserCount extends Role {
+  user_count: number;
+}
+
+export interface MenuItemWithChildren extends MenuItem {
+  children?: MenuItemWithChildren[];
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -26,6 +68,7 @@ export interface Database {
           id: string;
           email: string;
           role: UserRole;
+          role_id: string | null;
           company_website: string | null;
           created_at: string;
           updated_at: string;
@@ -34,6 +77,7 @@ export interface Database {
           id: string;
           email: string;
           role?: UserRole;
+          role_id?: string | null;
           company_website?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -42,6 +86,7 @@ export interface Database {
           id?: string;
           email?: string;
           role?: UserRole;
+          role_id?: string | null;
           company_website?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -513,6 +558,90 @@ export interface Database {
           metadata?: Json | null;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      roles: {
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          is_system: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          is_system?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          description?: string | null;
+          is_system?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      menu_items: {
+        Row: {
+          id: string;
+          name: string;
+          href: string;
+          icon: string;
+          display_order: number;
+          parent_id: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          href: string;
+          icon: string;
+          display_order?: number;
+          parent_id?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          href?: string;
+          icon?: string;
+          display_order?: number;
+          parent_id?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      role_permissions: {
+        Row: {
+          id: string;
+          role_id: string;
+          menu_item_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          role_id: string;
+          menu_item_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          role_id?: string;
+          menu_item_id?: string;
+          created_at?: string;
         };
         Relationships: [];
       };

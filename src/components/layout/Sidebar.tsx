@@ -1,88 +1,58 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { IconChartDots3, IconUsers, IconUserPlus, IconUserQuestion, IconSearch, IconSettings, IconCode, IconLogout, IconChevronUp, IconEye, IconShieldCheck, IconMessage, IconRobot } from '@tabler/icons-react';
+import {
+  IconChartDots3,
+  IconUsers,
+  IconUserPlus,
+  IconUserQuestion,
+  IconSearch,
+  IconSettings,
+  IconCode,
+  IconLogout,
+  IconChevronUp,
+  IconEye,
+  IconShieldCheck,
+  IconMessage,
+  IconRobot,
+  IconLock,
+  IconLayoutDashboard,
+  IconQuestionMark,
+} from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
 
-interface MenuItem {
-  title: string;
-  href: string;
-  icon: React.ReactNode;
-  adminOnly?: boolean;
-}
+// Icon mapping for database-driven menu items
+type IconComponent = React.ComponentType<{ className?: string; size?: string | number }>;
+const iconMap: Record<string, IconComponent> = {
+  IconChartDots3,
+  IconUsers,
+  IconUserPlus,
+  IconUserQuestion,
+  IconSearch,
+  IconSettings,
+  IconCode,
+  IconEye,
+  IconShieldCheck,
+  IconMessage,
+  IconRobot,
+  IconLock,
+  IconLayoutDashboard,
+};
 
-const menuItems: MenuItem[] = [
-  {
-    title: 'Dashboard',
-    href: '/',
-    icon: <IconChartDots3 className="icon" />,
-  },
-  {
-    title: 'Pixel Creation',
-    href: '/pixels',
-    icon: <IconCode className="icon" />,
-  },
-  {
-    title: 'Visitors',
-    href: '/visitors',
-    icon: <IconEye className="icon" />,
-  },
-  {
-    title: 'Audiences',
-    href: '/audiences',
-    icon: <IconUsers className="icon" />,
-  },
-  {
-    title: 'Create Audience',
-    href: '/audiences/create',
-    icon: <IconUserPlus className="icon" />,
-  },
-  {
-    title: 'Custom Audience',
-    href: '/audiences/custom',
-    icon: <IconUserQuestion className="icon" />,
-  },
-  {
-    title: 'Contact Enrichment',
-    href: '/enrich',
-    icon: <IconSearch className="icon" />,
-  },
-  {
-    title: 'Messages',
-    href: '/chat',
-    icon: <IconMessage className="icon" />,
-  },
-  {
-    title: 'Auto Replies',
-    href: '/chat/auto-replies',
-    icon: <IconRobot className="icon" />,
-  },
-  {
-    title: 'Settings',
-    href: '/settings',
-    icon: <IconSettings className="icon" />,
-  },
-  {
-    title: 'Admin Users',
-    href: '/admin/users',
-    icon: <IconShieldCheck className="icon" />,
-    adminOnly: true,
-  },
-];
+// Get icon component by name
+const getIcon = (iconName: string) => {
+  const IconComponent = iconMap[iconName] || IconQuestionMark;
+  return <IconComponent className="icon" />;
+};
 
 export default function Sidebar() {
   const router = useRouter();
-  const { user, userProfile, signOut } = useAuth();
+  const { user, userProfile, userMenuItems, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  // Filter menu items based on user role
-  const visibleMenuItems = menuItems.filter(item => {
-    if (item.adminOnly) {
-      return userProfile?.role === 'admin';
-    }
-    return true;
-  });
+  // Use database-driven menu items (already sorted by display_order in AuthContext)
+  const visibleMenuItems = userMenuItems;
 
   // Get display name from user metadata or email
   const getUserDisplayName = () => {
@@ -192,12 +162,12 @@ export default function Sidebar() {
         <div className="collapse navbar-collapse" id="sidebar-menu">
           <ul className="navbar-nav pt-lg-3">
             {visibleMenuItems.map((item) => (
-              <li key={item.href} className={`nav-item ${isActive(item.href) ? 'active' : ''}`}>
+              <li key={item.id} className={`nav-item ${isActive(item.href) ? 'active' : ''}`}>
                 <Link href={item.href} className={`nav-link ${isActive(item.href) ? 'active' : ''}`}>
                   <span className="nav-link-icon d-md-none d-lg-inline-block">
-                    {item.icon}
+                    {getIcon(item.icon)}
                   </span>
-                  <span className="nav-link-title">{item.title}</span>
+                  <span className="nav-link-title">{item.name}</span>
                 </Link>
               </li>
             ))}

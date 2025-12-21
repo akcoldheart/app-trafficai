@@ -19,11 +19,13 @@ import {
   IconEye,
   IconEyeOff,
 } from '@tabler/icons-react';
+import type { Role } from '@/lib/supabase/types';
 
 interface User {
   id: string;
   email: string;
   role: 'admin' | 'team' | 'partner';
+  role_id: string | null;
   company_website: string | null;
   created_at: string;
   updated_at: string;
@@ -35,6 +37,7 @@ export default function AdminUsers() {
   const { userProfile, loading: authLoading } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,6 +69,19 @@ export default function AdminUsers() {
     }
   }, []);
 
+  const fetchRoles = useCallback(async () => {
+    try {
+      const response = await fetch('/api/admin/roles');
+      const data = await response.json();
+
+      if (response.ok) {
+        setRoles(data.roles || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch roles:', err);
+    }
+  }, []);
+
   useEffect(() => {
     // Redirect non-admin users
     if (!authLoading && userProfile && userProfile.role !== 'admin') {
@@ -75,8 +91,9 @@ export default function AdminUsers() {
 
     if (!authLoading && userProfile?.role === 'admin') {
       fetchUsers();
+      fetchRoles();
     }
-  }, [authLoading, userProfile, router, fetchUsers]);
+  }, [authLoading, userProfile, router, fetchUsers, fetchRoles]);
 
   const handleOpenApiKeyModal = async (user: User) => {
     setSelectedUser(user);
@@ -162,12 +179,15 @@ export default function AdminUsers() {
     }
   };
 
-  const handleRoleChange = async (userId: string, newRole: 'admin' | 'team' | 'partner') => {
+  const handleRoleChange = async (userId: string, roleId: string) => {
+    const selectedRole = roles.find(r => r.id === roleId);
+    if (!selectedRole) return;
+
     try {
       const response = await fetch(`/api/admin/users/${userId}/role`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: newRole }),
+        body: JSON.stringify({ role_id: roleId }),
       });
 
       if (!response.ok) {
@@ -176,7 +196,7 @@ export default function AdminUsers() {
       }
 
       setUsers(users.map(u =>
-        u.id === userId ? { ...u, role: newRole } : u
+        u.id === userId ? { ...u, role: selectedRole.name as 'admin' | 'team' | 'partner', role_id: roleId } : u
       ));
     } catch (err) {
       alert((err as Error).message);
@@ -305,13 +325,23 @@ export default function AdminUsers() {
                     <td>
                       <select
                         className={`form-select form-select-sm ${getRoleBadgeClass(user.role)}`}
-                        value={user.role}
-                        onChange={(e) => handleRoleChange(user.id, e.target.value as 'admin' | 'team' | 'partner')}
-                        style={{ width: '100px' }}
+                        value={user.role_id || ''}
+                        onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                        style={{ width: '120px' }}
                       >
-                        <option value="admin">Admin</option>
-                        <option value="team">Team</option>
-                        <option value="partner">Partner</option>
+                        {roles.length === 0 ? (
+                          <>
+                            <option value="admin">Admin</option>
+                            <option value="team">Team</option>
+                            <option value="partner">Partner</option>
+                          </>
+                        ) : (
+                          roles.map((role) => (
+                            <option key={role.id} value={role.id}>
+                              {role.name.charAt(0).toUpperCase() + role.name.slice(1)}
+                            </option>
+                          ))
+                        )}
                       </select>
                     </td>
                     <td>

@@ -1,5 +1,5 @@
 import type { User } from '@supabase/supabase-js';
-import type { UserRole } from './supabase/types';
+import type { UserRole, Role, MenuItem } from './supabase/types';
 
 /**
  * Auth utility functions
@@ -9,6 +9,12 @@ export interface UserProfile {
   id: string;
   email: string;
   role: UserRole;
+  role_id: string | null;
+}
+
+export interface UserRoleData {
+  role: Role | null;
+  menuItems: MenuItem[];
 }
 
 /**

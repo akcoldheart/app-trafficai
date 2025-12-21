@@ -14,30 +14,70 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { user } = auth;
   const { id } = req.query;
-  const { role } = req.body as { role: UserRole };
+  const { role, role_id } = req.body as { role?: UserRole; role_id?: string };
 
   if (!id || typeof id !== 'string') {
     return res.status(400).json({ error: 'Invalid user ID' });
   }
 
-  if (!role || !['admin', 'team', 'partner'].includes(role)) {
-    return res.status(400).json({ error: 'Invalid role' });
-  }
-
   const supabase = createClient(req, res);
 
   try {
+    // Prepare update data
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    // If role_id is provided (database-driven), use it
+    if (role_id) {
+      // Verify role exists
+      const { data: roleData, error: roleError } = await supabase
+        .from('roles')
+        .select('id, name')
+        .eq('id', role_id)
+        .single();
+
+      if (roleError || !roleData) {
+        return res.status(400).json({ error: 'Invalid role ID' });
+      }
+
+      updateData.role_id = role_id;
+      // Also update string role for backward compatibility
+      updateData.role = roleData.name;
+    }
+    // If role string is provided (backward compatibility)
+    else if (role) {
+      if (!['admin', 'team', 'partner'].includes(role)) {
+        return res.status(400).json({ error: 'Invalid role' });
+      }
+
+      updateData.role = role;
+
+      // Try to find matching role_id
+      const { data: roleData } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', role)
+        .single();
+
+      if (roleData) {
+        updateData.role_id = roleData.id;
+      }
+    } else {
+      return res.status(400).json({ error: 'Role or role_id is required' });
+    }
+
     const { data, error } = await supabase
       .from('users')
       // @ts-ignore - Supabase type inference issue
-      .update({ role, updated_at: new Date().toISOString() })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw error;
 
-    await logAuditAction(user.id, 'update_user_role', req, res, 'user', id, { role });
+    await logAuditAction(user.id, 'update_user_role', req, res, 'user', id, updateData);
     return res.status(200).json(data);
   } catch (error) {
     console.error('API Error:', error);
