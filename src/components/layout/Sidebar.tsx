@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import {
@@ -52,7 +52,22 @@ export default function Sidebar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Use database-driven menu items (already sorted by display_order in AuthContext)
-  const visibleMenuItems = userMenuItems;
+  // For partners, put Partner Dashboard at the top
+  const visibleMenuItems = useMemo(() => {
+    const isPartner = userProfile?.role === 'partner';
+    if (!isPartner || userMenuItems.length === 0) {
+      return userMenuItems;
+    }
+
+    // Find Partner Dashboard and move it to the top
+    const partnerDashboard = userMenuItems.find(item => item.href === '/partner/dashboard');
+    if (!partnerDashboard) {
+      return userMenuItems;
+    }
+
+    const otherItems = userMenuItems.filter(item => item.href !== '/partner/dashboard');
+    return [partnerDashboard, ...otherItems];
+  }, [userMenuItems, userProfile?.role]);
 
   // Get display name from user metadata or email
   const getUserDisplayName = () => {
