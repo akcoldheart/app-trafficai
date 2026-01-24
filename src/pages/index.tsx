@@ -231,34 +231,34 @@ export default function Dashboard() {
                 {isAdmin ? (
                   <>
                     <div className="col-3">
-                      <div className="display-6 fw-bold">{stats?.overview.totalUsers || 0}</div>
+                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.totalUsers || 0}</div>
                       <div className="opacity-75 small">Users</div>
                     </div>
                     <div className="col-3">
-                      <div className="display-6 fw-bold">{stats?.overview.activePixels || 0}</div>
+                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.activePixels || 0}</div>
                       <div className="opacity-75 small">Pixels</div>
                     </div>
                     <div className="col-3">
-                      <div className="display-6 fw-bold">{stats?.overview.totalVisitors?.toLocaleString() || 0}</div>
+                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.totalVisitors?.toLocaleString() || 0}</div>
                       <div className="opacity-75 small">Visitors</div>
                     </div>
                     <div className="col-3">
-                      <div className="display-6 fw-bold">{stats?.overview.totalEvents?.toLocaleString() || 0}</div>
+                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.totalEvents?.toLocaleString() || 0}</div>
                       <div className="opacity-75 small">Events</div>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="col-4">
-                      <div className="display-6 fw-bold">{stats?.overview.totalVisitors?.toLocaleString() || 0}</div>
+                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.totalVisitors?.toLocaleString() || 0}</div>
                       <div className="opacity-75 small">Total Visitors</div>
                     </div>
                     <div className="col-4">
-                      <div className="display-6 fw-bold">{stats?.overview.totalEvents?.toLocaleString() || 0}</div>
+                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.totalEvents?.toLocaleString() || 0}</div>
                       <div className="opacity-75 small">Total Events</div>
                     </div>
                     <div className="col-4">
-                      <div className="display-6 fw-bold">{stats?.overview.avgLeadScore || 0}</div>
+                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.avgLeadScore || 0}</div>
                       <div className="opacity-75 small">Avg Score</div>
                     </div>
                   </>
