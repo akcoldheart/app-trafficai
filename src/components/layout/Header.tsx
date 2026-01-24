@@ -105,7 +105,7 @@ export default function Header() {
 
     // Navigate to relevant page
     if (notification.reference_type === 'pixel_request') {
-      router.push('/admin/pixel-requests');
+      router.push('/pixels');
     } else if (notification.reference_type === 'audience_request') {
       router.push('/admin/audience-requests');
     }
@@ -263,7 +263,7 @@ export default function Header() {
                     ))}
                     <div className="dropdown-divider"></div>
                     <Link
-                      href="/admin/pixel-requests"
+                      href="/pixels"
                       className="dropdown-item text-center text-primary"
                       onClick={() => setNotificationDropdownOpen(false)}
                     >

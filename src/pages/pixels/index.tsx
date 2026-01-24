@@ -16,8 +16,17 @@ import {
   IconAlertCircle,
   IconClock,
   IconX,
+  IconUser,
+  IconSearch,
+  IconEdit,
+  IconDeviceFloppy,
 } from '@tabler/icons-react';
 import type { Pixel, PixelStatus, PixelRequest, RequestStatus } from '@/lib/supabase/types';
+
+interface UserOption {
+  id: string;
+  email: string;
+}
 
 export default function Pixels() {
   const { userProfile } = useAuth();
@@ -34,6 +43,21 @@ export default function Pixels() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'pixels' | 'requests'>('pixels');
 
+  // Admin-specific state
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [customInstallationCode, setCustomInstallationCode] = useState('');
+  const [useCustomCode, setUseCustomCode] = useState(false);
+  const [processing, setProcessing] = useState(false);
+
+  // Edit mode state
+  const [editingCode, setEditingCode] = useState(false);
+  const [editedCode, setEditedCode] = useState('');
+  const [savingCode, setSavingCode] = useState(false);
+
   const fetchPixels = useCallback(async () => {
     try {
       setLoading(true);
@@ -45,7 +69,6 @@ export default function Pixels() {
       }
 
       setPixels(data.pixels || []);
-      // Auto-select first pixel if none selected
       if (data.pixels?.length > 0 && !selectedPixel) {
         setSelectedPixel(data.pixels[0]);
       }
@@ -58,10 +81,9 @@ export default function Pixels() {
   }, [selectedPixel]);
 
   const fetchPixelRequests = useCallback(async () => {
-    if (isAdmin) return; // Admin doesn't need to see requests here, they have the admin page
-
     try {
-      const response = await fetch('/api/pixel-requests');
+      const url = isAdmin ? '/api/pixel-requests' : '/api/pixel-requests';
+      const response = await fetch(url);
       const data = await response.json();
 
       if (response.ok) {
@@ -72,12 +94,27 @@ export default function Pixels() {
     }
   }, [isAdmin]);
 
+  const fetchUsers = async () => {
+    if (!isAdmin) return;
+    setLoadingUsers(true);
+    try {
+      const response = await fetch('/api/admin/users');
+      const data = await response.json();
+      if (response.ok && data.users) {
+        setUsers(data.users.map((u: { id: string; email: string }) => ({ id: u.id, email: u.email })));
+      }
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
   useEffect(() => {
     fetchPixels();
     fetchPixelRequests();
   }, [fetchPixels, fetchPixelRequests]);
 
-  // Get the base URL for the pixel script and API
   const getBaseUrl = () => {
     if (typeof window !== 'undefined') {
       return window.location.origin;
@@ -85,9 +122,12 @@ export default function Pixels() {
     return process.env.NEXT_PUBLIC_APP_URL || 'https://app.trafficai.io';
   };
 
-  const generatePixelCode = (pixel: Pixel) => {
+  const getInstallationCode = (pixel: Pixel) => {
+    if (pixel.custom_installation_code) {
+      return pixel.custom_installation_code;
+    }
     const baseUrl = getBaseUrl();
-    const version = '1.1.0'; // Increment this when pixel.js is updated
+    const version = '1.1.0';
     return `<!-- Traffic AI Pixel - ${pixel.name} -->
 <script>
   (function(t,r,a,f,i,c){
@@ -106,13 +146,69 @@ export default function Pixels() {
 <!-- End Traffic AI Pixel -->`;
   };
 
+  // Open create modal for admin
+  const handleOpenCreateModal = () => {
+    setShowCreateModal(true);
+    setSelectedUserId('');
+    setUserSearchTerm('');
+    setNewPixel({ name: '', domain: '' });
+    setCustomInstallationCode('');
+    setUseCustomCode(false);
+    fetchUsers();
+  };
+
+  const handleCloseCreateModal = () => {
+    setShowCreateModal(false);
+    setSelectedUserId('');
+    setNewPixel({ name: '', domain: '' });
+    setCustomInstallationCode('');
+    setUseCustomCode(false);
+  };
+
+  // Admin create pixel for user
+  const handleAdminCreatePixel = async () => {
+    if (!newPixel.name || !newPixel.domain || !selectedUserId) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const response = await fetch('/api/admin/pixels/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newPixel.name,
+          domain: newPixel.domain,
+          user_id: selectedUserId,
+          custom_installation_code: useCustomCode ? customInstallationCode.trim() : undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create pixel');
+      }
+
+      setPixels([data.pixel, ...pixels]);
+      setSelectedPixel(data.pixel);
+      handleCloseCreateModal();
+      alert('Pixel created successfully!');
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Regular user create/request
   const handleCreatePixel = async () => {
     if (!newPixel.name || !newPixel.domain) return;
 
     setCreating(true);
     try {
       if (isAdmin) {
-        // Admin can create pixels directly
         const response = await fetch('/api/pixels', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -130,7 +226,6 @@ export default function Pixels() {
         setShowCreateForm(false);
         setSelectedPixel(data.pixel);
       } else {
-        // Non-admin users submit a request
         const response = await fetch('/api/pixel-requests', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -153,6 +248,70 @@ export default function Pixels() {
       alert((err as Error).message);
     } finally {
       setCreating(false);
+    }
+  };
+
+  // Approve request
+  const handleApproveRequest = async (request: PixelRequest) => {
+    if (!confirm(`Approve pixel request "${request.name}" for ${request.user?.email}?`)) return;
+
+    setProcessing(true);
+    try {
+      const response = await fetch(`/api/admin/pixel-requests/${request.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_notes: '' }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to approve request');
+      }
+
+      // Update requests list
+      setPixelRequests(pixelRequests.filter(r => r.id !== request.id));
+      // Add new pixel to list
+      if (data.pixel) {
+        setPixels([data.pixel, ...pixels]);
+        setSelectedPixel(data.pixel);
+        setActiveTab('pixels');
+      }
+      alert('Request approved! Pixel created successfully.');
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Reject request
+  const handleRejectRequest = async (request: PixelRequest) => {
+    const reason = prompt('Enter rejection reason (optional):');
+    if (reason === null) return; // User cancelled
+
+    setProcessing(true);
+    try {
+      const response = await fetch(`/api/admin/pixel-requests/${request.id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_notes: reason }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reject request');
+      }
+
+      setPixelRequests(pixelRequests.map(r =>
+        r.id === request.id ? { ...r, status: 'rejected' as RequestStatus, admin_notes: reason } : r
+      ));
+      alert('Request rejected.');
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -202,6 +361,45 @@ export default function Pixels() {
     }
   };
 
+  // Edit installation code
+  const handleEditCode = () => {
+    if (!selectedPixel) return;
+    setEditedCode(selectedPixel.custom_installation_code || '');
+    setEditingCode(true);
+  };
+
+  const handleSaveCode = async () => {
+    if (!selectedPixel) return;
+
+    setSavingCode(true);
+    try {
+      const response = await fetch(`/api/pixels/${selectedPixel.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          custom_installation_code: editedCode.trim() || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update pixel');
+      }
+
+      // Update pixel in state
+      const updatedPixel = { ...selectedPixel, custom_installation_code: editedCode.trim() || null };
+      setPixels(pixels.map(p => p.id === selectedPixel.id ? updatedPixel : p));
+      setSelectedPixel(updatedPixel);
+      setEditingCode(false);
+      alert('Installation code updated!');
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setSavingCode(false);
+    }
+  };
+
   const copyToClipboard = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -210,29 +408,24 @@ export default function Pixels() {
 
   const getStatusBadgeClass = (status: PixelStatus) => {
     switch (status) {
-      case 'active':
-        return 'bg-green-lt text-green';
-      case 'pending':
-        return 'bg-yellow-lt text-yellow';
-      default:
-        return 'bg-secondary-lt';
+      case 'active': return 'bg-green-lt text-green';
+      case 'pending': return 'bg-yellow-lt text-yellow';
+      default: return 'bg-secondary-lt';
     }
   };
 
   const getRequestStatusBadgeClass = (status: RequestStatus) => {
     switch (status) {
-      case 'approved':
-        return 'bg-green-lt text-green';
-      case 'rejected':
-        return 'bg-red-lt text-red';
-      case 'pending':
-        return 'bg-yellow-lt text-yellow';
-      default:
-        return 'bg-secondary-lt';
+      case 'approved': return 'bg-green-lt text-green';
+      case 'rejected': return 'bg-red-lt text-red';
+      case 'pending': return 'bg-yellow-lt text-yellow';
+      default: return 'bg-secondary-lt';
     }
   };
 
   const pendingRequestCount = pixelRequests.filter(r => r.status === 'pending').length;
+  const filteredUsers = users.filter(u => u.email.toLowerCase().includes(userSearchTerm.toLowerCase()));
+  const selectedUser = users.find(u => u.id === selectedUserId);
 
   if (loading) {
     return (
@@ -243,12 +436,7 @@ export default function Pixels() {
             <p className="text-muted">Loading pixels...</p>
           </div>
         </div>
-        <style jsx>{`
-          @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+        <style jsx>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </Layout>
     );
   }
@@ -260,8 +448,7 @@ export default function Pixels() {
           <div className="d-flex align-items-center">
             <div className="flex-fill">{error}</div>
             <button className="btn btn-outline-danger btn-sm" onClick={fetchPixels}>
-              <IconRefresh size={16} className="me-1" />
-              Retry
+              <IconRefresh size={16} className="me-1" />Retry
             </button>
           </div>
         </div>
@@ -276,20 +463,24 @@ export default function Pixels() {
         <div className="col-lg-4">
           <div className="card">
             <div className="card-header">
-              <h3 className="card-title">Your Pixels</h3>
+              <h3 className="card-title">{isAdmin ? 'All Pixels' : 'Your Pixels'}</h3>
               <div className="card-actions">
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setShowCreateForm(true)}
-                >
-                  <IconPlus size={16} className="me-1" />
-                  {isAdmin ? 'New Pixel' : 'Request Pixel'}
-                </button>
+                {isAdmin ? (
+                  <button className="btn btn-primary btn-sm" onClick={handleOpenCreateModal}>
+                    <IconPlus size={16} className="me-1" />
+                    Create for User
+                  </button>
+                ) : (
+                  <button className="btn btn-primary btn-sm" onClick={() => setShowCreateForm(true)}>
+                    <IconPlus size={16} className="me-1" />
+                    Request Pixel
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Tabs for non-admin users */}
-            {!isAdmin && pixelRequests.length > 0 && (
+            {/* Tabs */}
+            {(isAdmin || pixelRequests.length > 0) && (
               <div className="card-header border-0 pt-0">
                 <ul className="nav nav-tabs card-header-tabs">
                   <li className="nav-item">
@@ -315,9 +506,9 @@ export default function Pixels() {
               </div>
             )}
 
-            <div className="list-group list-group-flush">
-              {/* Create/Request Form */}
-              {showCreateForm && (
+            <div className="list-group list-group-flush" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+              {/* Create Form for non-admin */}
+              {!isAdmin && showCreateForm && (
                 <div className="list-group-item p-3" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
                   <div className="mb-3">
                     <label className="form-label">Pixel Name</label>
@@ -327,56 +518,35 @@ export default function Pixels() {
                       placeholder="e.g., Main Website"
                       value={newPixel.name}
                       onChange={(e) => setNewPixel({ ...newPixel, name: e.target.value })}
-                      autoFocus
                       disabled={creating}
                     />
                   </div>
                   <div className="mb-3">
                     <label className="form-label">Domain</label>
-                    <div className="input-group input-group-sm">
-                      <span className="input-group-text">
-                        <IconWorldWww size={14} />
-                      </span>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="example.com"
-                        value={newPixel.domain}
-                        onChange={(e) => setNewPixel({ ...newPixel, domain: e.target.value })}
-                        disabled={creating}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      placeholder="example.com"
+                      value={newPixel.domain}
+                      onChange={(e) => setNewPixel({ ...newPixel, domain: e.target.value })}
+                      disabled={creating}
+                    />
                   </div>
-                  {!isAdmin && (
-                    <div className="alert alert-info py-2 mb-3" style={{ fontSize: '12px' }}>
-                      <IconInfoCircle size={14} className="me-1" />
-                      Your request will be reviewed by an admin before the pixel is created.
-                    </div>
-                  )}
+                  <div className="alert alert-info py-2 mb-3" style={{ fontSize: '12px' }}>
+                    <IconInfoCircle size={14} className="me-1" />
+                    Your request will be reviewed by an admin.
+                  </div>
                   <div className="d-flex gap-2">
                     <button
                       className="btn btn-primary btn-sm flex-fill"
                       onClick={handleCreatePixel}
                       disabled={!newPixel.name || !newPixel.domain || creating}
                     >
-                      {creating ? (
-                        <>
-                          <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
-                          {isAdmin ? 'Creating...' : 'Submitting...'}
-                        </>
-                      ) : (
-                        <>
-                          <IconCheck size={14} className="me-1" />
-                          {isAdmin ? 'Create' : 'Submit Request'}
-                        </>
-                      )}
+                      {creating ? 'Submitting...' : 'Submit Request'}
                     </button>
                     <button
                       className="btn btn-outline-secondary btn-sm"
-                      onClick={() => {
-                        setShowCreateForm(false);
-                        setNewPixel({ name: '', domain: '' });
-                      }}
+                      onClick={() => { setShowCreateForm(false); setNewPixel({ name: '', domain: '' }); }}
                       disabled={creating}
                     >
                       Cancel
@@ -385,49 +555,39 @@ export default function Pixels() {
                 </div>
               )}
 
-              {/* Pixel List or Requests based on active tab */}
-              {(isAdmin || activeTab === 'pixels') ? (
+              {/* Pixels Tab */}
+              {activeTab === 'pixels' && (
                 <>
-                  {pixels.length === 0 && !showCreateForm ? (
+                  {pixels.length === 0 ? (
                     <div className="list-group-item text-center py-4">
-                      <div className="mb-3">
-                        <span className="avatar avatar-xl bg-primary-lt">
-                          <IconCode size={32} className="text-primary" />
-                        </span>
-                      </div>
+                      <IconCode size={32} className="text-muted mb-2" />
                       <h4 className="mb-2">No pixels yet</h4>
-                      <p className="text-muted mb-3">
-                        {isAdmin
-                          ? 'Create your first pixel to start tracking visitors'
-                          : 'Request your first pixel to start tracking visitors'}
+                      <p className="text-muted mb-0" style={{ fontSize: '13px' }}>
+                        {isAdmin ? 'Create pixels for users to start tracking' : 'Request a pixel to get started'}
                       </p>
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => setShowCreateForm(true)}
-                      >
-                        <IconPlus size={16} className="me-1" />
-                        {isAdmin ? 'Create Pixel' : 'Request Pixel'}
-                      </button>
                     </div>
                   ) : (
                     pixels.map((pixel) => (
                       <div
                         key={pixel.id}
                         className={`list-group-item list-group-item-action d-flex align-items-center ${selectedPixel?.id === pixel.id ? 'active' : ''}`}
-                        onClick={() => setSelectedPixel(pixel)}
+                        onClick={() => { setSelectedPixel(pixel); setEditingCode(false); }}
                         style={{ cursor: 'pointer' }}
                       >
                         <span className={`avatar avatar-sm me-3 ${pixel.status === 'active' ? 'bg-green-lt' : 'bg-azure-lt'}`}>
                           <IconCode size={16} />
                         </span>
-                        <div className="flex-fill">
+                        <div className="flex-fill" style={{ minWidth: 0 }}>
                           <div className="d-flex align-items-center">
-                            <span className="fw-semibold">{pixel.name}</span>
+                            <span className="fw-semibold text-truncate">{pixel.name}</span>
                             <span className={`badge ms-2 ${getStatusBadgeClass(pixel.status)}`} style={{ fontSize: '10px' }}>
                               {pixel.status}
                             </span>
+                            {pixel.custom_installation_code && (
+                              <span className="badge bg-purple-lt text-purple ms-1" style={{ fontSize: '9px' }}>custom</span>
+                            )}
                           </div>
-                          <div className={`text-${selectedPixel?.id === pixel.id ? 'white-50' : 'muted'}`} style={{ fontSize: '12px' }}>
+                          <div className={`text-truncate ${selectedPixel?.id === pixel.id ? 'text-white-50' : 'text-muted'}`} style={{ fontSize: '12px' }}>
                             {pixel.domain}
                           </div>
                         </div>
@@ -436,49 +596,73 @@ export default function Pixels() {
                     ))
                   )}
                 </>
-              ) : (
-                // Requests List for non-admin users
+              )}
+
+              {/* Requests Tab */}
+              {activeTab === 'requests' && (
                 <>
-                  {pixelRequests.length === 0 ? (
+                  {pixelRequests.filter(r => isAdmin || r.status === 'pending').length === 0 ? (
                     <div className="list-group-item text-center py-4">
                       <p className="text-muted mb-0">No pending requests</p>
                     </div>
                   ) : (
-                    pixelRequests.map((request) => (
-                      <div
-                        key={request.id}
-                        className="list-group-item d-flex align-items-center"
-                      >
-                        <span className={`avatar avatar-sm me-3 ${getRequestStatusBadgeClass(request.status)}`}>
-                          {request.status === 'pending' && <IconClock size={16} />}
-                          {request.status === 'approved' && <IconCheck size={16} />}
-                          {request.status === 'rejected' && <IconX size={16} />}
-                        </span>
-                        <div className="flex-fill">
-                          <div className="d-flex align-items-center">
-                            <span className="fw-semibold">{request.name}</span>
-                            <span className={`badge ms-2 ${getRequestStatusBadgeClass(request.status)}`} style={{ fontSize: '10px' }}>
-                              {request.status}
-                            </span>
-                          </div>
-                          <div className="text-muted" style={{ fontSize: '12px' }}>
-                            {request.domain}
-                          </div>
-                          {request.admin_notes && (
-                            <div className="text-muted small mt-1">
-                              Note: {request.admin_notes}
+                    pixelRequests.filter(r => isAdmin || r.status === 'pending').map((request) => (
+                      <div key={request.id} className="list-group-item">
+                        <div className="d-flex align-items-start">
+                          <span className={`avatar avatar-sm me-3 ${getRequestStatusBadgeClass(request.status)}`}>
+                            {request.status === 'pending' && <IconClock size={16} />}
+                            {request.status === 'approved' && <IconCheck size={16} />}
+                            {request.status === 'rejected' && <IconX size={16} />}
+                          </span>
+                          <div className="flex-fill" style={{ minWidth: 0 }}>
+                            <div className="d-flex align-items-center">
+                              <span className="fw-semibold">{request.name}</span>
+                              <span className={`badge ms-2 ${getRequestStatusBadgeClass(request.status)}`} style={{ fontSize: '10px' }}>
+                                {request.status}
+                              </span>
                             </div>
-                          )}
+                            <div className="text-muted" style={{ fontSize: '12px' }}>{request.domain}</div>
+                            {isAdmin && request.user?.email && (
+                              <div className="text-muted" style={{ fontSize: '11px' }}>
+                                <IconUser size={12} className="me-1" />{request.user.email}
+                              </div>
+                            )}
+                            {request.admin_notes && (
+                              <div className="text-muted small mt-1">Note: {request.admin_notes}</div>
+                            )}
+                          </div>
+                          <div className="d-flex gap-1">
+                            {isAdmin && request.status === 'pending' && (
+                              <>
+                                <button
+                                  className="btn btn-success btn-sm"
+                                  onClick={() => handleApproveRequest(request)}
+                                  disabled={processing}
+                                  title="Approve"
+                                >
+                                  <IconCheck size={14} />
+                                </button>
+                                <button
+                                  className="btn btn-danger btn-sm"
+                                  onClick={() => handleRejectRequest(request)}
+                                  disabled={processing}
+                                  title="Reject"
+                                >
+                                  <IconX size={14} />
+                                </button>
+                              </>
+                            )}
+                            {!isAdmin && request.status === 'pending' && (
+                              <button
+                                className="btn btn-ghost-danger btn-sm"
+                                onClick={() => handleDeleteRequest(request.id)}
+                                title="Cancel"
+                              >
+                                <IconTrash size={14} />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        {request.status === 'pending' && (
-                          <button
-                            className="btn btn-ghost-danger btn-sm"
-                            onClick={() => handleDeleteRequest(request.id)}
-                            title="Cancel request"
-                          >
-                            <IconTrash size={16} />
-                          </button>
-                        )}
                       </div>
                     ))
                   )}
@@ -488,7 +672,7 @@ export default function Pixels() {
           </div>
         </div>
 
-        {/* Right Column - Pixel Details & Code */}
+        {/* Right Column - Pixel Details */}
         <div className="col-lg-8">
           {selectedPixel ? (
             <div className="card">
@@ -496,48 +680,39 @@ export default function Pixels() {
                 <div>
                   <h3 className="card-title d-flex align-items-center">
                     {selectedPixel.name}
-                    <span className={`badge ms-2 ${getStatusBadgeClass(selectedPixel.status)}`}>
-                      {selectedPixel.status}
-                    </span>
+                    <span className={`badge ms-2 ${getStatusBadgeClass(selectedPixel.status)}`}>{selectedPixel.status}</span>
+                    {selectedPixel.custom_installation_code && (
+                      <span className="badge bg-purple-lt text-purple ms-1">Custom Code</span>
+                    )}
                   </h3>
                   <div className="text-muted" style={{ fontSize: '13px' }}>
-                    <IconWorldWww size={14} className="me-1" />
-                    {selectedPixel.domain}
+                    <IconWorldWww size={14} className="me-1" />{selectedPixel.domain}
                   </div>
                 </div>
                 <div className="card-actions">
-                  <button
-                    className="btn btn-ghost-danger btn-sm"
-                    onClick={() => handleDeletePixel(selectedPixel.id)}
-                  >
-                    <IconTrash size={16} className="me-1" />
-                    Delete
+                  <button className="btn btn-ghost-danger btn-sm" onClick={() => handleDeletePixel(selectedPixel.id)}>
+                    <IconTrash size={16} className="me-1" />Delete
                   </button>
                 </div>
               </div>
               <div className="card-body">
-                {/* Stats Row */}
+                {/* Stats */}
                 <div className="row g-3 mb-4">
                   <div className="col-md-4">
                     <div className="card card-sm">
                       <div className="card-body">
                         <div className="d-flex align-items-center">
-                          <span className="avatar bg-primary-lt me-3">
-                            <IconCode size={20} />
-                          </span>
+                          <span className="avatar bg-primary-lt me-3"><IconCode size={20} /></span>
                           <div className="flex-fill">
                             <div className="text-muted" style={{ fontSize: '12px' }}>Pixel ID</div>
                             <div className="d-flex align-items-center gap-2">
-                              <code className="fw-semibold" style={{ fontSize: '12px' }}>
-                                {selectedPixel.pixel_code}
-                              </code>
+                              <code style={{ fontSize: '11px' }}>{selectedPixel.pixel_code}</code>
                               <button
                                 className={`btn btn-icon btn-sm ${copiedId === 'pixelId' ? 'btn-success' : 'btn-ghost-secondary'}`}
                                 onClick={() => copyToClipboard(selectedPixel.pixel_code, 'pixelId')}
-                                title="Copy Pixel ID"
                                 style={{ padding: '2px 6px' }}
                               >
-                                {copiedId === 'pixelId' ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                                {copiedId === 'pixelId' ? <IconCheck size={12} /> : <IconCopy size={12} />}
                               </button>
                             </div>
                           </div>
@@ -549,11 +724,9 @@ export default function Pixels() {
                     <div className="card card-sm">
                       <div className="card-body">
                         <div className="d-flex align-items-center">
-                          <span className="avatar bg-green-lt me-3">
-                            <IconCircleCheck size={20} />
-                          </span>
+                          <span className="avatar bg-green-lt me-3"><IconCircleCheck size={20} /></span>
                           <div>
-                            <div className="text-muted" style={{ fontSize: '12px' }}>Events Captured</div>
+                            <div className="text-muted" style={{ fontSize: '12px' }}>Events</div>
                             <div className="fw-semibold">{selectedPixel.events_count.toLocaleString()}</div>
                           </div>
                         </div>
@@ -577,90 +750,104 @@ export default function Pixels() {
                   </div>
                 </div>
 
-                {/* Installation Instructions */}
+                {/* Installation Code */}
                 <div className="mb-4">
-                  <h4 className="mb-3">Installation Code</h4>
-                  <div className="alert alert-info mb-3">
-                    <div className="d-flex align-items-start">
-                      <IconInfoCircle size={20} className="me-2 flex-shrink-0 mt-1" />
-                      <div>
-                        Copy this code and paste it in the <code>&lt;head&gt;</code> section of your website,
-                        just before the closing <code>&lt;/head&gt;</code> tag.
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h4 className="mb-0">Installation Code</h4>
+                    {isAdmin && !editingCode && (
+                      <button className="btn btn-outline-primary btn-sm" onClick={handleEditCode}>
+                        <IconEdit size={14} className="me-1" />Edit Code
+                      </button>
+                    )}
+                  </div>
+
+                  {editingCode ? (
+                    <div>
+                      <textarea
+                        className="form-control font-monospace mb-2"
+                        rows={12}
+                        value={editedCode}
+                        onChange={(e) => setEditedCode(e.target.value)}
+                        placeholder="Enter custom installation code or leave empty to use auto-generated code"
+                        style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0' }}
+                      />
+                      <div className="d-flex gap-2">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={handleSaveCode}
+                          disabled={savingCode}
+                        >
+                          {savingCode ? (
+                            <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Saving...</>
+                          ) : (
+                            <><IconDeviceFloppy size={14} className="me-1" />Save Code</>
+                          )}
+                        </button>
+                        <button
+                          className="btn btn-outline-secondary btn-sm"
+                          onClick={() => setEditingCode(false)}
+                          disabled={savingCode}
+                        >
+                          Cancel
+                        </button>
+                        {editedCode && (
+                          <button
+                            className="btn btn-outline-danger btn-sm"
+                            onClick={() => setEditedCode('')}
+                            disabled={savingCode}
+                          >
+                            Clear (Use Auto)
+                          </button>
+                        )}
                       </div>
+                      <small className="text-muted d-block mt-2">
+                        Leave empty to use the auto-generated Traffic AI pixel code.
+                      </small>
                     </div>
-                  </div>
-                  <div className="position-relative">
-                    <pre
-                      className="p-3 rounded mb-0"
-                      style={{
-                        backgroundColor: '#1e293b',
-                        color: '#e2e8f0',
-                        fontSize: '13px',
-                        lineHeight: '1.6',
-                        overflow: 'auto',
-                        border: '1px solid #334155',
-                        maxHeight: '300px'
-                      }}
-                    >
-                      <code>{generatePixelCode(selectedPixel)}</code>
-                    </pre>
-                    <button
-                      className={`btn ${copiedId === 'code' ? 'btn-success' : 'btn-primary'} position-absolute`}
-                      style={{ top: '12px', right: '12px' }}
-                      onClick={() => copyToClipboard(generatePixelCode(selectedPixel), 'code')}
-                    >
-                      {copiedId === 'code' ? (
-                        <>
-                          <IconCheck size={16} className="me-1" />
-                          Copied!
-                        </>
-                      ) : (
-                        <>
-                          <IconCopy size={16} className="me-1" />
-                          Copy Code
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="alert alert-info mb-3">
+                        <IconInfoCircle size={18} className="me-2" />
+                        Copy this code and paste it in the <code>&lt;head&gt;</code> section of your website.
+                      </div>
+                      <div className="position-relative">
+                        <pre
+                          className="p-3 rounded mb-0"
+                          style={{ backgroundColor: '#1e293b', color: '#e2e8f0', fontSize: '12px', lineHeight: '1.5', overflow: 'auto', maxHeight: '250px' }}
+                        >
+                          <code>{getInstallationCode(selectedPixel)}</code>
+                        </pre>
+                        <button
+                          className={`btn ${copiedId === 'code' ? 'btn-success' : 'btn-primary'} position-absolute`}
+                          style={{ top: '12px', right: '12px' }}
+                          onClick={() => copyToClipboard(getInstallationCode(selectedPixel), 'code')}
+                        >
+                          {copiedId === 'code' ? <><IconCheck size={16} className="me-1" />Copied!</> : <><IconCopy size={16} className="me-1" />Copy Code</>}
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                {/* Quick Install Options */}
+                {/* Quick Install */}
                 <div>
-                  <h4 className="mb-3">Quick Installation Options</h4>
+                  <h4 className="mb-3">Quick Installation</h4>
                   <div className="row g-3">
-                    <div className="col-md-4">
-                      <div className="card card-sm card-link" style={{ cursor: 'pointer' }}>
-                        <div className="card-body text-center py-3">
-                          <div className="mb-2">
-                            <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/wordpress/wordpress-original.svg" alt="WordPress" width="32" height="32" />
+                    {[
+                      { name: 'WordPress', icon: 'wordpress/wordpress-original.svg', desc: 'Plugin or theme editor' },
+                      { name: 'Shopify', icon: 'woocommerce/woocommerce-original.svg', desc: 'Add to theme.liquid' },
+                      { name: 'Manual', icon: 'html5/html5-original.svg', desc: 'Paste in HTML head' },
+                    ].map((opt) => (
+                      <div className="col-md-4" key={opt.name}>
+                        <div className="card card-sm card-link" style={{ cursor: 'pointer' }}>
+                          <div className="card-body text-center py-3">
+                            <img src={`https://cdn.jsdelivr.net/gh/devicons/devicon/icons/${opt.icon}`} alt={opt.name} width="28" height="28" className="mb-2" />
+                            <div className="fw-semibold" style={{ fontSize: '13px' }}>{opt.name}</div>
+                            <div className="text-muted" style={{ fontSize: '11px' }}>{opt.desc}</div>
                           </div>
-                          <div className="fw-semibold" style={{ fontSize: '13px' }}>WordPress</div>
-                          <div className="text-muted" style={{ fontSize: '11px' }}>Use plugin or theme editor</div>
                         </div>
                       </div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="card card-sm card-link" style={{ cursor: 'pointer' }}>
-                        <div className="card-body text-center py-3">
-                          <div className="mb-2">
-                            <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/woocommerce/woocommerce-original.svg" alt="Shopify" width="32" height="32" />
-                          </div>
-                          <div className="fw-semibold" style={{ fontSize: '13px' }}>Shopify</div>
-                          <div className="text-muted" style={{ fontSize: '11px' }}>Add to theme.liquid</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-4">
-                      <div className="card card-sm card-link" style={{ cursor: 'pointer' }}>
-                        <div className="card-body text-center py-3">
-                          <div className="mb-2">
-                            <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/html5/html5-original.svg" alt="HTML" width="32" height="32" />
-                          </div>
-                          <div className="fw-semibold" style={{ fontSize: '13px' }}>Manual Install</div>
-                          <div className="text-muted" style={{ fontSize: '11px' }}>Paste in HTML head</div>
-                        </div>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -668,27 +855,138 @@ export default function Pixels() {
           ) : (
             <div className="card">
               <div className="card-body text-center py-5">
-                <div className="mb-3">
-                  <span className="avatar avatar-xl bg-azure-lt">
-                    <IconCode size={32} className="text-azure" />
-                  </span>
-                </div>
-                <h3 className="mb-2">Select a Pixel</h3>
-                <p className="text-muted mb-0">
-                  Choose a pixel from the list to view its installation code and details
-                </p>
+                <span className="avatar avatar-xl bg-azure-lt mb-3"><IconCode size={32} /></span>
+                <h3>Select a Pixel</h3>
+                <p className="text-muted mb-0">Choose a pixel from the list to view details</p>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      <style jsx>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      {/* Create Pixel for User Modal (Admin only) */}
+      {showCreateModal && isAdmin && (
+        <div className="modal modal-blur show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title"><IconPlus className="icon me-2" />Create Pixel for User</h5>
+                <button type="button" className="btn-close" onClick={handleCloseCreateModal} />
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label required">Select User</label>
+                  <div className="input-group mb-2">
+                    <span className="input-group-text"><IconSearch size={16} /></span>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Search users by email..."
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  {selectedUser && (
+                    <div className="alert alert-success py-2 mb-2">
+                      <strong>Selected:</strong> {selectedUser.email}
+                    </div>
+                  )}
+                  <div className="list-group" style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                    {loadingUsers ? (
+                      <div className="list-group-item text-center"><IconLoader2 size={20} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} /></div>
+                    ) : filteredUsers.length === 0 ? (
+                      <div className="list-group-item text-center text-muted">No users found</div>
+                    ) : (
+                      filteredUsers.slice(0, 8).map((user) => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          className={`list-group-item list-group-item-action d-flex align-items-center ${selectedUserId === user.id ? 'active' : ''}`}
+                          onClick={() => setSelectedUserId(user.id)}
+                        >
+                          <span className={`avatar avatar-xs ${selectedUserId === user.id ? 'bg-white text-primary' : 'bg-blue-lt'} me-2`}>
+                            <IconUser size={12} />
+                          </span>
+                          {user.email}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="row">
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label required">Pixel Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g., Main Website"
+                        value={newPixel.name}
+                        onChange={(e) => setNewPixel({ ...newPixel, name: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-md-6">
+                    <div className="mb-3">
+                      <label className="form-label required">Domain</label>
+                      <div className="input-group">
+                        <span className="input-group-text"><IconWorldWww size={16} /></span>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="example.com"
+                          value={newPixel.domain}
+                          onChange={(e) => setNewPixel({ ...newPixel, domain: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-check form-switch">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      checked={useCustomCode}
+                      onChange={(e) => setUseCustomCode(e.target.checked)}
+                    />
+                    <span className="form-check-label">Use custom installation code</span>
+                  </label>
+                </div>
+
+                {useCustomCode && (
+                  <div className="mb-3">
+                    <label className="form-label">Custom Installation Code</label>
+                    <textarea
+                      className="form-control font-monospace"
+                      rows={8}
+                      placeholder="<!-- Your custom tracking code -->"
+                      value={customInstallationCode}
+                      onChange={(e) => setCustomInstallationCode(e.target.value)}
+                      style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0' }}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={handleCloseCreateModal} disabled={processing}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleAdminCreatePixel}
+                  disabled={processing || !selectedUserId || !newPixel.name || !newPixel.domain}
+                >
+                  {processing ? <><IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Creating...</> : <><IconPlus size={16} className="me-1" />Create Pixel</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </Layout>
   );
 }

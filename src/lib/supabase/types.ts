@@ -199,6 +199,7 @@ export interface Database {
           last_event_at: string | null;
           created_at: string;
           updated_at: string;
+          custom_installation_code: string | null;
         };
         Insert: {
           id?: string;
@@ -211,6 +212,7 @@ export interface Database {
           last_event_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          custom_installation_code?: string | null;
         };
         Update: {
           id?: string;
@@ -223,6 +225,7 @@ export interface Database {
           last_event_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          custom_installation_code?: string | null;
         };
         Relationships: [];
       };
