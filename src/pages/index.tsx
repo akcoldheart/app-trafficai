@@ -226,8 +226,8 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
-            <div className="col-lg-5 d-none d-lg-block text-end">
-              <div className="row text-white text-center">
+            <div className="col-lg-5 d-none d-lg-block">
+              <div className="row text-white text-center" style={{ marginRight: '2rem' }}>
                 {isAdmin ? (
                   <>
                     <div className="col-3">
