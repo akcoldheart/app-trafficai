@@ -26,64 +26,71 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     yesterday.setDate(yesterday.getDate() - 1);
     const lastWeek = new Date(today);
     lastWeek.setDate(lastWeek.getDate() - 7);
-    const lastMonth = new Date(today);
-    lastMonth.setMonth(lastMonth.getMonth() - 1);
 
-    // Get ALL pixels (not filtered by user)
-    const { data: allPixels } = await supabase
-      .from('pixels')
-      .select('id, name, domain, status, events_count, user_id');
+    // Run independent queries in parallel for better performance
+    const [
+      pixelsResult,
+      totalVisitorsResult,
+      identifiedVisitorsResult,
+      enrichedVisitorsResult,
+      visitorsTodayResult,
+      visitorsYesterdayResult,
+      recentVisitorsResult,
+      allUsersResult,
+      visitorsByUserResult,
+    ] = await Promise.all([
+      // Get ALL pixels
+      supabase.from('pixels').select('id, name, domain, status, events_count, user_id'),
+      // Visitor counts
+      supabase.from('visitors').select('*', { count: 'exact', head: true }),
+      supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('is_identified', true),
+      supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('is_enriched', true),
+      supabase.from('visitors').select('*', { count: 'exact', head: true }).gte('last_seen_at', today.toISOString()),
+      supabase.from('visitors').select('*', { count: 'exact', head: true }).gte('last_seen_at', yesterday.toISOString()).lt('last_seen_at', today.toISOString()),
+      // Recent visitors
+      supabase.from('visitors').select('id, full_name, email, company, lead_score, last_seen_at, is_identified, is_enriched, user_id').order('last_seen_at', { ascending: false }).limit(10),
+      // Users
+      supabase.from('users').select('id, email, role, company_website, created_at'),
+      // Visitor counts by user
+      supabase.from('visitors').select('user_id'),
+    ]);
+
+    const allPixels = pixelsResult.data;
+    const totalVisitors = totalVisitorsResult.count;
+    const identifiedVisitors = identifiedVisitorsResult.count;
+    const enrichedVisitors = enrichedVisitorsResult.count;
+    const visitorsToday = visitorsTodayResult.count;
+    const visitorsYesterday = visitorsYesterdayResult.count;
+    const recentVisitors = recentVisitorsResult.data;
+    const allUsers = allUsersResult.data;
+    const visitorsByUser = visitorsByUserResult.data;
 
     const allPixelIds = allPixels?.map(p => p.id) || [];
     const activePixels = allPixels?.filter(p => p.status === 'active').length || 0;
     const totalEvents = allPixels?.reduce((sum, p) => sum + (p.events_count || 0), 0) || 0;
+    const pixelFilter = allPixelIds.length > 0 ? allPixelIds : ['00000000-0000-0000-0000-000000000000'];
 
-    // Get ALL visitor stats
-    const { count: totalVisitors } = await supabase
-      .from('visitors')
-      .select('*', { count: 'exact', head: true });
+    // Run event queries in parallel (these depend on pixel IDs)
+    const [
+      eventsTodayResult,
+      eventsLastWeekResult,
+      avgLeadScoreResult,
+    ] = await Promise.all([
+      supabase.from('pixel_events').select('*', { count: 'exact', head: true }).in('pixel_id', pixelFilter).gte('created_at', today.toISOString()),
+      supabase.from('pixel_events').select('created_at, event_type, page_url').in('pixel_id', pixelFilter).gte('created_at', lastWeek.toISOString()).order('created_at', { ascending: true }).limit(10000),
+      supabase.from('visitors').select('lead_score').not('lead_score', 'is', null).limit(1000),
+    ]);
 
-    const { count: identifiedVisitors } = await supabase
-      .from('visitors')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_identified', true);
+    const eventsToday = eventsTodayResult.count;
+    const eventsLastWeek = eventsLastWeekResult.data;
+    const leadScoreData = avgLeadScoreResult.data;
 
-    const { count: enrichedVisitors } = await supabase
-      .from('visitors')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_enriched', true);
-
-    // Get visitors today
-    const { count: visitorsToday } = await supabase
-      .from('visitors')
-      .select('*', { count: 'exact', head: true })
-      .gte('last_seen_at', today.toISOString());
-
-    // Get visitors yesterday (for comparison)
-    const { count: visitorsYesterday } = await supabase
-      .from('visitors')
-      .select('*', { count: 'exact', head: true })
-      .gte('last_seen_at', yesterday.toISOString())
-      .lt('last_seen_at', today.toISOString());
-
-    // Get events today
-    const { count: eventsToday } = await supabase
-      .from('pixel_events')
-      .select('*', { count: 'exact', head: true })
-      .in('pixel_id', allPixelIds.length > 0 ? allPixelIds : ['00000000-0000-0000-0000-000000000000'])
-      .gte('created_at', today.toISOString());
-
-    // Get events last 7 days by day
-    const { data: eventsLastWeek } = await supabase
-      .from('pixel_events')
-      .select('created_at, event_type')
-      .in('pixel_id', allPixelIds.length > 0 ? allPixelIds : ['00000000-0000-0000-0000-000000000000'])
-      .gte('created_at', lastWeek.toISOString())
-      .order('created_at', { ascending: true });
-
-    // Aggregate events by day
+    // Aggregate events by day and type in one pass
     const eventsByDay: Record<string, number> = {};
     const pageviewsByDay: Record<string, number> = {};
+    const eventTypeCount: Record<string, number> = {};
+    const pageCount: Record<string, number> = {};
+
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
@@ -100,37 +107,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           pageviewsByDay[dateStr]++;
         }
       }
-    });
-
-    // Get event types distribution
-    const { data: eventTypes } = await supabase
-      .from('pixel_events')
-      .select('event_type')
-      .in('pixel_id', allPixelIds.length > 0 ? allPixelIds : ['00000000-0000-0000-0000-000000000000'])
-      .gte('created_at', lastWeek.toISOString());
-
-    const eventTypeCount: Record<string, number> = {};
-    eventTypes?.forEach(e => {
-      eventTypeCount[e.event_type] = (eventTypeCount[e.event_type] || 0) + 1;
-    });
-
-    // Get top pages
-    const { data: topPagesData } = await supabase
-      .from('pixel_events')
-      .select('page_url')
-      .in('pixel_id', allPixelIds.length > 0 ? allPixelIds : ['00000000-0000-0000-0000-000000000000'])
-      .eq('event_type', 'pageview')
-      .gte('created_at', lastWeek.toISOString());
-
-    const pageCount: Record<string, number> = {};
-    topPagesData?.forEach(e => {
-      if (!e.page_url) return;
-      try {
-        const url = new URL(e.page_url);
-        const path = url.pathname;
-        pageCount[path] = (pageCount[path] || 0) + 1;
-      } catch {
-        // Skip invalid URLs
+      // Count event types
+      eventTypeCount[event.event_type] = (eventTypeCount[event.event_type] || 0) + 1;
+      // Count pages for pageviews
+      if (event.event_type === 'pageview' && event.page_url) {
+        try {
+          const url = new URL(event.page_url);
+          pageCount[url.pathname] = (pageCount[url.pathname] || 0) + 1;
+        } catch {
+          // Skip invalid URLs
+        }
       }
     });
 
@@ -139,36 +125,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .slice(0, 5)
       .map(([page, views]) => ({ page, views }));
 
-    // Get recent visitors (all users)
-    const { data: recentVisitors } = await supabase
-      .from('visitors')
-      .select('id, full_name, email, company, lead_score, last_seen_at, is_identified, is_enriched, user_id')
-      .order('last_seen_at', { ascending: false })
-      .limit(10);
-
     // Calculate visitor change percentage
     const visitorChange = visitorsYesterday && visitorsYesterday > 0
       ? Math.round(((visitorsToday || 0) - visitorsYesterday) / visitorsYesterday * 100)
       : 0;
 
-    // Get average lead score
-    const { data: leadScoreData } = await supabase
-      .from('visitors')
-      .select('lead_score');
-
+    // Calculate average lead score
     const avgLeadScore = leadScoreData && leadScoreData.length > 0
-      ? Math.round(leadScoreData.reduce((sum, v) => sum + v.lead_score, 0) / leadScoreData.length)
+      ? Math.round(leadScoreData.reduce((sum, v) => sum + (v.lead_score || 0), 0) / leadScoreData.length)
       : 0;
-
-    // Get ALL users for partner breakdown
-    const { data: allUsers } = await supabase
-      .from('users')
-      .select('id, email, role, company_website, created_at');
-
-    // Get visitor counts per user
-    const { data: visitorsByUser } = await supabase
-      .from('visitors')
-      .select('user_id');
 
     // Count visitors by user
     const visitorCountByUser: Record<string, number> = {};
@@ -205,6 +170,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const adminCount = allUsers?.filter(u => u.role === 'admin').length || 0;
     const teamCount = allUsers?.filter(u => u.role === 'team').length || 0;
     const partnerCount = allUsers?.filter(u => u.role === 'partner').length || 0;
+    const totalEventTypes = eventsLastWeek?.length || 1;
 
     return res.status(200).json({
       overview: {
@@ -236,7 +202,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         eventTypes: Object.entries(eventTypeCount).map(([type, count]) => ({
           type,
           count,
-          percentage: Math.round(count / (eventTypes?.length || 1) * 100),
+          percentage: Math.round(count / totalEventTypes * 100),
         })),
       },
       topPages,

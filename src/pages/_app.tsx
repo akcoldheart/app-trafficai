@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import { AuthProvider } from '@/contexts/AuthContext';
 import ChatBubble from '@/components/ChatBubble';
 
@@ -10,6 +11,9 @@ import '@tabler/core/dist/css/tabler-themes.min.css';
 import '@/styles/globals.css';
 
 export default function App({ Component, pageProps }: AppProps) {
+  const router = useRouter();
+  const isAuthPage = router.pathname.startsWith('/auth');
+
   // Load Bootstrap JS on client-side only
   useEffect(() => {
     // Dynamically import Bootstrap JS for client-side functionality
@@ -27,7 +31,7 @@ export default function App({ Component, pageProps }: AppProps) {
       </Head>
       <AuthProvider>
         <Component {...pageProps} />
-        <ChatBubble />
+        {!isAuthPage && <ChatBubble />}
       </AuthProvider>
     </>
   );
