@@ -2,11 +2,15 @@ import { useEffect, useState, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
+import { useAuth } from '@/contexts/AuthContext';
 import { TrafficAPI } from '@/lib/api';
-import { IconPlus } from '@tabler/icons-react';
+import { IconPlus, IconInfoCircle } from '@tabler/icons-react';
 
 export default function CreateAudience() {
   const router = useRouter();
+  const { userProfile } = useAuth();
+  const isAdmin = userProfile?.role === 'admin';
+
   const [loading, setLoading] = useState(false);
   const [industries, setIndustries] = useState<string[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
@@ -56,55 +60,86 @@ export default function CreateAudience() {
     }
   };
 
+  const buildFormData = () => {
+    const filters: Record<string, unknown> = {};
+
+    // Age filter
+    if (minAge || maxAge) {
+      filters.age = {};
+      if (minAge) (filters.age as Record<string, number>).minAge = parseInt(minAge);
+      if (maxAge) (filters.age as Record<string, number>).maxAge = parseInt(maxAge);
+    }
+
+    // Gender filter
+    if (gender) filters.gender = gender;
+
+    // City filter
+    if (cities) {
+      filters.city = cities.split(',').map((c) => c.trim()).filter((c) => c);
+    }
+
+    // State filter
+    if (states) {
+      filters.state = states.split(',').map((s) => s.trim()).filter((s) => s);
+    }
+
+    // Business profile filters
+    const businessProfile: Record<string, string[]> = {};
+    if (selectedIndustries.length > 0) businessProfile.industry = selectedIndustries;
+    if (selectedDepartments.length > 0) businessProfile.department = selectedDepartments;
+    if (selectedSeniority.length > 0) businessProfile.seniority = selectedSeniority;
+    if (Object.keys(businessProfile).length > 0) filters.businessProfile = businessProfile;
+
+    // Segments
+    const segmentList = segments ? segments.split(',').map((s) => s.trim()).filter((s) => s) : [];
+
+    return {
+      filters,
+      days_back: daysBack,
+      ...(segmentList.length > 0 ? { segment: segmentList } : {}),
+    };
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const filters: Record<string, unknown> = {};
+      const formData = buildFormData();
 
-      // Age filter
-      if (minAge || maxAge) {
-        filters.age = {};
-        if (minAge) (filters.age as Record<string, number>).minAge = parseInt(minAge);
-        if (maxAge) (filters.age as Record<string, number>).maxAge = parseInt(maxAge);
+      if (isAdmin) {
+        // Admin can create audience directly
+        const data = {
+          name,
+          ...formData,
+        };
+
+        await TrafficAPI.createAudience(data);
+        alert('Audience created successfully!');
+        router.push('/audiences');
+      } else {
+        // Non-admin users submit a request
+        const response = await fetch('/api/audience-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            request_type: 'standard',
+            name,
+            form_data: formData,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to submit audience request');
+        }
+
+        alert('Your audience request has been submitted for admin approval.');
+        router.push('/audiences');
       }
-
-      // Gender filter
-      if (gender) filters.gender = gender;
-
-      // City filter
-      if (cities) {
-        filters.city = cities.split(',').map((c) => c.trim()).filter((c) => c);
-      }
-
-      // State filter
-      if (states) {
-        filters.state = states.split(',').map((s) => s.trim()).filter((s) => s);
-      }
-
-      // Business profile filters
-      const businessProfile: Record<string, string[]> = {};
-      if (selectedIndustries.length > 0) businessProfile.industry = selectedIndustries;
-      if (selectedDepartments.length > 0) businessProfile.department = selectedDepartments;
-      if (selectedSeniority.length > 0) businessProfile.seniority = selectedSeniority;
-      if (Object.keys(businessProfile).length > 0) filters.businessProfile = businessProfile;
-
-      // Segments
-      const segmentList = segments ? segments.split(',').map((s) => s.trim()).filter((s) => s) : [];
-
-      const data = {
-        name,
-        filters,
-        days_back: daysBack,
-        ...(segmentList.length > 0 ? { segment: segmentList } : {}),
-      };
-
-      await TrafficAPI.createAudience(data);
-      alert('Audience created successfully!');
-      router.push('/audiences');
     } catch (error) {
-      alert('Error creating audience: ' + (error as Error).message);
+      alert('Error: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -115,6 +150,21 @@ export default function CreateAudience() {
       <div className="row row-cards">
         <div className="col-lg-8">
           <form onSubmit={handleSubmit}>
+            {!isAdmin && (
+              <div className="alert alert-info mb-3">
+                <div className="d-flex align-items-start">
+                  <IconInfoCircle size={20} className="me-2 flex-shrink-0 mt-1" />
+                  <div>
+                    <h4 className="alert-title">Request Mode</h4>
+                    <p className="mb-0">
+                      Your audience request will be submitted for admin approval. Once approved,
+                      the audience will be created and available in your Audiences list.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="card">
               <div className="card-header">
                 <h3 className="card-title">Audience Details</h3>
@@ -323,12 +373,12 @@ export default function CreateAudience() {
                     {loading ? (
                       <>
                         <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                        Creating...
+                        {isAdmin ? 'Creating...' : 'Submitting...'}
                       </>
                     ) : (
                       <>
                         <IconPlus className="icon" />
-                        Create Audience
+                        {isAdmin ? 'Create Audience' : 'Submit Request'}
                       </>
                     )}
                   </button>

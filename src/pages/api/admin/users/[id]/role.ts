@@ -53,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     // If role string is provided (backward compatibility)
     else if (role) {
-      if (!['admin', 'team', 'partner'].includes(role)) {
+      if (!['admin', 'team', 'user'].includes(role)) {
         return res.status(400).json({ error: 'Invalid role' });
       }
 

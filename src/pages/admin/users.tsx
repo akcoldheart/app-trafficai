@@ -24,7 +24,7 @@ import type { Role } from '@/lib/supabase/types';
 interface User {
   id: string;
   email: string;
-  role: 'admin' | 'team' | 'partner';
+  role: 'admin' | 'team' | 'user';
   role_id: string | null;
   company_website: string | null;
   created_at: string;
@@ -196,7 +196,7 @@ export default function AdminUsers() {
       }
 
       setUsers(users.map(u =>
-        u.id === userId ? { ...u, role: selectedRole.name as 'admin' | 'team' | 'partner', role_id: roleId } : u
+        u.id === userId ? { ...u, role: selectedRole.name as 'admin' | 'team' | 'user', role_id: roleId } : u
       ));
     } catch (err) {
       alert((err as Error).message);
@@ -217,7 +217,7 @@ export default function AdminUsers() {
     switch (role) {
       case 'admin': return 'bg-red-lt text-red';
       case 'team': return 'bg-blue-lt text-blue';
-      case 'partner': return 'bg-green-lt text-green';
+      case 'user': return 'bg-green-lt text-green';
       default: return 'bg-secondary-lt';
     }
   };

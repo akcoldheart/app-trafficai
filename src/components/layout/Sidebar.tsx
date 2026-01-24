@@ -18,6 +18,7 @@ import {
   IconLock,
   IconLayoutDashboard,
   IconQuestionMark,
+  IconFileDescription,
 } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
@@ -38,6 +39,7 @@ const iconMap: Record<string, IconComponent> = {
   IconRobot,
   IconLock,
   IconLayoutDashboard,
+  IconFileDescription,
 };
 
 // Get icon component by name
@@ -52,22 +54,9 @@ export default function Sidebar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Use database-driven menu items (already sorted by display_order in AuthContext)
-  // For partners, put Partner Dashboard at the top
   const visibleMenuItems = useMemo(() => {
-    const isPartner = userProfile?.role === 'partner';
-    if (!isPartner || userMenuItems.length === 0) {
-      return userMenuItems;
-    }
-
-    // Find Partner Dashboard and move it to the top
-    const partnerDashboard = userMenuItems.find(item => item.href === '/partner/dashboard');
-    if (!partnerDashboard) {
-      return userMenuItems;
-    }
-
-    const otherItems = userMenuItems.filter(item => item.href !== '/partner/dashboard');
-    return [partnerDashboard, ...otherItems];
-  }, [userMenuItems, userProfile?.role]);
+    return userMenuItems;
+  }, [userMenuItems]);
 
   // Get display name from user metadata or email
   const getUserDisplayName = () => {

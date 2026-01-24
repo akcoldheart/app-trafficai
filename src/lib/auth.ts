@@ -39,10 +39,17 @@ export function isTeam(user: UserProfile | null): boolean {
 }
 
 /**
- * Check if user is a partner
+ * Check if user is a standard user
  */
-export function isPartner(user: UserProfile | null): boolean {
-  return hasRole(user, 'partner');
+export function isUser(user: UserProfile | null): boolean {
+  return hasRole(user, 'user');
+}
+
+/**
+ * Check if user requires approval for creating resources (non-admin)
+ */
+export function requiresApproval(user: UserProfile | null): boolean {
+  return !isAdmin(user);
 }
 
 /**
@@ -70,8 +77,8 @@ export function getUserDisplayName(user: UserProfile | User | null): string {
  */
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Admin',
-  team: 'Team Member',
-  partner: 'Partner',
+  team: 'Team',
+  user: 'User',
 };
 
 /**
@@ -88,7 +95,7 @@ export function getRoleBadgeClass(role: UserRole): string {
   const classes: Record<UserRole, string> = {
     admin: 'bg-danger',
     team: 'bg-primary',
-    partner: 'bg-info',
+    user: 'bg-info',
   };
   return classes[role];
 }

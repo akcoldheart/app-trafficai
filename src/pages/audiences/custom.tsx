@@ -1,12 +1,16 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
+import { useAuth } from '@/contexts/AuthContext';
 import { TrafficAPI } from '@/lib/api';
-import { IconPlus } from '@tabler/icons-react';
+import { IconPlus, IconInfoCircle } from '@tabler/icons-react';
 
 export default function CustomAudience() {
   const router = useRouter();
+  const { userProfile } = useAuth();
+  const isAdmin = userProfile?.role === 'admin';
+
   const [loading, setLoading] = useState(false);
   const [topic, setTopic] = useState('');
   const [description, setDescription] = useState('');
@@ -17,11 +21,37 @@ export default function CustomAudience() {
     setLoading(true);
 
     try {
-      const result = await TrafficAPI.createCustomAudience(topic, description);
-      alert('Custom audience created successfully! Status: ' + ((result as unknown as { Status?: string }).Status || 'processing'));
-      router.push('/audiences');
+      if (isAdmin) {
+        // Admin can create custom audience directly
+        const result = await TrafficAPI.createCustomAudience(topic, description);
+        alert('Custom audience created successfully! Status: ' + ((result as unknown as { Status?: string }).Status || 'processing'));
+        router.push('/audiences');
+      } else {
+        // Non-admin users submit a request
+        const response = await fetch('/api/audience-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            request_type: 'custom',
+            name: topic,
+            form_data: {
+              topic,
+              description,
+            },
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to submit custom audience request');
+        }
+
+        alert('Your custom audience request has been submitted for admin approval.');
+        router.push('/audiences');
+      }
     } catch (error) {
-      alert('Error creating custom audience: ' + (error as Error).message);
+      alert('Error: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -32,6 +62,21 @@ export default function CustomAudience() {
       <div className="row row-cards">
         <div className="col-lg-8">
           <form onSubmit={handleSubmit}>
+            {!isAdmin && (
+              <div className="alert alert-info mb-3">
+                <div className="d-flex align-items-start">
+                  <IconInfoCircle size={20} className="me-2 flex-shrink-0 mt-1" />
+                  <div>
+                    <h4 className="alert-title">Request Mode</h4>
+                    <p className="mb-0">
+                      Your custom audience request will be submitted for admin approval. Once approved,
+                      the audience will be created and available in your Audiences list.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="card">
               <div className="card-header">
                 <h3 className="card-title">Custom Audience Details</h3>
@@ -74,12 +119,12 @@ export default function CustomAudience() {
                     {loading ? (
                       <>
                         <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                        Creating...
+                        {isAdmin ? 'Creating...' : 'Submitting...'}
                       </>
                     ) : (
                       <>
                         <IconPlus className="icon" />
-                        Create Custom Audience
+                        {isAdmin ? 'Create Custom Audience' : 'Submit Request'}
                       </>
                     )}
                   </button>

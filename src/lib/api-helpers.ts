@@ -199,3 +199,56 @@ export async function logAuditAction(
     metadata: (metadata as Json) || null,
   });
 }
+
+/**
+ * Create an admin notification
+ */
+export async function createAdminNotification(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  type: string,
+  title: string,
+  message: string,
+  referenceId?: string,
+  referenceType?: string
+) {
+  const supabase = createClient(req, res);
+  const { error } = await supabase.from('admin_notifications').insert({
+    type,
+    title,
+    message,
+    reference_id: referenceId || null,
+    reference_type: referenceType || null,
+    is_read: false,
+  });
+
+  if (error) {
+    console.error('Failed to create admin notification:', error);
+  }
+}
+
+/**
+ * Check if user is an admin
+ */
+export async function isUserAdmin(
+  userId: string,
+  req: NextApiRequest,
+  res: NextApiResponse
+): Promise<boolean> {
+  const supabase = createClient(req, res);
+  const { data: userData } = await supabase
+    .from('users')
+    .select('role_id')
+    .eq('id', userId)
+    .single();
+
+  if (!userData?.role_id) return false;
+
+  const { data: roleData } = await supabase
+    .from('roles')
+    .select('name')
+    .eq('id', userData.role_id)
+    .single();
+
+  return roleData?.name === 'admin';
+}

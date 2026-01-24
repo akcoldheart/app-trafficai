@@ -169,7 +169,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const totalUsers = allUsers?.length || 0;
     const adminCount = allUsers?.filter(u => u.role === 'admin').length || 0;
     const teamCount = allUsers?.filter(u => u.role === 'team').length || 0;
-    const partnerCount = allUsers?.filter(u => u.role === 'partner').length || 0;
+    const userCount = allUsers?.filter(u => u.role === 'user').length || 0;
     const totalEventTypes = eventsLastWeek?.length || 1;
 
     return res.status(200).json({
@@ -186,7 +186,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         totalUsers,
         adminCount,
         teamCount,
-        partnerCount,
+        userCount,
       },
       charts: {
         eventsByDay: Object.entries(eventsByDay).map(([date, count]) => ({

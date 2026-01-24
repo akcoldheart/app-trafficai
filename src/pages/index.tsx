@@ -80,7 +80,6 @@ export default function Dashboard() {
   const router = useRouter();
   const { userProfile, loading: authLoading } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
-  const isPartner = userProfile?.role === 'partner';
   const [audiences, setAudiences] = useState<Audience[]>([]);
   const [totalAudiences, setTotalAudiences] = useState<number | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
@@ -88,20 +87,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
-  // Redirect partners to their dashboard
-  useEffect(() => {
-    if (!authLoading && isPartner) {
-      router.replace('/partner/dashboard');
-    }
-  }, [authLoading, isPartner, router]);
-
   useEffect(() => {
     // Wait for auth to finish loading before fetching data
-    if (authLoading || isPartner) return;
+    if (authLoading) return;
 
     loadDashboardData();
     loadDashboardStats();
-  }, [authLoading, isAdmin, isPartner]);
+  }, [authLoading, isAdmin]);
 
   const loadDashboardStats = async () => {
     try {

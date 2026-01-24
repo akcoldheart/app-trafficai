@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/layout/Layout';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   IconCode,
   IconCopy,
@@ -12,12 +13,18 @@ import {
   IconRefresh,
   IconChevronRight,
   IconCircleCheck,
-  IconAlertCircle
+  IconAlertCircle,
+  IconClock,
+  IconX,
 } from '@tabler/icons-react';
-import type { Pixel, PixelStatus } from '@/lib/supabase/types';
+import type { Pixel, PixelStatus, PixelRequest, RequestStatus } from '@/lib/supabase/types';
 
 export default function Pixels() {
+  const { userProfile } = useAuth();
+  const isAdmin = userProfile?.role === 'admin';
+
   const [pixels, setPixels] = useState<Pixel[]>([]);
+  const [pixelRequests, setPixelRequests] = useState<PixelRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPixel, setSelectedPixel] = useState<Pixel | null>(null);
@@ -25,6 +32,7 @@ export default function Pixels() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<'pixels' | 'requests'>('pixels');
 
   const fetchPixels = useCallback(async () => {
     try {
@@ -49,9 +57,25 @@ export default function Pixels() {
     }
   }, [selectedPixel]);
 
+  const fetchPixelRequests = useCallback(async () => {
+    if (isAdmin) return; // Admin doesn't need to see requests here, they have the admin page
+
+    try {
+      const response = await fetch('/api/pixel-requests');
+      const data = await response.json();
+
+      if (response.ok) {
+        setPixelRequests(data.requests || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch pixel requests:', err);
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     fetchPixels();
-  }, [fetchPixels]);
+    fetchPixelRequests();
+  }, [fetchPixels, fetchPixelRequests]);
 
   // Get the base URL for the pixel script and API
   const getBaseUrl = () => {
@@ -87,22 +111,44 @@ export default function Pixels() {
 
     setCreating(true);
     try {
-      const response = await fetch('/api/pixels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newPixel),
-      });
+      if (isAdmin) {
+        // Admin can create pixels directly
+        const response = await fetch('/api/pixels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newPixel),
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create pixel');
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to create pixel');
+        }
+
+        setPixels([data.pixel, ...pixels]);
+        setNewPixel({ name: '', domain: '' });
+        setShowCreateForm(false);
+        setSelectedPixel(data.pixel);
+      } else {
+        // Non-admin users submit a request
+        const response = await fetch('/api/pixel-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newPixel),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to submit pixel request');
+        }
+
+        setPixelRequests([data.request, ...pixelRequests]);
+        setNewPixel({ name: '', domain: '' });
+        setShowCreateForm(false);
+        setActiveTab('requests');
+        alert('Your pixel request has been submitted for admin approval.');
       }
-
-      setPixels([data.pixel, ...pixels]);
-      setNewPixel({ name: '', domain: '' });
-      setShowCreateForm(false);
-      setSelectedPixel(data.pixel);
     } catch (err) {
       alert((err as Error).message);
     } finally {
@@ -135,6 +181,27 @@ export default function Pixels() {
     }
   };
 
+  const handleDeleteRequest = async (id: string) => {
+    if (!confirm('Are you sure you want to cancel this request?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/pixel-requests/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete request');
+      }
+
+      setPixelRequests(pixelRequests.filter(r => r.id !== id));
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
   const copyToClipboard = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -151,6 +218,21 @@ export default function Pixels() {
         return 'bg-secondary-lt';
     }
   };
+
+  const getRequestStatusBadgeClass = (status: RequestStatus) => {
+    switch (status) {
+      case 'approved':
+        return 'bg-green-lt text-green';
+      case 'rejected':
+        return 'bg-red-lt text-red';
+      case 'pending':
+        return 'bg-yellow-lt text-yellow';
+      default:
+        return 'bg-secondary-lt';
+    }
+  };
+
+  const pendingRequestCount = pixelRequests.filter(r => r.status === 'pending').length;
 
   if (loading) {
     return (
@@ -201,118 +283,205 @@ export default function Pixels() {
                   onClick={() => setShowCreateForm(true)}
                 >
                   <IconPlus size={16} className="me-1" />
-                  New Pixel
+                  {isAdmin ? 'New Pixel' : 'Request Pixel'}
                 </button>
               </div>
             </div>
+
+            {/* Tabs for non-admin users */}
+            {!isAdmin && pixelRequests.length > 0 && (
+              <div className="card-header border-0 pt-0">
+                <ul className="nav nav-tabs card-header-tabs">
+                  <li className="nav-item">
+                    <button
+                      className={`nav-link ${activeTab === 'pixels' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('pixels')}
+                    >
+                      Pixels ({pixels.length})
+                    </button>
+                  </li>
+                  <li className="nav-item">
+                    <button
+                      className={`nav-link ${activeTab === 'requests' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('requests')}
+                    >
+                      Requests
+                      {pendingRequestCount > 0 && (
+                        <span className="badge bg-yellow-lt text-yellow ms-1">{pendingRequestCount}</span>
+                      )}
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            )}
+
             <div className="list-group list-group-flush">
-              {pixels.length === 0 && !showCreateForm ? (
-                <div className="list-group-item text-center py-4">
+              {/* Create/Request Form */}
+              {showCreateForm && (
+                <div className="list-group-item p-3" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
                   <div className="mb-3">
-                    <span className="avatar avatar-xl bg-primary-lt">
-                      <IconCode size={32} className="text-primary" />
-                    </span>
+                    <label className="form-label">Pixel Name</label>
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      placeholder="e.g., Main Website"
+                      value={newPixel.name}
+                      onChange={(e) => setNewPixel({ ...newPixel, name: e.target.value })}
+                      autoFocus
+                      disabled={creating}
+                    />
                   </div>
-                  <h4 className="mb-2">No pixels yet</h4>
-                  <p className="text-muted mb-3">Create your first pixel to start tracking visitors</p>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => setShowCreateForm(true)}
-                  >
-                    <IconPlus size={16} className="me-1" />
-                    Create Pixel
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* Create Form */}
-                  {showCreateForm && (
-                    <div className="list-group-item p-3" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
-                      <div className="mb-3">
-                        <label className="form-label">Pixel Name</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g., Main Website"
-                          value={newPixel.name}
-                          onChange={(e) => setNewPixel({ ...newPixel, name: e.target.value })}
-                          autoFocus
-                          disabled={creating}
-                        />
-                      </div>
-                      <div className="mb-3">
-                        <label className="form-label">Domain</label>
-                        <div className="input-group input-group-sm">
-                          <span className="input-group-text">
-                            <IconWorldWww size={14} />
-                          </span>
-                          <input
-                            type="text"
-                            className="form-control"
-                            placeholder="example.com"
-                            value={newPixel.domain}
-                            onChange={(e) => setNewPixel({ ...newPixel, domain: e.target.value })}
-                            disabled={creating}
-                          />
-                        </div>
-                      </div>
-                      <div className="d-flex gap-2">
-                        <button
-                          className="btn btn-primary btn-sm flex-fill"
-                          onClick={handleCreatePixel}
-                          disabled={!newPixel.name || !newPixel.domain || creating}
-                        >
-                          {creating ? (
-                            <>
-                              <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
-                              Creating...
-                            </>
-                          ) : (
-                            <>
-                              <IconCheck size={14} className="me-1" />
-                              Create
-                            </>
-                          )}
-                        </button>
-                        <button
-                          className="btn btn-outline-secondary btn-sm"
-                          onClick={() => {
-                            setShowCreateForm(false);
-                            setNewPixel({ name: '', domain: '' });
-                          }}
-                          disabled={creating}
-                        >
-                          Cancel
-                        </button>
-                      </div>
+                  <div className="mb-3">
+                    <label className="form-label">Domain</label>
+                    <div className="input-group input-group-sm">
+                      <span className="input-group-text">
+                        <IconWorldWww size={14} />
+                      </span>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="example.com"
+                        value={newPixel.domain}
+                        onChange={(e) => setNewPixel({ ...newPixel, domain: e.target.value })}
+                        disabled={creating}
+                      />
+                    </div>
+                  </div>
+                  {!isAdmin && (
+                    <div className="alert alert-info py-2 mb-3" style={{ fontSize: '12px' }}>
+                      <IconInfoCircle size={14} className="me-1" />
+                      Your request will be reviewed by an admin before the pixel is created.
                     </div>
                   )}
-
-                  {/* Pixel List */}
-                  {pixels.map((pixel) => (
-                    <div
-                      key={pixel.id}
-                      className={`list-group-item list-group-item-action d-flex align-items-center ${selectedPixel?.id === pixel.id ? 'active' : ''}`}
-                      onClick={() => setSelectedPixel(pixel)}
-                      style={{ cursor: 'pointer' }}
+                  <div className="d-flex gap-2">
+                    <button
+                      className="btn btn-primary btn-sm flex-fill"
+                      onClick={handleCreatePixel}
+                      disabled={!newPixel.name || !newPixel.domain || creating}
                     >
-                      <span className={`avatar avatar-sm me-3 ${pixel.status === 'active' ? 'bg-green-lt' : 'bg-azure-lt'}`}>
-                        <IconCode size={16} />
-                      </span>
-                      <div className="flex-fill">
-                        <div className="d-flex align-items-center">
-                          <span className="fw-semibold">{pixel.name}</span>
-                          <span className={`badge ms-2 ${getStatusBadgeClass(pixel.status)}`} style={{ fontSize: '10px' }}>
-                            {pixel.status}
-                          </span>
-                        </div>
-                        <div className={`text-${selectedPixel?.id === pixel.id ? 'white-50' : 'muted'}`} style={{ fontSize: '12px' }}>
-                          {pixel.domain}
-                        </div>
+                      {creating ? (
+                        <>
+                          <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                          {isAdmin ? 'Creating...' : 'Submitting...'}
+                        </>
+                      ) : (
+                        <>
+                          <IconCheck size={14} className="me-1" />
+                          {isAdmin ? 'Create' : 'Submit Request'}
+                        </>
+                      )}
+                    </button>
+                    <button
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={() => {
+                        setShowCreateForm(false);
+                        setNewPixel({ name: '', domain: '' });
+                      }}
+                      disabled={creating}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Pixel List or Requests based on active tab */}
+              {(isAdmin || activeTab === 'pixels') ? (
+                <>
+                  {pixels.length === 0 && !showCreateForm ? (
+                    <div className="list-group-item text-center py-4">
+                      <div className="mb-3">
+                        <span className="avatar avatar-xl bg-primary-lt">
+                          <IconCode size={32} className="text-primary" />
+                        </span>
                       </div>
-                      <IconChevronRight size={16} className={selectedPixel?.id === pixel.id ? 'text-white' : 'text-muted'} />
+                      <h4 className="mb-2">No pixels yet</h4>
+                      <p className="text-muted mb-3">
+                        {isAdmin
+                          ? 'Create your first pixel to start tracking visitors'
+                          : 'Request your first pixel to start tracking visitors'}
+                      </p>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => setShowCreateForm(true)}
+                      >
+                        <IconPlus size={16} className="me-1" />
+                        {isAdmin ? 'Create Pixel' : 'Request Pixel'}
+                      </button>
                     </div>
-                  ))}
+                  ) : (
+                    pixels.map((pixel) => (
+                      <div
+                        key={pixel.id}
+                        className={`list-group-item list-group-item-action d-flex align-items-center ${selectedPixel?.id === pixel.id ? 'active' : ''}`}
+                        onClick={() => setSelectedPixel(pixel)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <span className={`avatar avatar-sm me-3 ${pixel.status === 'active' ? 'bg-green-lt' : 'bg-azure-lt'}`}>
+                          <IconCode size={16} />
+                        </span>
+                        <div className="flex-fill">
+                          <div className="d-flex align-items-center">
+                            <span className="fw-semibold">{pixel.name}</span>
+                            <span className={`badge ms-2 ${getStatusBadgeClass(pixel.status)}`} style={{ fontSize: '10px' }}>
+                              {pixel.status}
+                            </span>
+                          </div>
+                          <div className={`text-${selectedPixel?.id === pixel.id ? 'white-50' : 'muted'}`} style={{ fontSize: '12px' }}>
+                            {pixel.domain}
+                          </div>
+                        </div>
+                        <IconChevronRight size={16} className={selectedPixel?.id === pixel.id ? 'text-white' : 'text-muted'} />
+                      </div>
+                    ))
+                  )}
+                </>
+              ) : (
+                // Requests List for non-admin users
+                <>
+                  {pixelRequests.length === 0 ? (
+                    <div className="list-group-item text-center py-4">
+                      <p className="text-muted mb-0">No pending requests</p>
+                    </div>
+                  ) : (
+                    pixelRequests.map((request) => (
+                      <div
+                        key={request.id}
+                        className="list-group-item d-flex align-items-center"
+                      >
+                        <span className={`avatar avatar-sm me-3 ${getRequestStatusBadgeClass(request.status)}`}>
+                          {request.status === 'pending' && <IconClock size={16} />}
+                          {request.status === 'approved' && <IconCheck size={16} />}
+                          {request.status === 'rejected' && <IconX size={16} />}
+                        </span>
+                        <div className="flex-fill">
+                          <div className="d-flex align-items-center">
+                            <span className="fw-semibold">{request.name}</span>
+                            <span className={`badge ms-2 ${getRequestStatusBadgeClass(request.status)}`} style={{ fontSize: '10px' }}>
+                              {request.status}
+                            </span>
+                          </div>
+                          <div className="text-muted" style={{ fontSize: '12px' }}>
+                            {request.domain}
+                          </div>
+                          {request.admin_notes && (
+                            <div className="text-muted small mt-1">
+                              Note: {request.admin_notes}
+                            </div>
+                          )}
+                        </div>
+                        {request.status === 'pending' && (
+                          <button
+                            className="btn btn-ghost-danger btn-sm"
+                            onClick={() => handleDeleteRequest(request.id)}
+                            title="Cancel request"
+                          >
+                            <IconTrash size={16} />
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </>
               )}
             </div>

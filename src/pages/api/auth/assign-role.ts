@@ -63,8 +63,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // User doesn't have role_id - assign based on role string or default to 'partner'
-    const roleName = userData?.role || 'partner';
+    // User doesn't have role_id - assign based on role string or default to 'user'
+    const roleName = userData?.role || 'user';
     console.log('Assigning role for user:', userData?.email, 'role name:', roleName);
 
     // Look up the role

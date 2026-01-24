@@ -14,7 +14,8 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type UserRole = 'admin' | 'team' | 'partner';
+export type UserRole = 'admin' | 'team' | 'user';
+export type RequestStatus = 'pending' | 'approved' | 'rejected';
 export type PixelStatus = 'active' | 'inactive' | 'pending';
 export type IntegrationType = 'facebook' | 'google' | 'email' | 'crm' | 'webhook';
 
@@ -645,6 +646,126 @@ export interface Database {
         };
         Relationships: [];
       };
+      pixel_requests: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          domain: string;
+          status: RequestStatus;
+          admin_notes: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          pixel_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          domain: string;
+          status?: RequestStatus;
+          admin_notes?: string | null;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          pixel_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          domain?: string;
+          status?: RequestStatus;
+          admin_notes?: string | null;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          pixel_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      audience_requests: {
+        Row: {
+          id: string;
+          user_id: string;
+          request_type: 'standard' | 'custom';
+          name: string;
+          form_data: Json;
+          status: RequestStatus;
+          admin_notes: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          audience_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          request_type: 'standard' | 'custom';
+          name: string;
+          form_data: Json;
+          status?: RequestStatus;
+          admin_notes?: string | null;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          audience_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          request_type?: 'standard' | 'custom';
+          name?: string;
+          form_data?: Json;
+          status?: RequestStatus;
+          admin_notes?: string | null;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          audience_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      admin_notifications: {
+        Row: {
+          id: string;
+          type: string;
+          title: string;
+          message: string;
+          reference_id: string | null;
+          reference_type: string | null;
+          is_read: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          type: string;
+          title: string;
+          message: string;
+          reference_id?: string | null;
+          reference_type?: string | null;
+          is_read?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          type?: string;
+          title?: string;
+          message?: string;
+          reference_id?: string | null;
+          reference_type?: string | null;
+          is_read?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -659,6 +780,7 @@ export interface Database {
       user_role: UserRole;
       pixel_status: PixelStatus;
       integration_type: IntegrationType;
+      request_status: RequestStatus;
     };
   };
 }
@@ -671,3 +793,46 @@ export type Integration = Database['public']['Tables']['integrations']['Row'];
 export type PixelEvent = Database['public']['Tables']['pixel_events']['Row'];
 export type Visitor = Database['public']['Tables']['visitors']['Row'];
 export type AuditLog = Database['public']['Tables']['audit_logs']['Row'];
+
+// Request Workflow Types
+export interface PixelRequest {
+  id: string;
+  user_id: string;
+  name: string;
+  domain: string;
+  status: RequestStatus;
+  admin_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  pixel_id: string | null;
+  created_at: string;
+  updated_at: string;
+  user?: { email: string };
+}
+
+export interface AudienceRequest {
+  id: string;
+  user_id: string;
+  request_type: 'standard' | 'custom';
+  name: string;
+  form_data: Record<string, unknown>;
+  status: RequestStatus;
+  admin_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  audience_id: string | null;
+  created_at: string;
+  updated_at: string;
+  user?: { email: string };
+}
+
+export interface AdminNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  reference_id: string | null;
+  reference_type: string | null;
+  is_read: boolean;
+  created_at: string;
+}
