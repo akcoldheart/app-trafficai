@@ -18,7 +18,6 @@ import {
   IconX,
   IconUser,
   IconSearch,
-  IconEdit,
   IconDeviceFloppy,
 } from '@tabler/icons-react';
 import type { Pixel, PixelStatus, PixelRequest, RequestStatus } from '@/lib/supabase/types';
@@ -53,12 +52,12 @@ export default function Pixels() {
   const [useCustomCode, setUseCustomCode] = useState(false);
   const [processing, setProcessing] = useState(false);
 
-  // Edit mode state
-  const [editingCode, setEditingCode] = useState(false);
+  // Code editing state
   const [editedCode, setEditedCode] = useState('');
   const [savingCode, setSavingCode] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const fetchPixels = useCallback(async () => {
+  const fetchPixels = useCallback(async (selectFirst = false) => {
     try {
       setLoading(true);
       const response = await fetch('/api/pixels');
@@ -69,7 +68,7 @@ export default function Pixels() {
       }
 
       setPixels(data.pixels || []);
-      if (data.pixels?.length > 0 && !selectedPixel) {
+      if (selectFirst && data.pixels?.length > 0) {
         setSelectedPixel(data.pixels[0]);
       }
       setError(null);
@@ -78,7 +77,7 @@ export default function Pixels() {
     } finally {
       setLoading(false);
     }
-  }, [selectedPixel]);
+  }, []);
 
   const fetchPixelRequests = useCallback(async () => {
     try {
@@ -111,9 +110,19 @@ export default function Pixels() {
   };
 
   useEffect(() => {
-    fetchPixels();
+    fetchPixels(true); // Select first pixel on initial load
     fetchPixelRequests();
   }, [fetchPixels, fetchPixelRequests]);
+
+  // Load custom code when pixel is selected (by ID change only)
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  useEffect(() => {
+    if (selectedPixel && selectedPixel.id !== lastSelectedId) {
+      setEditedCode(selectedPixel.custom_installation_code || '');
+      setSaveMessage(null); // Clear any previous message only when switching pixels
+      setLastSelectedId(selectedPixel.id);
+    }
+  }, [selectedPixel, lastSelectedId]);
 
   const getBaseUrl = () => {
     if (typeof window !== 'undefined') {
@@ -269,11 +278,11 @@ export default function Pixels() {
         throw new Error(data.error || 'Failed to approve request');
       }
 
-      // Update requests list
-      setPixelRequests(pixelRequests.filter(r => r.id !== request.id));
-      // Add new pixel to list
+      // Refresh both pixels and requests to get updated data
+      await Promise.all([fetchPixels(), fetchPixelRequests()]);
+
+      // Select the newly created pixel and switch to pixels tab
       if (data.pixel) {
-        setPixels([data.pixel, ...pixels]);
         setSelectedPixel(data.pixel);
         setActiveTab('pixels');
       }
@@ -361,17 +370,11 @@ export default function Pixels() {
     }
   };
 
-  // Edit installation code
-  const handleEditCode = () => {
-    if (!selectedPixel) return;
-    setEditedCode(selectedPixel.custom_installation_code || '');
-    setEditingCode(true);
-  };
-
   const handleSaveCode = async () => {
     if (!selectedPixel) return;
 
     setSavingCode(true);
+    setSaveMessage(null);
     try {
       const response = await fetch(`/api/pixels/${selectedPixel.id}`, {
         method: 'PATCH',
@@ -391,10 +394,12 @@ export default function Pixels() {
       const updatedPixel = { ...selectedPixel, custom_installation_code: editedCode.trim() || null };
       setPixels(pixels.map(p => p.id === selectedPixel.id ? updatedPixel : p));
       setSelectedPixel(updatedPixel);
-      setEditingCode(false);
-      alert('Installation code updated!');
+      setSaveMessage({ type: 'success', text: 'Installation code saved successfully!' });
+
+      // Clear message after 3 seconds
+      setTimeout(() => setSaveMessage(null), 3000);
     } catch (err) {
-      alert((err as Error).message);
+      setSaveMessage({ type: 'error', text: (err as Error).message });
     } finally {
       setSavingCode(false);
     }
@@ -571,7 +576,7 @@ export default function Pixels() {
                       <div
                         key={pixel.id}
                         className={`list-group-item list-group-item-action d-flex align-items-center ${selectedPixel?.id === pixel.id ? 'active' : ''}`}
-                        onClick={() => { setSelectedPixel(pixel); setEditingCode(false); }}
+                        onClick={() => setSelectedPixel(pixel)}
                         style={{ cursor: 'pointer' }}
                       >
                         <span className={`avatar avatar-sm me-3 ${pixel.status === 'active' ? 'bg-green-lt' : 'bg-azure-lt'}`}>
@@ -590,6 +595,11 @@ export default function Pixels() {
                           <div className={`text-truncate ${selectedPixel?.id === pixel.id ? 'text-white-50' : 'text-muted'}`} style={{ fontSize: '12px' }}>
                             {pixel.domain}
                           </div>
+                          {isAdmin && (pixel as any).user?.email && (
+                            <div className={`text-truncate ${selectedPixel?.id === pixel.id ? 'text-white-50' : 'text-muted'}`} style={{ fontSize: '11px' }}>
+                              <IconUser size={11} className="me-1" />{(pixel as any).user.email}
+                            </div>
+                          )}
                         </div>
                         <IconChevronRight size={16} className={selectedPixel?.id === pixel.id ? 'text-white' : 'text-muted'} />
                       </div>
@@ -601,12 +611,12 @@ export default function Pixels() {
               {/* Requests Tab */}
               {activeTab === 'requests' && (
                 <>
-                  {pixelRequests.filter(r => isAdmin || r.status === 'pending').length === 0 ? (
+                  {pixelRequests.filter(r => r.status === 'pending').length === 0 ? (
                     <div className="list-group-item text-center py-4">
                       <p className="text-muted mb-0">No pending requests</p>
                     </div>
                   ) : (
-                    pixelRequests.filter(r => isAdmin || r.status === 'pending').map((request) => (
+                    pixelRequests.filter(r => r.status === 'pending').map((request) => (
                       <div key={request.id} className="list-group-item">
                         <div className="d-flex align-items-start">
                           <span className={`avatar avatar-sm me-3 ${getRequestStatusBadgeClass(request.status)}`}>
@@ -752,59 +762,75 @@ export default function Pixels() {
 
                 {/* Installation Code */}
                 <div className="mb-4">
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h4 className="mb-0">Installation Code</h4>
-                    {isAdmin && !editingCode && (
-                      <button className="btn btn-outline-primary btn-sm" onClick={handleEditCode}>
-                        <IconEdit size={14} className="me-1" />Edit Code
-                      </button>
-                    )}
-                  </div>
+                  <h4 className="mb-3">Installation Code</h4>
 
-                  {editingCode ? (
+                  {isAdmin ? (
+                    // Admin view - editable code
                     <div>
-                      <textarea
-                        className="form-control font-monospace mb-2"
-                        rows={12}
-                        value={editedCode}
-                        onChange={(e) => setEditedCode(e.target.value)}
-                        placeholder="Enter custom installation code or leave empty to use auto-generated code"
-                        style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0' }}
-                      />
-                      <div className="d-flex gap-2">
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={handleSaveCode}
-                          disabled={savingCode}
-                        >
-                          {savingCode ? (
-                            <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Saving...</>
-                          ) : (
-                            <><IconDeviceFloppy size={14} className="me-1" />Save Code</>
-                          )}
-                        </button>
-                        <button
-                          className="btn btn-outline-secondary btn-sm"
-                          onClick={() => setEditingCode(false)}
-                          disabled={savingCode}
-                        >
-                          Cancel
-                        </button>
-                        {editedCode && (
-                          <button
-                            className="btn btn-outline-danger btn-sm"
-                            onClick={() => setEditedCode('')}
-                            disabled={savingCode}
-                          >
-                            Clear (Use Auto)
-                          </button>
-                        )}
+                      <div className="alert alert-info mb-3 py-2">
+                        <IconInfoCircle size={16} className="me-2" />
+                        Enter custom code below or leave empty to use auto-generated code. Copy and paste in the <code>&lt;head&gt;</code> section.
                       </div>
-                      <small className="text-muted d-block mt-2">
-                        Leave empty to use the auto-generated Traffic AI pixel code.
-                      </small>
+                      <div className="position-relative">
+                        <textarea
+                          className="form-control font-monospace"
+                          rows={10}
+                          value={editedCode}
+                          onChange={(e) => setEditedCode(e.target.value)}
+                          placeholder={getInstallationCode(selectedPixel)}
+                          style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0', resize: 'vertical' }}
+                        />
+                        <button
+                          className={`btn btn-sm ${copiedId === 'code' ? 'btn-success' : 'btn-primary'} position-absolute`}
+                          style={{ top: '12px', right: '12px' }}
+                          onClick={() => copyToClipboard(editedCode || getInstallationCode(selectedPixel), 'code')}
+                        >
+                          {copiedId === 'code' ? <><IconCheck size={14} className="me-1" />Copied!</> : <><IconCopy size={14} className="me-1" />Copy</>}
+                        </button>
+                      </div>
+                      <div className="d-flex justify-content-between align-items-center mt-2">
+                        <div className="d-flex align-items-center gap-2">
+                          <small className="text-muted">
+                            {editedCode ? 'Using custom code' : 'Using auto-generated code (type to customize)'}
+                          </small>
+                          {saveMessage && (
+                            <span className={`badge ${saveMessage.type === 'success' ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`}>
+                              {saveMessage.type === 'success' ? <IconCheck size={12} className="me-1" /> : <IconX size={12} className="me-1" />}
+                              {saveMessage.text}
+                            </span>
+                          )}
+                        </div>
+                        <div className="d-flex gap-2">
+                          {editedCode !== (selectedPixel.custom_installation_code || '') && (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={handleSaveCode}
+                              disabled={savingCode}
+                            >
+                              {savingCode ? (
+                                <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Saving...</>
+                              ) : (
+                                <><IconDeviceFloppy size={14} className="me-1" />Save Changes</>
+                              )}
+                            </button>
+                          )}
+                          {editedCode && (
+                            <button
+                              type="button"
+                              className="btn btn-outline-secondary btn-sm"
+                              onClick={() => setEditedCode('')}
+                              disabled={savingCode}
+                              title="Clear custom code and use auto-generated"
+                            >
+                              Reset to Auto
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ) : (
+                    // User view - read-only code
                     <>
                       <div className="alert alert-info mb-3">
                         <IconInfoCircle size={18} className="me-2" />

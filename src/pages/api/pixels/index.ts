@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, logAuditAction } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, logAuditAction } from '@/lib/api-helpers';
 
 function generatePixelCode(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -19,12 +19,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     if (req.method === 'GET') {
-      // List user's pixels
-      const { data, error } = await supabase
+      // Check if user is admin
+      const profile = await getUserProfile(user.id, req, res);
+      const isAdmin = profile.role === 'admin';
+
+      // Admins see all pixels, users see only their own
+      let query = supabase
         .from('pixels')
-        .select('*')
-        .eq('user_id', user.id)
+        .select('*, user:users!pixels_user_id_fkey(email)')
         .order('created_at', { ascending: false });
+
+      if (!isAdmin) {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error fetching pixels:', error);

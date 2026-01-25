@@ -50,7 +50,7 @@ const getIcon = (iconName: string) => {
 
 export default function Sidebar() {
   const router = useRouter();
-  const { user, userProfile, userMenuItems, signOut } = useAuth();
+  const { user, userMenuItems } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Use database-driven menu items (already sorted by display_order in AuthContext)
@@ -72,8 +72,6 @@ export default function Sidebar() {
     }
     return 'User';
   };
-
- 
 
   const isActive = (href: string) => {
     if (href === '/') {

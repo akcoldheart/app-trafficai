@@ -59,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         name: name.trim(),
         domain: domain.trim().toLowerCase(),
         pixel_code: pixelCode,
-        status: 'pending',
+        status: 'active',
         events_count: 0,
         custom_installation_code: custom_installation_code || null,
       })

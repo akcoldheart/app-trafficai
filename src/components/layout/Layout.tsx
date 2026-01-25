@@ -2,6 +2,7 @@ import Head from 'next/head';
 import Sidebar from './Sidebar';
 import Footer from './Footer';
 import PageHeader from './PageHeader';
+import TopBar from './TopBar';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -28,6 +29,8 @@ export default function Layout({
         <Sidebar />
 
         <div className="page-wrapper">
+          <TopBar />
+
           {pageTitle && (
             <PageHeader title={pageTitle} pretitle={pagePretitle}>
               {pageActions}
