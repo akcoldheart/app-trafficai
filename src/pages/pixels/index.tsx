@@ -452,7 +452,7 @@ export default function Pixels() {
         <div className="alert alert-danger">
           <div className="d-flex align-items-center">
             <div className="flex-fill">{error}</div>
-            <button className="btn btn-outline-danger btn-sm" onClick={fetchPixels}>
+            <button className="btn btn-outline-danger btn-sm" onClick={() => fetchPixels()}>
               <IconRefresh size={16} className="me-1" />Retry
             </button>
           </div>
