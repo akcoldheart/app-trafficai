@@ -19,6 +19,8 @@ import {
   IconLayoutDashboard,
   IconQuestionMark,
   IconFileDescription,
+  IconUser,
+  IconCreditCard,
 } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
@@ -50,8 +52,9 @@ const getIcon = (iconName: string) => {
 
 export default function Sidebar() {
   const router = useRouter();
-  const { user, userMenuItems } = useAuth();
+  const { user, userProfile, userMenuItems } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const isAdmin = userProfile?.role === 'admin';
 
   // Use database-driven menu items (already sorted by display_order in AuthContext)
   const visibleMenuItems = useMemo(() => {
@@ -193,10 +196,29 @@ export default function Sidebar() {
             {/* Dropdown Menu */}
             {showUserMenu && (
               <div className="sidebar-user-menu">
+                <Link
+                  href="/account/profile"
+                  className="sidebar-user-menu-item"
+                  onClick={() => setShowUserMenu(false)}
+                >
+                  <IconUser size={18} />
+                  <span>My Profile</span>
+                </Link>
+                {!isAdmin && (
+                  <Link
+                    href="/account/billing"
+                    className="sidebar-user-menu-item"
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    <IconCreditCard size={18} />
+                    <span>Billing & Plan</span>
+                  </Link>
+                )}
+                <div className="sidebar-user-menu-divider" />
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="sidebar-user-menu-item"
+                  className="sidebar-user-menu-item text-danger"
                 >
                   <IconLogout size={18} />
                   <span>Logout</span>

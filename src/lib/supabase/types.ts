@@ -70,7 +70,11 @@ export interface Database {
           email: string;
           role: UserRole;
           role_id: string | null;
+          full_name: string | null;
+          phone: string | null;
+          company: string | null;
           company_website: string | null;
+          plan: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -79,7 +83,11 @@ export interface Database {
           email: string;
           role?: UserRole;
           role_id?: string | null;
+          full_name?: string | null;
+          phone?: string | null;
+          company?: string | null;
           company_website?: string | null;
+          plan?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -88,7 +96,11 @@ export interface Database {
           email?: string;
           role?: UserRole;
           role_id?: string | null;
+          full_name?: string | null;
+          phone?: string | null;
+          company?: string | null;
           company_website?: string | null;
+          plan?: string | null;
           created_at?: string;
           updated_at?: string;
         };

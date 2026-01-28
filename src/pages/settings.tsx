@@ -19,6 +19,10 @@ import {
   IconX,
   IconEye,
   IconEyeOff,
+  IconCreditCard,
+  IconCurrencyDollar,
+  IconTrendingUp as IconGrowth,
+  IconRocket,
 } from '@tabler/icons-react';
 import type { UserWebsite } from '@/lib/supabase/types';
 
@@ -79,6 +83,38 @@ export default function Settings() {
   const [editApiKeyValue, setEditApiKeyValue] = useState('');
   const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({});
 
+  // Stripe settings state
+  const [stripeSettings, setStripeSettings] = useState({
+    stripe_secret_key: '',
+    stripe_webhook_secret: '',
+    stripe_starter_monthly_price_id: '',
+    stripe_starter_yearly_price_id: '',
+    stripe_growth_monthly_price_id: '',
+    stripe_growth_yearly_price_id: '',
+    stripe_professional_monthly_price_id: '',
+    stripe_professional_yearly_price_id: '',
+    app_url: '',
+  });
+  const [stripeSettingsHasValue, setStripeSettingsHasValue] = useState<Record<string, boolean>>({});
+  const [editingStripe, setEditingStripe] = useState(false);
+  const [savingStripe, setSavingStripe] = useState(false);
+  const [showStripeSecrets, setShowStripeSecrets] = useState<Record<string, boolean>>({});
+
+  // Pricing settings state (yearly prices are effective monthly rates)
+  const [pricingSettings, setPricingSettings] = useState({
+    plan_starter_monthly_price: '500',
+    plan_starter_yearly_price: '425',
+    plan_starter_visitors: '3,000',
+    plan_growth_monthly_price: '800',
+    plan_growth_yearly_price: '680',
+    plan_growth_visitors: '5,000',
+    plan_professional_monthly_price: '1200',
+    plan_professional_yearly_price: '1020',
+    plan_professional_visitors: '10,000',
+  });
+  const [editingPricing, setEditingPricing] = useState(false);
+  const [savingPricing, setSavingPricing] = useState(false);
+
   const fetchWebsites = useCallback(async () => {
     try {
       setWebsitesLoading(true);
@@ -107,6 +143,34 @@ export default function Settings() {
         } catch {
           setEndpoints([]);
         }
+      }
+
+      // Also fetch raw settings for Stripe and Pricing
+      if (data.raw) {
+        const stripeData: Record<string, string> = {};
+        const hasValueData: Record<string, boolean> = {};
+        const pricingData: Record<string, string> = {};
+
+        data.raw.forEach((setting: { key: string; value: string; is_secret?: boolean; category?: string }) => {
+          if (setting.key.startsWith('stripe_') || setting.key === 'app_url') {
+            // For secret fields, show masked value if it has a value
+            if (setting.is_secret && setting.value) {
+              stripeData[setting.key] = '••••••••' + setting.value.slice(-4);
+              hasValueData[setting.key] = true;
+            } else {
+              stripeData[setting.key] = setting.value || '';
+              hasValueData[setting.key] = !!setting.value;
+            }
+          }
+          // Load pricing settings
+          if (setting.key.startsWith('plan_')) {
+            pricingData[setting.key] = setting.value || '';
+          }
+        });
+
+        setStripeSettings(prev => ({ ...prev, ...stripeData }));
+        setStripeSettingsHasValue(hasValueData);
+        setPricingSettings(prev => ({ ...prev, ...pricingData }));
       }
     } catch (error) {
       console.error('Error fetching admin settings:', error);
@@ -264,6 +328,63 @@ export default function Settings() {
 
   const handleDeleteEndpoint = (index: number) => {
     setEndpoints(endpoints.filter((_, i) => i !== index));
+  };
+
+  const handleSaveStripeSettings = async () => {
+    setSavingStripe(true);
+    try {
+      // Save each setting individually
+      const settingsToSave = Object.entries(stripeSettings).filter(([key, value]) => {
+        // Skip masked values (unchanged secrets)
+        if (value.startsWith('••••••••')) return false;
+        return true;
+      });
+
+      for (const [key, value] of settingsToSave) {
+        const response = await fetch(`/api/admin/settings/${key}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || `Failed to save ${key}`);
+        }
+      }
+
+      setEditingStripe(false);
+      fetchAdminSettings(); // Refresh to get masked values
+    } catch (error) {
+      alert((error as Error).message);
+    } finally {
+      setSavingStripe(false);
+    }
+  };
+
+  const handleSavePricingSettings = async () => {
+    setSavingPricing(true);
+    try {
+      for (const [key, value] of Object.entries(pricingSettings)) {
+        const response = await fetch(`/api/admin/settings/${key}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || `Failed to save ${key}`);
+        }
+      }
+
+      setEditingPricing(false);
+      fetchAdminSettings();
+    } catch (error) {
+      alert((error as Error).message);
+    } finally {
+      setSavingPricing(false);
+    }
   };
 
   const handleAddApiKey = async () => {
@@ -934,6 +1055,492 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Stripe Configuration */}
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">
+                    <IconCreditCard className="icon me-2" />
+                    Stripe Configuration
+                  </h3>
+                  <div className="card-actions">
+                    {!editingStripe && (
+                      <button
+                        className="btn btn-ghost-primary btn-sm"
+                        onClick={() => setEditingStripe(true)}
+                      >
+                        <IconEdit size={14} className="me-1" />
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="card-body">
+                  {editingStripe ? (
+                    <div>
+                      {/* App URL */}
+                      <div className="mb-3">
+                        <label className="form-label">Application URL</label>
+                        <input
+                          type="url"
+                          className="form-control form-control-sm"
+                          placeholder="https://app.trafficai.io"
+                          value={stripeSettings.app_url}
+                          onChange={(e) => setStripeSettings({ ...stripeSettings, app_url: e.target.value })}
+                        />
+                        <small className="text-muted">Used for Stripe redirect URLs</small>
+                      </div>
+
+                      {/* Secret Key */}
+                      <div className="mb-3">
+                        <label className="form-label">Secret API Key</label>
+                        <div className="input-group input-group-sm">
+                          <input
+                            type={showStripeSecrets.secret_key ? 'text' : 'password'}
+                            className="form-control"
+                            placeholder="sk_live_xxx or sk_test_xxx"
+                            value={stripeSettings.stripe_secret_key}
+                            onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_secret_key: e.target.value })}
+                          />
+                          <button
+                            className="btn btn-outline-secondary"
+                            type="button"
+                            onClick={() => setShowStripeSecrets({ ...showStripeSecrets, secret_key: !showStripeSecrets.secret_key })}
+                          >
+                            {showStripeSecrets.secret_key ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Webhook Secret */}
+                      <div className="mb-3">
+                        <label className="form-label">Webhook Secret</label>
+                        <div className="input-group input-group-sm">
+                          <input
+                            type={showStripeSecrets.webhook_secret ? 'text' : 'password'}
+                            className="form-control"
+                            placeholder="whsec_xxx"
+                            value={stripeSettings.stripe_webhook_secret}
+                            onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_webhook_secret: e.target.value })}
+                          />
+                          <button
+                            className="btn btn-outline-secondary"
+                            type="button"
+                            onClick={() => setShowStripeSecrets({ ...showStripeSecrets, webhook_secret: !showStripeSecrets.webhook_secret })}
+                          >
+                            {showStripeSecrets.webhook_secret ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <hr className="my-3" />
+                      <h5 className="mb-3">Price IDs</h5>
+
+                      {/* Starter Plan */}
+                      <div className="mb-3">
+                        <label className="form-label fw-semibold">Starter Plan</label>
+                        <div className="row g-2">
+                          <div className="col-6">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              placeholder="Monthly Price ID"
+                              value={stripeSettings.stripe_starter_monthly_price_id}
+                              onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_starter_monthly_price_id: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-6">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              placeholder="Yearly Price ID"
+                              value={stripeSettings.stripe_starter_yearly_price_id}
+                              onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_starter_yearly_price_id: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Growth Plan */}
+                      <div className="mb-3">
+                        <label className="form-label fw-semibold">Growth Plan</label>
+                        <div className="row g-2">
+                          <div className="col-6">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              placeholder="Monthly Price ID"
+                              value={stripeSettings.stripe_growth_monthly_price_id}
+                              onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_growth_monthly_price_id: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-6">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              placeholder="Yearly Price ID"
+                              value={stripeSettings.stripe_growth_yearly_price_id}
+                              onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_growth_yearly_price_id: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Professional Plan */}
+                      <div className="mb-3">
+                        <label className="form-label fw-semibold">Professional Plan</label>
+                        <div className="row g-2">
+                          <div className="col-6">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              placeholder="Monthly Price ID"
+                              value={stripeSettings.stripe_professional_monthly_price_id}
+                              onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_professional_monthly_price_id: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-6">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              placeholder="Yearly Price ID"
+                              value={stripeSettings.stripe_professional_yearly_price_id}
+                              onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_professional_yearly_price_id: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="d-flex gap-2 mt-3">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={handleSaveStripeSettings}
+                          disabled={savingStripe}
+                        >
+                          {savingStripe ? (
+                            <>
+                              <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <IconCheck size={14} className="me-1" />
+                              Save Settings
+                            </>
+                          )}
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setEditingStripe(false);
+                            fetchAdminSettings();
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Display current settings status */}
+                      <div className="mb-2">
+                        <span className="text-muted small">App URL:</span>
+                        <span className="ms-2 small">{stripeSettings.app_url || 'Not configured'}</span>
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-muted small">Secret Key:</span>
+                        <span className={`ms-2 badge ${stripeSettingsHasValue.stripe_secret_key ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`}>
+                          {stripeSettingsHasValue.stripe_secret_key ? 'Configured' : 'Not set'}
+                        </span>
+                      </div>
+                      <div className="mb-2">
+                        <span className="text-muted small">Webhook Secret:</span>
+                        <span className={`ms-2 badge ${stripeSettingsHasValue.stripe_webhook_secret ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`}>
+                          {stripeSettingsHasValue.stripe_webhook_secret ? 'Configured' : 'Not set'}
+                        </span>
+                      </div>
+                      <hr className="my-2" />
+                      <div className="text-muted small mb-1">Price IDs:</div>
+                      <div className="d-flex flex-wrap gap-1">
+                        <span className={`badge ${stripeSettingsHasValue.stripe_starter_monthly_price_id ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                          Starter M {stripeSettingsHasValue.stripe_starter_monthly_price_id ? '✓' : '✗'}
+                        </span>
+                        <span className={`badge ${stripeSettingsHasValue.stripe_starter_yearly_price_id ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                          Starter Y {stripeSettingsHasValue.stripe_starter_yearly_price_id ? '✓' : '✗'}
+                        </span>
+                        <span className={`badge ${stripeSettingsHasValue.stripe_growth_monthly_price_id ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                          Growth M {stripeSettingsHasValue.stripe_growth_monthly_price_id ? '✓' : '✗'}
+                        </span>
+                        <span className={`badge ${stripeSettingsHasValue.stripe_growth_yearly_price_id ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                          Growth Y {stripeSettingsHasValue.stripe_growth_yearly_price_id ? '✓' : '✗'}
+                        </span>
+                        <span className={`badge ${stripeSettingsHasValue.stripe_professional_monthly_price_id ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                          Pro M {stripeSettingsHasValue.stripe_professional_monthly_price_id ? '✓' : '✗'}
+                        </span>
+                        <span className={`badge ${stripeSettingsHasValue.stripe_professional_yearly_price_id ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                          Pro Y {stripeSettingsHasValue.stripe_professional_yearly_price_id ? '✓' : '✗'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Plan Pricing Configuration */}
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">
+                    <IconCurrencyDollar className="icon me-2" />
+                    Plan Pricing
+                  </h3>
+                  <div className="card-actions">
+                    {!editingPricing && (
+                      <button
+                        className="btn btn-ghost-primary btn-sm"
+                        onClick={() => setEditingPricing(true)}
+                      >
+                        <IconEdit size={14} className="me-1" />
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="card-body">
+                  {editingPricing ? (
+                    <div>
+                      <div className="alert alert-info mb-3 py-2">
+                        <small>
+                          <strong>Note:</strong> Monthly price is per month. Annual price is the effective monthly rate shown when user selects yearly billing.
+                        </small>
+                      </div>
+
+                      {/* Starter Plan */}
+                      <div className="border rounded p-3 mb-3">
+                        <div className="d-flex align-items-center mb-2">
+                          <IconStar size={18} className="text-yellow me-2" />
+                          <h5 className="mb-0">Starter Plan</h5>
+                        </div>
+                        <div className="row g-2">
+                          <div className="col-6">
+                            <label className="form-label small text-muted mb-1">Monthly Price ($)</label>
+                            <div className="input-group input-group-sm">
+                              <span className="input-group-text">$</span>
+                              <input
+                                type="number"
+                                className="form-control"
+                                value={pricingSettings.plan_starter_monthly_price}
+                                onChange={(e) => setPricingSettings({ ...pricingSettings, plan_starter_monthly_price: e.target.value })}
+                              />
+                              <span className="input-group-text">/mo</span>
+                            </div>
+                          </div>
+                          <div className="col-6">
+                            <label className="form-label small text-muted mb-1">Annual Rate ($)</label>
+                            <div className="input-group input-group-sm">
+                              <span className="input-group-text">$</span>
+                              <input
+                                type="number"
+                                className="form-control"
+                                value={pricingSettings.plan_starter_yearly_price}
+                                onChange={(e) => setPricingSettings({ ...pricingSettings, plan_starter_yearly_price: e.target.value })}
+                              />
+                              <span className="input-group-text">/mo</span>
+                            </div>
+                            <small className="text-muted">
+                              Yearly total: ${(parseInt(pricingSettings.plan_starter_yearly_price || '0') * 12).toLocaleString()}
+                            </small>
+                          </div>
+                          <div className="col-12">
+                            <label className="form-label small text-muted mb-1">Visitors Limit</label>
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              value={pricingSettings.plan_starter_visitors}
+                              onChange={(e) => setPricingSettings({ ...pricingSettings, plan_starter_visitors: e.target.value })}
+                              placeholder="e.g., 3,000"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Growth Plan */}
+                      <div className="border rounded p-3 mb-3 border-primary">
+                        <div className="d-flex align-items-center mb-2">
+                          <IconGrowth size={18} className="text-primary me-2" />
+                          <h5 className="mb-0">Growth Plan</h5>
+                          <span className="badge bg-primary ms-2">Popular</span>
+                        </div>
+                        <div className="row g-2">
+                          <div className="col-6">
+                            <label className="form-label small text-muted mb-1">Monthly Price ($)</label>
+                            <div className="input-group input-group-sm">
+                              <span className="input-group-text">$</span>
+                              <input
+                                type="number"
+                                className="form-control"
+                                value={pricingSettings.plan_growth_monthly_price}
+                                onChange={(e) => setPricingSettings({ ...pricingSettings, plan_growth_monthly_price: e.target.value })}
+                              />
+                              <span className="input-group-text">/mo</span>
+                            </div>
+                          </div>
+                          <div className="col-6">
+                            <label className="form-label small text-muted mb-1">Annual Rate ($)</label>
+                            <div className="input-group input-group-sm">
+                              <span className="input-group-text">$</span>
+                              <input
+                                type="number"
+                                className="form-control"
+                                value={pricingSettings.plan_growth_yearly_price}
+                                onChange={(e) => setPricingSettings({ ...pricingSettings, plan_growth_yearly_price: e.target.value })}
+                              />
+                              <span className="input-group-text">/mo</span>
+                            </div>
+                            <small className="text-muted">
+                              Yearly total: ${(parseInt(pricingSettings.plan_growth_yearly_price || '0') * 12).toLocaleString()}
+                            </small>
+                          </div>
+                          <div className="col-12">
+                            <label className="form-label small text-muted mb-1">Visitors Limit</label>
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              value={pricingSettings.plan_growth_visitors}
+                              onChange={(e) => setPricingSettings({ ...pricingSettings, plan_growth_visitors: e.target.value })}
+                              placeholder="e.g., 5,000"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Professional Plan */}
+                      <div className="border rounded p-3 mb-3">
+                        <div className="d-flex align-items-center mb-2">
+                          <IconRocket size={18} className="text-azure me-2" />
+                          <h5 className="mb-0">Professional Plan</h5>
+                        </div>
+                        <div className="row g-2">
+                          <div className="col-6">
+                            <label className="form-label small text-muted mb-1">Monthly Price ($)</label>
+                            <div className="input-group input-group-sm">
+                              <span className="input-group-text">$</span>
+                              <input
+                                type="number"
+                                className="form-control"
+                                value={pricingSettings.plan_professional_monthly_price}
+                                onChange={(e) => setPricingSettings({ ...pricingSettings, plan_professional_monthly_price: e.target.value })}
+                              />
+                              <span className="input-group-text">/mo</span>
+                            </div>
+                          </div>
+                          <div className="col-6">
+                            <label className="form-label small text-muted mb-1">Annual Rate ($)</label>
+                            <div className="input-group input-group-sm">
+                              <span className="input-group-text">$</span>
+                              <input
+                                type="number"
+                                className="form-control"
+                                value={pricingSettings.plan_professional_yearly_price}
+                                onChange={(e) => setPricingSettings({ ...pricingSettings, plan_professional_yearly_price: e.target.value })}
+                              />
+                              <span className="input-group-text">/mo</span>
+                            </div>
+                            <small className="text-muted">
+                              Yearly total: ${(parseInt(pricingSettings.plan_professional_yearly_price || '0') * 12).toLocaleString()}
+                            </small>
+                          </div>
+                          <div className="col-12">
+                            <label className="form-label small text-muted mb-1">Visitors Limit</label>
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              value={pricingSettings.plan_professional_visitors}
+                              onChange={(e) => setPricingSettings({ ...pricingSettings, plan_professional_visitors: e.target.value })}
+                              placeholder="e.g., 10,000"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="d-flex gap-2">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={handleSavePricingSettings}
+                          disabled={savingPricing}
+                        >
+                          {savingPricing ? (
+                            <>
+                              <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <IconCheck size={14} className="me-1" />
+                              Save Pricing
+                            </>
+                          )}
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setEditingPricing(false);
+                            fetchAdminSettings();
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {/* Starter */}
+                      <div className="d-flex align-items-center p-2 rounded" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
+                        <span className="avatar avatar-sm bg-yellow-lt me-3">
+                          <IconStar size={16} />
+                        </span>
+                        <div className="flex-fill">
+                          <div className="fw-semibold">Starter</div>
+                          <div className="text-muted small">{pricingSettings.plan_starter_visitors} visitors</div>
+                        </div>
+                        <div className="text-end">
+                          <div className="fw-bold">${parseInt(pricingSettings.plan_starter_monthly_price || '0').toLocaleString()}<span className="text-muted fw-normal">/mo</span></div>
+                          <div className="text-muted small">${parseInt(pricingSettings.plan_starter_yearly_price || '0').toLocaleString()}/mo annually</div>
+                        </div>
+                      </div>
+
+                      {/* Growth */}
+                      <div className="d-flex align-items-center p-2 rounded border border-primary" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
+                        <span className="avatar avatar-sm bg-primary me-3">
+                          <IconGrowth size={16} />
+                        </span>
+                        <div className="flex-fill">
+                          <div className="fw-semibold">Growth <span className="badge bg-primary ms-1" style={{ fontSize: '10px' }}>Popular</span></div>
+                          <div className="text-muted small">{pricingSettings.plan_growth_visitors} visitors</div>
+                        </div>
+                        <div className="text-end">
+                          <div className="fw-bold">${parseInt(pricingSettings.plan_growth_monthly_price || '0').toLocaleString()}<span className="text-muted fw-normal">/mo</span></div>
+                          <div className="text-muted small">${parseInt(pricingSettings.plan_growth_yearly_price || '0').toLocaleString()}/mo annually</div>
+                        </div>
+                      </div>
+
+                      {/* Professional */}
+                      <div className="d-flex align-items-center p-2 rounded" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
+                        <span className="avatar avatar-sm bg-azure-lt me-3">
+                          <IconRocket size={16} />
+                        </span>
+                        <div className="flex-fill">
+                          <div className="fw-semibold">Professional</div>
+                          <div className="text-muted small">{pricingSettings.plan_professional_visitors} visitors</div>
+                        </div>
+                        <div className="text-end">
+                          <div className="fw-bold">${parseInt(pricingSettings.plan_professional_monthly_price || '0').toLocaleString()}<span className="text-muted fw-normal">/mo</span></div>
+                          <div className="text-muted small">${parseInt(pricingSettings.plan_professional_yearly_price || '0').toLocaleString()}/mo annually</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="card bg-azure-lt">
                 <div className="card-body">
                   <div className="d-flex">
@@ -1013,6 +1620,9 @@ export default function Settings() {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        .space-y-3 > * + * {
+          margin-top: 0.75rem;
         }
       `}</style>
     </Layout>

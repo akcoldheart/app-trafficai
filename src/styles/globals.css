@@ -352,6 +352,17 @@ body {
   flex-shrink: 0;
 }
 
+.sidebar-user-menu-item.text-danger:hover {
+  background-color: rgba(220, 53, 69, 0.15);
+  color: #dc3545;
+}
+
+.sidebar-user-menu-divider {
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.1);
+  margin: 0.5rem 0;
+}
+
 /* Loading states */
 .loading-spinner {
   display: inline-block;

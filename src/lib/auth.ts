@@ -10,6 +10,10 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   role_id: string | null;
+  full_name: string | null;
+  phone: string | null;
+  company: string | null;
+  plan: string | null;
 }
 
 export interface UserRoleData {
