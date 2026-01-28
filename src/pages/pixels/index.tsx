@@ -335,38 +335,11 @@ export default function Pixels() {
     }
   };
 
-  // Approve request
-  const handleApproveRequest = async (request: PixelRequest) => {
-    if (!confirm(`Approve pixel request "${request.name}" for ${request.user?.email}?`)) return;
-
-    setProcessing(true);
-    try {
-      const response = await fetch(`/api/admin/pixel-requests/${request.id}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ admin_notes: '' }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to approve request');
-      }
-
-      // Refresh both pixels and requests to get updated data
-      await Promise.all([fetchPixels(), fetchPixelRequests()]);
-
-      // Select the newly created pixel and switch to pixels tab
-      if (data.pixel) {
-        setSelectedPixel(data.pixel);
-        setActiveTab('pixels');
-      }
-      showToast('success', 'Request approved! Pixel created successfully.');
-    } catch (err) {
-      showToast('error', (err as Error).message);
-    } finally {
-      setProcessing(false);
-    }
+  // Approve request - opens the create modal pre-filled with request data
+  const handleApproveRequest = (request: PixelRequest) => {
+    // Open the create modal with request data pre-filled
+    // This allows admin to add custom code before creating
+    handleOpenCreateModal(request);
   };
 
   // Reject request
@@ -753,7 +726,7 @@ export default function Pixels() {
                                   className="btn btn-success btn-sm"
                                   onClick={() => handleApproveRequest(request)}
                                   disabled={processing}
-                                  title="Quick Approve"
+                                  title="Create Pixel"
                                 >
                                   <IconCheck size={14} />
                                 </button>
