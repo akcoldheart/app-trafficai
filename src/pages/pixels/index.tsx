@@ -264,13 +264,12 @@ export default function Pixels() {
         throw new Error(data.error || 'Failed to create pixel');
       }
 
-      // If this was created from a pending request, approve/delete it
+      // If this was created from a pending request, delete the request (pixel already created)
       if (filledFromRequest && filledFromRequest.status === 'pending') {
         try {
-          await fetch(`/api/admin/pixel-requests/${filledFromRequest.id}/approve`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ admin_notes: 'Approved via Create Pixel modal' }),
+          // Just delete the request - don't call approve as that creates another pixel
+          await fetch(`/api/pixel-requests/${filledFromRequest.id}`, {
+            method: 'DELETE',
           });
           // Update local state to remove the request
           setPixelRequests(pixelRequests.filter(r => r.id !== filledFromRequest.id));
