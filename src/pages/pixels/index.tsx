@@ -971,144 +971,137 @@ export default function Pixels() {
       {/* Create Pixel for User Modal (Admin only) */}
       {showCreateModal && isAdmin && (
         <div className="modal modal-blur show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-dialog modal-dialog-centered modal-md">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title"><IconPlus className="icon me-2" />Create Pixel for User</h5>
+                <h5 className="modal-title"><IconPlus className="icon me-2" />Create Pixel</h5>
                 <button type="button" className="btn-close" onClick={handleCloseCreateModal} />
               </div>
               <div className="modal-body">
-                <div className="mb-3">
-                  <label className="form-label required">Select User</label>
-                  <div className="input-group mb-2">
-                    <span className="input-group-text"><IconSearch size={16} /></span>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Search users by email..."
-                      value={userSearchTerm}
-                      onChange={(e) => setUserSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  {selectedUser && (
-                    <div className="alert alert-success py-2 mb-2">
-                      <strong>Selected:</strong> {selectedUser.email}
-                      {filledFromRequest && (
-                        <span className="badge bg-yellow-lt text-yellow ms-2">
-                          <IconClock size={12} className="me-1" />
-                          Has pending request
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <div className="list-group" style={{ maxHeight: '150px', overflowY: 'auto' }}>
-                    {loadingUsers ? (
-                      <div className="list-group-item text-center"><IconLoader2 size={20} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} /></div>
-                    ) : filteredUsers.length === 0 ? (
-                      <div className="list-group-item text-center text-muted">No users found</div>
-                    ) : (
-                      filteredUsers.slice(0, 8).map((user) => {
-                        const hasPendingRequest = pixelRequests.some(r => r.user_id === user.id && r.status === 'pending');
-                        return (
-                          <button
-                            key={user.id}
-                            type="button"
-                            className={`list-group-item list-group-item-action d-flex align-items-center ${selectedUserId === user.id ? 'active' : ''}`}
-                            onClick={() => handleSelectUser(user.id)}
-                          >
-                            <span className={`avatar avatar-xs ${selectedUserId === user.id ? 'bg-white text-primary' : 'bg-blue-lt'} me-2`}>
-                              <IconUser size={12} />
-                            </span>
-                            {user.email}
-                            {hasPendingRequest && (
-                              <span className={`badge ms-auto ${selectedUserId === user.id ? 'bg-white text-primary' : 'bg-yellow-lt text-yellow'}`} style={{ fontSize: '9px' }}>
-                                Request
-                              </span>
-                            )}
-                          </button>
-                        );
+                {/* Step 1: Select User */}
+                <div className="mb-4">
+                  <label className="form-label fw-semibold">
+                    <span className="badge bg-primary me-2">1</span>
+                    Select User Account
+                  </label>
+                  <select
+                    className="form-select"
+                    value={selectedUserId}
+                    onChange={(e) => handleSelectUser(e.target.value)}
+                    disabled={loadingUsers}
+                  >
+                    <option value="">-- Choose a user --</option>
+                    {/* Show users with pending requests first */}
+                    {users
+                      .sort((a, b) => {
+                        const aHasRequest = pixelRequests.some(r => r.user_id === a.id && r.status === 'pending');
+                        const bHasRequest = pixelRequests.some(r => r.user_id === b.id && r.status === 'pending');
+                        if (aHasRequest && !bHasRequest) return -1;
+                        if (!aHasRequest && bHasRequest) return 1;
+                        return 0;
                       })
-                    )}
-                  </div>
+                      .map((user) => {
+                        const pendingRequest = pixelRequests.find(r => r.user_id === user.id && r.status === 'pending');
+                        return (
+                          <option key={user.id} value={user.id}>
+                            {user.email}{pendingRequest ? ` ⭐ (Requested: ${pendingRequest.name})` : ''}
+                          </option>
+                        );
+                      })}
+                  </select>
+                  {loadingUsers && (
+                    <small className="text-muted"><IconLoader2 size={12} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Loading users...</small>
+                  )}
                 </div>
 
+                {/* Show request info if auto-filled */}
                 {filledFromRequest && (
-                  <div className="alert alert-info py-2 mb-3">
-                    <IconInfoCircle size={14} className="me-1" />
-                    <strong>Auto-filled from pending request:</strong> &quot;{filledFromRequest.name}&quot; - {filledFromRequest.domain}
-                    <br /><small className="text-muted">You can edit these values before creating the pixel.</small>
-                  </div>
-                )}
-
-                <div className="row">
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label required">Pixel Name</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="e.g., Main Website"
-                        value={newPixel.name}
-                        onChange={(e) => {
-                          setNewPixel({ ...newPixel, name: e.target.value });
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label required">Domain</label>
-                      <div className="input-group">
-                        <span className="input-group-text"><IconWorldWww size={16} /></span>
-                        <input
-                          type="text"
-                          className="form-control"
-                          placeholder="example.com"
-                          value={newPixel.domain}
-                          onChange={(e) => {
-                            setNewPixel({ ...newPixel, domain: e.target.value });
-                          }}
-                        />
+                  <div className="alert alert-success py-2 mb-4">
+                    <div className="d-flex align-items-center">
+                      <IconCircleCheck size={18} className="me-2" />
+                      <div>
+                        <strong>Request auto-filled!</strong>
+                        <div className="text-muted small">Name: {filledFromRequest.name} | Domain: {filledFromRequest.domain}</div>
                       </div>
                     </div>
                   </div>
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-check form-switch">
-                    <input
-                      className="form-check-input"
-                      type="checkbox"
-                      checked={useCustomCode}
-                      onChange={(e) => setUseCustomCode(e.target.checked)}
-                    />
-                    <span className="form-check-label">Use custom installation code</span>
-                  </label>
-                </div>
-
-                {useCustomCode && (
-                  <div className="mb-3">
-                    <label className="form-label">Custom Installation Code</label>
-                    <textarea
-                      className="form-control font-monospace"
-                      rows={8}
-                      placeholder="<!-- Your custom tracking code -->"
-                      value={customInstallationCode}
-                      onChange={(e) => setCustomInstallationCode(e.target.value)}
-                      style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0' }}
-                    />
-                  </div>
                 )}
+
+                {/* Step 2: Pixel Details */}
+                <div className="mb-4">
+                  <label className="form-label fw-semibold">
+                    <span className="badge bg-primary me-2">2</span>
+                    Pixel Details
+                  </label>
+                  <div className="row g-3">
+                    <div className="col-6">
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Pixel Name (e.g., Main Site)"
+                        value={newPixel.name}
+                        onChange={(e) => setNewPixel({ ...newPixel, name: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-6">
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Domain (e.g., example.com)"
+                        value={newPixel.domain}
+                        onChange={(e) => setNewPixel({ ...newPixel, domain: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step 3: Custom Code (Optional) */}
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">
+                    <span className="badge bg-secondary me-2">3</span>
+                    Custom Code <span className="text-muted fw-normal">(Optional)</span>
+                  </label>
+                  <div
+                    className="border rounded p-3"
+                    style={{ backgroundColor: useCustomCode ? '#1e293b' : 'transparent' }}
+                  >
+                    <label className="form-check form-switch mb-2">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        checked={useCustomCode}
+                        onChange={(e) => setUseCustomCode(e.target.checked)}
+                      />
+                      <span className="form-check-label">Use custom installation code</span>
+                    </label>
+                    {useCustomCode && (
+                      <textarea
+                        className="form-control font-monospace border-0"
+                        rows={6}
+                        placeholder="<!-- Paste your custom tracking code here -->"
+                        value={customInstallationCode}
+                        onChange={(e) => setCustomInstallationCode(e.target.value)}
+                        style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0' }}
+                      />
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={handleCloseCreateModal} disabled={processing}>Cancel</button>
+                <button type="button" className="btn btn-ghost-secondary" onClick={handleCloseCreateModal} disabled={processing}>
+                  Cancel
+                </button>
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={handleAdminCreatePixel}
                   disabled={processing || !selectedUserId || !newPixel.name || !newPixel.domain}
                 >
-                  {processing ? <><IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Creating...</> : <><IconPlus size={16} className="me-1" />Create Pixel</>}
+                  {processing ? (
+                    <><IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Creating...</>
+                  ) : (
+                    <><IconPlus size={16} className="me-1" />Create Pixel</>
+                  )}
                 </button>
               </div>
             </div>
