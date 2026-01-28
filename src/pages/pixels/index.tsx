@@ -59,6 +59,14 @@ export default function Pixels() {
   const [savingCode, setSavingCode] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Toast notification state
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+
+  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
+
   const fetchPixels = useCallback(async (selectFirst = false) => {
     try {
       setLoading(true);
@@ -223,7 +231,7 @@ export default function Pixels() {
   // Admin create pixel for user
   const handleAdminCreatePixel = async () => {
     if (!newPixel.name || !newPixel.domain || !selectedUserId) {
-      alert('Please fill in all required fields');
+      showToast('error', 'Please fill in all required fields');
       return;
     }
 
@@ -264,9 +272,9 @@ export default function Pixels() {
       setPixels([data.pixel, ...pixels]);
       setSelectedPixel(data.pixel);
       handleCloseCreateModal();
-      alert('Pixel created successfully!');
+      showToast('success', `Pixel "${data.pixel.name}" created successfully!`);
     } catch (err) {
-      alert((err as Error).message);
+      showToast('error', (err as Error).message);
     } finally {
       setProcessing(false);
     }
@@ -312,10 +320,10 @@ export default function Pixels() {
         setNewPixel({ name: '', domain: '' });
         setShowCreateForm(false);
         setActiveTab('requests');
-        alert('Your pixel request has been submitted for admin approval.');
+        showToast('success', 'Your pixel request has been submitted for admin approval.');
       }
     } catch (err) {
-      alert((err as Error).message);
+      showToast('error', (err as Error).message);
     } finally {
       setCreating(false);
     }
@@ -347,9 +355,9 @@ export default function Pixels() {
         setSelectedPixel(data.pixel);
         setActiveTab('pixels');
       }
-      alert('Request approved! Pixel created successfully.');
+      showToast('success', 'Request approved! Pixel created successfully.');
     } catch (err) {
-      alert((err as Error).message);
+      showToast('error', (err as Error).message);
     } finally {
       setProcessing(false);
     }
@@ -377,9 +385,9 @@ export default function Pixels() {
       setPixelRequests(pixelRequests.map(r =>
         r.id === request.id ? { ...r, status: 'rejected' as RequestStatus, admin_notes: reason } : r
       ));
-      alert('Request rejected.');
+      showToast('info', 'Request rejected.');
     } catch (err) {
-      alert((err as Error).message);
+      showToast('error', (err as Error).message);
     } finally {
       setProcessing(false);
     }
@@ -406,7 +414,7 @@ export default function Pixels() {
         setSelectedPixel(updatedPixels[0] || null);
       }
     } catch (err) {
-      alert((err as Error).message);
+      showToast('error', (err as Error).message);
     }
   };
 
@@ -427,7 +435,7 @@ export default function Pixels() {
 
       setPixelRequests(pixelRequests.filter(r => r.id !== id));
     } catch (err) {
-      alert((err as Error).message);
+      showToast('error', (err as Error).message);
     }
   };
 
@@ -524,6 +532,36 @@ export default function Pixels() {
 
   return (
     <Layout title="Pixel Creation" pageTitle="Pixel Creation" pagePretitle="Traffic AI">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`alert alert-${toast.type === 'success' ? 'success' : toast.type === 'error' ? 'danger' : 'info'} alert-dismissible mb-4`}
+          style={{
+            position: 'fixed',
+            top: '80px',
+            right: '20px',
+            zIndex: 9999,
+            minWidth: '300px',
+            maxWidth: '450px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            animation: 'slideIn 0.3s ease-out',
+          }}
+        >
+          <div className="d-flex align-items-center">
+            {toast.type === 'success' && <IconCircleCheck size={20} className="me-2" />}
+            {toast.type === 'error' && <IconAlertCircle size={20} className="me-2" />}
+            {toast.type === 'info' && <IconInfoCircle size={20} className="me-2" />}
+            <span>{toast.message}</span>
+          </div>
+          <button
+            type="button"
+            className="btn-close"
+            onClick={() => setToast(null)}
+            aria-label="Close"
+          />
+        </div>
+      )}
+
       <div className="row g-4">
         {/* Left Column - Pixel List */}
         <div className="col-lg-4">
@@ -1099,7 +1137,10 @@ export default function Pixels() {
         </div>
       )}
 
-      <style jsx>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style jsx>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+      `}</style>
     </Layout>
   );
 }
