@@ -26,6 +26,7 @@ import type { Pixel, PixelStatus, PixelRequest, RequestStatus } from '@/lib/supa
 interface UserOption {
   id: string;
   email: string;
+  role?: string;
 }
 
 export default function Pixels() {
@@ -110,7 +111,11 @@ export default function Pixels() {
       const response = await fetch('/api/admin/users');
       const data = await response.json();
       if (response.ok && data.users) {
-        setUsers(data.users.map((u: { id: string; email: string }) => ({ id: u.id, email: u.email })));
+        setUsers(data.users.map((u: { id: string; email: string; role?: string }) => ({
+          id: u.id,
+          email: u.email,
+          role: u.role
+        })));
       }
     } catch (err) {
       console.error('Failed to fetch users:', err);
@@ -991,8 +996,9 @@ export default function Pixels() {
                     disabled={loadingUsers}
                   >
                     <option value="">-- Choose a user --</option>
-                    {/* Show users with pending requests first */}
+                    {/* Filter out admin users, show users with pending requests first */}
                     {users
+                      .filter((user) => user.role !== 'admin')
                       .sort((a, b) => {
                         const aHasRequest = pixelRequests.some(r => r.user_id === a.id && r.status === 'pending');
                         const bHasRequest = pixelRequests.some(r => r.user_id === b.id && r.status === 'pending');
@@ -1057,34 +1063,30 @@ export default function Pixels() {
 
                 {/* Step 3: Custom Code (Optional) */}
                 <div className="mb-3">
-                  <label className="form-label fw-semibold">
-                    <span className="badge bg-secondary me-2">3</span>
-                    Custom Code <span className="text-muted fw-normal">(Optional)</span>
+                  <label className="form-check form-switch mb-0">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      checked={useCustomCode}
+                      onChange={(e) => setUseCustomCode(e.target.checked)}
+                    />
+                    <span className="form-check-label">
+                      <span className="badge bg-secondary me-2">3</span>
+                      Use custom installation code <span className="text-muted">(Optional)</span>
+                    </span>
                   </label>
-                  <div
-                    className="border rounded p-3"
-                    style={{ backgroundColor: useCustomCode ? '#1e293b' : 'transparent' }}
-                  >
-                    <label className="form-check form-switch mb-2">
-                      <input
-                        className="form-check-input"
-                        type="checkbox"
-                        checked={useCustomCode}
-                        onChange={(e) => setUseCustomCode(e.target.checked)}
-                      />
-                      <span className="form-check-label">Use custom installation code</span>
-                    </label>
-                    {useCustomCode && (
+                  {useCustomCode && (
+                    <div className="mt-2">
                       <textarea
-                        className="form-control font-monospace border-0"
+                        className="form-control font-monospace"
                         rows={6}
                         placeholder="<!-- Paste your custom tracking code here -->"
                         value={customInstallationCode}
                         onChange={(e) => setCustomInstallationCode(e.target.value)}
                         style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0' }}
                       />
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="modal-footer">
