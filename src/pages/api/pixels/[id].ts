@@ -76,6 +76,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'DELETE') {
       // Delete pixel - admin can delete any, user can only delete their own
+
+      // First, check if the pixel exists and user has permission
+      let checkQuery = supabase.from('pixels').select('id').eq('id', id);
+      if (!isAdmin) {
+        checkQuery = checkQuery.eq('user_id', user.id);
+      }
+      const { data: pixelCheck } = await checkQuery.single();
+
+      if (!pixelCheck) {
+        return res.status(404).json({ error: 'Pixel not found or access denied' });
+      }
+
+      // Clear any references in pixel_requests table
+      await supabase
+        .from('pixel_requests')
+        .update({ pixel_id: null })
+        .eq('pixel_id', id);
+
+      // Now delete the pixel
       let query = supabase.from('pixels').delete().eq('id', id);
       if (!isAdmin) {
         query = query.eq('user_id', user.id);
