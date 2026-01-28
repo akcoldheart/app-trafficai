@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Request ID is required' });
   }
 
-  const { admin_notes } = req.body;
+  const { admin_notes, edited_name, edited_form_data } = req.body;
   const supabase = createClient(req, res);
 
   try {
@@ -46,14 +46,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'User does not have an API key assigned' });
     }
 
-    // Create the audience via Traffic AI API
-    const formData = audienceRequest.form_data as Record<string, unknown>;
+    // Use edited data if provided, otherwise use original request data
+    const finalName = edited_name || audienceRequest.name;
+    const formData = (edited_form_data || audienceRequest.form_data) as Record<string, unknown>;
     let audienceId: string | null = null;
 
     if (audienceRequest.request_type === 'standard') {
       // Standard audience creation
       const audiencePayload = {
-        name: audienceRequest.name,
+        name: finalName,
         filters: formData.filters || {},
         days_back: formData.days_back || 7,
         ...(formData.segment ? { segment: formData.segment } : {}),
