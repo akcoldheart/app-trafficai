@@ -166,15 +166,49 @@ export default function Pixels() {
 <!-- End Traffic AI Pixel -->`;
   };
 
+  // Track if the form was filled from a request
+  const [filledFromRequest, setFilledFromRequest] = useState<PixelRequest | null>(null);
+
   // Open create modal for admin
-  const handleOpenCreateModal = () => {
+  const handleOpenCreateModal = (prefillRequest?: PixelRequest) => {
     setShowCreateModal(true);
-    setSelectedUserId('');
     setUserSearchTerm('');
-    setNewPixel({ name: '', domain: '' });
     setCustomInstallationCode('');
     setUseCustomCode(false);
     fetchUsers();
+
+    // If called with a prefill request, set the data
+    if (prefillRequest) {
+      setSelectedUserId(prefillRequest.user_id);
+      setNewPixel({ name: prefillRequest.name, domain: prefillRequest.domain });
+      setFilledFromRequest(prefillRequest);
+    } else {
+      setSelectedUserId('');
+      setNewPixel({ name: '', domain: '' });
+      setFilledFromRequest(null);
+    }
+  };
+
+  // Handle user selection - auto-fill from pending request if exists
+  const handleSelectUser = (userId: string) => {
+    setSelectedUserId(userId);
+
+    // Check if this user has a pending request
+    const pendingRequest = pixelRequests.find(
+      r => r.user_id === userId && r.status === 'pending'
+    );
+
+    if (pendingRequest) {
+      setNewPixel({ name: pendingRequest.name, domain: pendingRequest.domain });
+      setFilledFromRequest(pendingRequest);
+    } else {
+      // Only clear if we're switching to a user without a request
+      // Don't clear if we just switched from a user with a request to avoid losing edits
+      if (filledFromRequest && filledFromRequest.user_id !== userId) {
+        setNewPixel({ name: '', domain: '' });
+        setFilledFromRequest(null);
+      }
+    }
   };
 
   const handleCloseCreateModal = () => {
@@ -183,6 +217,7 @@ export default function Pixels() {
     setNewPixel({ name: '', domain: '' });
     setCustomInstallationCode('');
     setUseCustomCode(false);
+    setFilledFromRequest(null);
   };
 
   // Admin create pixel for user
@@ -209,6 +244,21 @@ export default function Pixels() {
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create pixel');
+      }
+
+      // If this was created from a pending request, approve/delete it
+      if (filledFromRequest && filledFromRequest.status === 'pending') {
+        try {
+          await fetch(`/api/admin/pixel-requests/${filledFromRequest.id}/approve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ admin_notes: 'Approved via Create Pixel modal' }),
+          });
+          // Update local state to remove the request
+          setPixelRequests(pixelRequests.filter(r => r.id !== filledFromRequest.id));
+        } catch {
+          // Silently ignore - pixel was created successfully
+        }
       }
 
       setPixels([data.pixel, ...pixels]);
@@ -482,7 +532,7 @@ export default function Pixels() {
               <h3 className="card-title">{isAdmin ? 'All Pixels' : 'Your Pixels'}</h3>
               <div className="card-actions">
                 {isAdmin ? (
-                  <button className="btn btn-primary btn-sm" onClick={handleOpenCreateModal}>
+                  <button className="btn btn-primary btn-sm" onClick={() => handleOpenCreateModal()}>
                     <IconPlus size={16} className="me-1" />
                     Create for User
                   </button>
@@ -659,7 +709,7 @@ export default function Pixels() {
                                   className="btn btn-success btn-sm"
                                   onClick={() => handleApproveRequest(request)}
                                   disabled={processing}
-                                  title="Approve"
+                                  title="Quick Approve"
                                 >
                                   <IconCheck size={14} />
                                 </button>
@@ -926,6 +976,12 @@ export default function Pixels() {
                   {selectedUser && (
                     <div className="alert alert-success py-2 mb-2">
                       <strong>Selected:</strong> {selectedUser.email}
+                      {filledFromRequest && (
+                        <span className="badge bg-yellow-lt text-yellow ms-2">
+                          <IconClock size={12} className="me-1" />
+                          Has pending request
+                        </span>
+                      )}
                     </div>
                   )}
                   <div className="list-group" style={{ maxHeight: '150px', overflowY: 'auto' }}>
@@ -934,22 +990,38 @@ export default function Pixels() {
                     ) : filteredUsers.length === 0 ? (
                       <div className="list-group-item text-center text-muted">No users found</div>
                     ) : (
-                      filteredUsers.slice(0, 8).map((user) => (
-                        <button
-                          key={user.id}
-                          type="button"
-                          className={`list-group-item list-group-item-action d-flex align-items-center ${selectedUserId === user.id ? 'active' : ''}`}
-                          onClick={() => setSelectedUserId(user.id)}
-                        >
-                          <span className={`avatar avatar-xs ${selectedUserId === user.id ? 'bg-white text-primary' : 'bg-blue-lt'} me-2`}>
-                            <IconUser size={12} />
-                          </span>
-                          {user.email}
-                        </button>
-                      ))
+                      filteredUsers.slice(0, 8).map((user) => {
+                        const hasPendingRequest = pixelRequests.some(r => r.user_id === user.id && r.status === 'pending');
+                        return (
+                          <button
+                            key={user.id}
+                            type="button"
+                            className={`list-group-item list-group-item-action d-flex align-items-center ${selectedUserId === user.id ? 'active' : ''}`}
+                            onClick={() => handleSelectUser(user.id)}
+                          >
+                            <span className={`avatar avatar-xs ${selectedUserId === user.id ? 'bg-white text-primary' : 'bg-blue-lt'} me-2`}>
+                              <IconUser size={12} />
+                            </span>
+                            {user.email}
+                            {hasPendingRequest && (
+                              <span className={`badge ms-auto ${selectedUserId === user.id ? 'bg-white text-primary' : 'bg-yellow-lt text-yellow'}`} style={{ fontSize: '9px' }}>
+                                Request
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 </div>
+
+                {filledFromRequest && (
+                  <div className="alert alert-info py-2 mb-3">
+                    <IconInfoCircle size={14} className="me-1" />
+                    <strong>Auto-filled from pending request:</strong> &quot;{filledFromRequest.name}&quot; - {filledFromRequest.domain}
+                    <br /><small className="text-muted">You can edit these values before creating the pixel.</small>
+                  </div>
+                )}
 
                 <div className="row">
                   <div className="col-md-6">
@@ -960,7 +1032,9 @@ export default function Pixels() {
                         className="form-control"
                         placeholder="e.g., Main Website"
                         value={newPixel.name}
-                        onChange={(e) => setNewPixel({ ...newPixel, name: e.target.value })}
+                        onChange={(e) => {
+                          setNewPixel({ ...newPixel, name: e.target.value });
+                        }}
                       />
                     </div>
                   </div>
@@ -974,7 +1048,9 @@ export default function Pixels() {
                           className="form-control"
                           placeholder="example.com"
                           value={newPixel.domain}
-                          onChange={(e) => setNewPixel({ ...newPixel, domain: e.target.value })}
+                          onChange={(e) => {
+                            setNewPixel({ ...newPixel, domain: e.target.value });
+                          }}
                         />
                       </div>
                     </div>
