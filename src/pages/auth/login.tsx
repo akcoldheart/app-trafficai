@@ -22,113 +22,19 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isProcessingOAuth, setIsProcessingOAuth] = useState(false);
   const supabase = createClient();
 
-  const { redirect, code } = router.query;
+  const { redirect } = router.query;
 
-  // Handle OAuth code if present in URL (happens when OAuth redirects here)
+  // Check URL for error from OAuth callback
   useEffect(() => {
-    const handleOAuthCode = async () => {
-      // First, check if there's a hash fragment with access_token (implicit flow)
-      if (typeof window !== 'undefined' && window.location.hash) {
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const accessToken = hashParams.get('access_token');
-        if (accessToken) {
-          console.log('Found access token in hash, setting session...');
-          setIsProcessingOAuth(true);
-          // The Supabase client should automatically pick up the hash and set the session
-          const { data, error } = await supabase.auth.getSession();
-          if (data.session) {
-            window.location.href = (redirect as string) || '/';
-            return;
-          }
-          if (error) {
-            setError(error.message);
-            setIsProcessingOAuth(false);
-            return;
-          }
-        }
-      }
-
-      // Check if there's a code in the URL (OAuth callback)
-      if (code && typeof code === 'string') {
-        setIsProcessingOAuth(true);
-
-        // Set a timeout to prevent infinite loading
-        const timeout = setTimeout(() => {
-          console.error('OAuth timeout - taking too long');
-          setError('Sign in is taking too long. Please try again.');
-          setIsProcessingOAuth(false);
-          // Clear the code from URL to prevent retry loops
-          router.replace('/auth/login', undefined, { shallow: true });
-        }, 10000);
-
-        try {
-          console.log('Exchanging code for session...');
-
-          // Exchange the code for a session (PKCE flow)
-          const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
-          clearTimeout(timeout);
-
-          if (exchangeError) {
-            console.error('Code exchange error:', exchangeError);
-            // Check for specific error types
-            if (exchangeError.message.includes('code') || exchangeError.message.includes('expired')) {
-              setError('Sign in link has expired. Please try again.');
-            } else {
-              setError(exchangeError.message);
-            }
-            setIsProcessingOAuth(false);
-            router.replace('/auth/login', undefined, { shallow: true });
-            return;
-          }
-
-          console.log('Code exchanged, checking session...');
-
-          // Check if we got a session from the exchange
-          if (exchangeData?.session) {
-            console.log('Session obtained, redirecting...');
-            const redirectTo = (redirect as string) || '/';
-            window.location.href = redirectTo;
-            return;
-          }
-
-          // Fallback: try to get session
-          const { data, error: sessionError } = await supabase.auth.getSession();
-
-          if (sessionError) {
-            console.error('Session error:', sessionError);
-            setError(sessionError.message);
-            setIsProcessingOAuth(false);
-            return;
-          }
-
-          if (data.session) {
-            console.log('Session found, redirecting...');
-            const redirectTo = (redirect as string) || '/';
-            window.location.href = redirectTo;
-            return;
-          } else {
-            setError('Authentication failed. Please try again.');
-            setIsProcessingOAuth(false);
-            router.replace('/auth/login', undefined, { shallow: true });
-          }
-        } catch (err) {
-          clearTimeout(timeout);
-          console.error('OAuth handling error:', err);
-          setError('Failed to complete sign in. Please try again.');
-          setIsProcessingOAuth(false);
-          router.replace('/auth/login', undefined, { shallow: true });
-        }
-      }
-    };
-
-    if (router.isReady) {
-      handleOAuthCode();
+    const errorParam = router.query.error as string;
+    if (errorParam) {
+      setError(decodeURIComponent(errorParam));
+      // Clear error from URL
+      router.replace('/auth/login', undefined, { shallow: true });
     }
-  }, [router.isReady, code, redirect, supabase.auth, router]);
+  }, [router.query.error, router]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,8 +67,12 @@ export default function Login() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // Use API route for server-side code exchange (handles PKCE properly)
-          redirectTo: `${window.location.origin}/api/auth/callback?redirect=${encodeURIComponent((redirect as string) || '/')}`,
+          redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent((redirect as string) || '/')}`,
+          // Use query params for code exchange instead of hash fragments
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       });
 
@@ -172,22 +82,6 @@ export default function Login() {
       setLoading(false);
     }
   };
-
-  // Show loading state when processing OAuth
-  if (isProcessingOAuth) {
-    return (
-      <div className="page page-center" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="text-center">
-          <div className="mb-3">
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-          </div>
-          <div className="text-muted">Completing sign in...</div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <>
