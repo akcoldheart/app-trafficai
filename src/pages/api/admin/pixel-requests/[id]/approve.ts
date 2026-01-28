@@ -99,6 +99,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       { pixel_id: pixel.id }
     );
 
+    // Delete associated notification
+    await supabase
+      .from('admin_notifications')
+      .delete()
+      .eq('reference_id', id)
+      .eq('reference_type', 'pixel_request');
+
     return res.status(200).json({
       success: true,
       request: updatedRequest,

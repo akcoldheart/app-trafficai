@@ -103,13 +103,8 @@ export default function Header() {
       handleMarkAsRead(notification.id);
     }
 
-    // Navigate to relevant page
-    if (notification.reference_type === 'pixel_request') {
-      router.push('/pixels');
-    } else if (notification.reference_type === 'audience_request') {
-      router.push('/admin/audience-requests');
-    }
-
+    // Navigate to all requests page
+    router.push('/admin/requests');
     setNotificationDropdownOpen(false);
   };
 
@@ -263,7 +258,7 @@ export default function Header() {
                     ))}
                     <div className="dropdown-divider"></div>
                     <Link
-                      href="/pixels"
+                      href="/admin/requests"
                       className="dropdown-item text-center text-primary"
                       onClick={() => setNotificationDropdownOpen(false)}
                     >

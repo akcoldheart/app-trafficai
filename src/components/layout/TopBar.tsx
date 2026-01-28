@@ -96,12 +96,8 @@ export default function TopBar() {
       handleMarkAsRead(notification.id);
     }
 
-    if (notification.reference_type === 'pixel_request') {
-      router.push('/pixels');
-    } else if (notification.reference_type === 'audience_request') {
-      router.push('/admin/audience-requests');
-    }
-
+    // Navigate to all requests page
+    router.push('/admin/requests');
     setShowNotifications(false);
   };
 
@@ -196,7 +192,7 @@ export default function TopBar() {
                 )}
               </div>
               <Link
-                href="/pixels"
+                href="/admin/requests"
                 className="notification-footer"
                 onClick={() => setShowNotifications(false)}
               >

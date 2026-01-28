@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/router';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -28,6 +29,7 @@ interface UserOption {
 }
 
 export default function Pixels() {
+  const router = useRouter();
   const { userProfile } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
 
@@ -123,6 +125,15 @@ export default function Pixels() {
       setLastSelectedId(selectedPixel.id);
     }
   }, [selectedPixel, lastSelectedId]);
+
+  // Handle tab query parameter from URL
+  useEffect(() => {
+    if (router.query.tab === 'requests') {
+      setActiveTab('requests');
+      // Clear the query parameter from URL
+      router.replace('/pixels', undefined, { shallow: true });
+    }
+  }, [router.query.tab, router]);
 
   const getBaseUrl = () => {
     if (typeof window !== 'undefined') {

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { TrafficAPI, Audience } from '@/lib/api';
@@ -39,6 +40,7 @@ interface EditFormData {
 }
 
 export default function Audiences() {
+  const router = useRouter();
   const { userProfile } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
 
@@ -148,6 +150,15 @@ export default function Audiences() {
       loadAttributes();
     }
   }, [loadAudiences, loadAudienceRequests, isAdmin, loadAttributes]);
+
+  // Handle tab query parameter from URL
+  useEffect(() => {
+    if (router.query.tab === 'requests') {
+      setActiveTab('requests');
+      // Clear the query parameter from URL
+      router.replace('/audiences', undefined, { shallow: true });
+    }
+  }, [router.query.tab, router]);
 
   const handleDelete = async () => {
     if (!deleteId) return;
