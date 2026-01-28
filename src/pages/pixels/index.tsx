@@ -1063,15 +1063,15 @@ export default function Pixels() {
 
                 {/* Step 3: Custom Code (Optional) */}
                 <div className="mb-3">
-                  <label className="form-check form-switch mb-0">
+                  <label className="form-check form-switch mb-0" style={{ paddingLeft: '3.5rem' }}>
                     <input
                       className="form-check-input"
                       type="checkbox"
                       checked={useCustomCode}
                       onChange={(e) => setUseCustomCode(e.target.checked)}
+                      style={{ width: '2.5rem', height: '1.25rem', marginLeft: '-3.5rem' }}
                     />
                     <span className="form-check-label">
-                      <span className="badge bg-secondary me-2">3</span>
                       Use custom installation code <span className="text-muted">(Optional)</span>
                     </span>
                   </label>
