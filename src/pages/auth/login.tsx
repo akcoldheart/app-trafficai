@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Head from 'next/head';
@@ -22,9 +22,59 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isProcessingAuth, setIsProcessingAuth] = useState(false);
+  const authProcessedRef = useRef(false);
   const supabase = createClient();
 
   const { redirect } = router.query;
+
+  // Handle OAuth callback - detect code in URL and exchange it
+  useEffect(() => {
+    const handleOAuthCallback = async () => {
+      // Prevent double processing
+      if (authProcessedRef.current) return;
+
+      // Check for code in URL (OAuth callback)
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+
+      if (code) {
+        authProcessedRef.current = true;
+        setIsProcessingAuth(true);
+        console.log('OAuth code detected, exchanging...');
+
+        try {
+          // Exchange the code for a session (client-side has access to PKCE verifier)
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+          if (exchangeError) {
+            console.error('Code exchange error:', exchangeError);
+            setError('Authentication failed. Please try again.');
+            setIsProcessingAuth(false);
+            // Clear code from URL
+            window.history.replaceState({}, '', '/auth/login');
+            return;
+          }
+
+          if (data?.session) {
+            console.log('Session obtained, redirecting...');
+            // Get redirect URL from sessionStorage or default to home
+            const redirectUrl = sessionStorage.getItem('authRedirect') || '/';
+            sessionStorage.removeItem('authRedirect');
+            window.location.href = redirectUrl;
+            return;
+          }
+        } catch (err) {
+          console.error('OAuth callback error:', err);
+          setError('Authentication failed. Please try again.');
+          setIsProcessingAuth(false);
+          window.history.replaceState({}, '', '/auth/login');
+        }
+      }
+    };
+
+    handleOAuthCallback();
+  }, [supabase.auth]);
 
   // Check URL for error from OAuth callback
   useEffect(() => {
@@ -64,10 +114,15 @@ export default function Login() {
     setError(null);
 
     try {
+      // Store the redirect URL for after auth completes
+      const redirectUrl = (redirect as string) || '/';
+      sessionStorage.setItem('authRedirect', redirectUrl);
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/api/auth/callback?redirect=${encodeURIComponent((redirect as string) || '/')}`,
+          // Redirect to login page which will handle the code exchange client-side
+          redirectTo: `${window.location.origin}/auth/login`,
         },
       });
 
@@ -77,6 +132,27 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  // Show loading state when processing OAuth
+  if (isProcessingAuth) {
+    return (
+      <>
+        <Head>
+          <title>Signing in... - Traffic AI</title>
+        </Head>
+        <div className="page page-center" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="text-center">
+            <div className="mb-3">
+              <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            <div className="text-muted">Completing sign in...</div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

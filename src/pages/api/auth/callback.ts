@@ -5,7 +5,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { code, redirect: redirectTo } = req.query;
 
   if (!code || typeof code !== 'string') {
-    console.error('No code provided in callback');
     return res.redirect('/auth/login?error=No+authorization+code+provided');
   }
 
@@ -16,12 +15,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (error) {
-      console.error('Code exchange error:', error);
+      console.error('Code exchange error:', error.message);
+
+      // Check if we have a session despite the error
+      const { data: sessionAfterError } = await supabase.auth.getSession();
+      if (sessionAfterError?.session) {
+        const finalRedirect = typeof redirectTo === 'string' ? redirectTo : '/';
+        return res.redirect(finalRedirect);
+      }
+
       return res.redirect(`/auth/login?error=${encodeURIComponent(error.message)}`);
     }
 
     if (!data.session) {
-      console.error('No session returned from code exchange');
       return res.redirect('/auth/login?error=Authentication+failed');
     }
 
