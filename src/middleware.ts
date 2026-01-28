@@ -9,11 +9,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Skip middleware for OAuth callback to avoid interfering with PKCE code exchange
-  if (pathname === '/auth/callback') {
-    return NextResponse.next();
-  }
-
   return await updateSession(request);
 }
 

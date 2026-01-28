@@ -35,6 +35,8 @@ export default function AuthCallback() {
         const { data: { session: existingSession } } = await supabase.auth.getSession();
         if (existingSession) {
           console.log('Session already exists, redirecting...');
+          // Small delay to ensure cookies are synced
+          await new Promise(resolve => setTimeout(resolve, 100));
           window.location.href = redirectTo;
           return;
         }
@@ -52,6 +54,7 @@ export default function AuthCallback() {
             const { data: { session: retrySession } } = await supabase.auth.getSession();
             if (retrySession) {
               console.log('Session found after exchange error, redirecting...');
+              await new Promise(resolve => setTimeout(resolve, 100));
               window.location.href = redirectTo;
               return;
             }
@@ -68,6 +71,8 @@ export default function AuthCallback() {
           // Successfully exchanged code
           if (data?.session) {
             console.log('Session obtained from code exchange, redirecting...');
+            // Small delay to ensure cookies are fully set before redirect
+            await new Promise(resolve => setTimeout(resolve, 100));
             window.location.href = redirectTo;
             return;
           }

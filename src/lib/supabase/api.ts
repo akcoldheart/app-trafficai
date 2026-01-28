@@ -19,9 +19,11 @@ export function createClient(req: NextApiRequest, res: NextApiResponse) {
           }));
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            res.setHeader('Set-Cookie', serialize(name, value, options));
-          });
+          // Collect all cookies and set them together to avoid overwriting
+          const cookieStrings = cookiesToSet.map(({ name, value, options }) =>
+            serialize(name, value, options)
+          );
+          res.setHeader('Set-Cookie', cookieStrings);
         },
       },
     }

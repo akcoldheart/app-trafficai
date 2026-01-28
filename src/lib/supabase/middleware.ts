@@ -53,10 +53,8 @@ export async function updateSession(request: NextRequest) {
 
   // Redirect authenticated users away from auth pages
   // Exception: Don't redirect if on login page (allows logout to complete)
-  // Exception: Don't redirect if on callback page (allows OAuth callback to complete)
   const isLoginPage = request.nextUrl.pathname === '/auth/login';
-  const isCallbackPage = request.nextUrl.pathname === '/auth/callback';
-  if (user && isAuthPage && !isLoginPage && !isCallbackPage) {
+  if (user && isAuthPage && !isLoginPage) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);
