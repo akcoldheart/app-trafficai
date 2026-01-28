@@ -237,18 +237,23 @@ export default function Pixels() {
 
     setProcessing(true);
     try {
+      const payload = {
+        name: newPixel.name,
+        domain: newPixel.domain,
+        user_id: selectedUserId,
+        custom_installation_code: useCustomCode && customInstallationCode.trim() ? customInstallationCode.trim() : null,
+      };
+
+      console.log('Creating pixel with payload:', payload);
+
       const response = await fetch('/api/admin/pixels/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newPixel.name,
-          domain: newPixel.domain,
-          user_id: selectedUserId,
-          custom_installation_code: useCustomCode ? customInstallationCode.trim() : undefined,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
+      console.log('Pixel created response:', data);
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create pixel');
@@ -272,7 +277,8 @@ export default function Pixels() {
       setPixels([data.pixel, ...pixels]);
       setSelectedPixel(data.pixel);
       handleCloseCreateModal();
-      showToast('success', `Pixel "${data.pixel.name}" created successfully!`);
+      const hasCustomCode = !!data.pixel.custom_installation_code;
+      showToast('success', `Pixel "${data.pixel.name}" created successfully!${hasCustomCode ? ' (with custom code)' : ''}`);
     } catch (err) {
       showToast('error', (err as Error).message);
     } finally {
