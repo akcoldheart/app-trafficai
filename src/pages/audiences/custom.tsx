@@ -14,6 +14,12 @@ export default function CustomAudience() {
   const [loading, setLoading] = useState(false);
   const [topic, setTopic] = useState('');
   const [description, setDescription] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
 
   const handleSubmit = async (e: FormEvent) => {
@@ -24,8 +30,9 @@ export default function CustomAudience() {
       if (isAdmin) {
         // Admin can create custom audience directly
         const result = await TrafficAPI.createCustomAudience(topic, description);
-        alert('Custom audience created successfully! Status: ' + ((result as unknown as { Status?: string }).Status || 'processing'));
-        router.push('/audiences');
+        const status = (result as unknown as { Status?: string }).Status || 'processing';
+        showToast(`Custom audience created successfully! Status: ${status}`, 'success');
+        setTimeout(() => router.push('/audiences'), 1500);
       } else {
         // Non-admin users submit a request
         const response = await fetch('/api/audience-requests', {
@@ -47,11 +54,11 @@ export default function CustomAudience() {
           throw new Error(data.error || 'Failed to submit custom audience request');
         }
 
-        alert('Your custom audience request has been submitted for admin approval.');
-        router.push('/audiences');
+        showToast('Your custom audience request has been submitted for admin approval.', 'success');
+        setTimeout(() => router.push('/audiences'), 1500);
       }
     } catch (error) {
-      alert('Error: ' + (error as Error).message);
+      showToast('Error: ' + (error as Error).message, 'error');
     } finally {
       setLoading(false);
     }
@@ -190,6 +197,38 @@ export default function CustomAudience() {
           </div>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className="toast show position-fixed"
+          style={{
+            top: '20px',
+            right: '20px',
+            zIndex: 9999,
+            minWidth: '300px',
+          }}
+        >
+          <div className={`toast-header ${
+            toast.type === 'success' ? 'bg-success text-white' :
+            toast.type === 'error' ? 'bg-danger text-white' :
+            'bg-info text-white'
+          }`}>
+            <strong className="me-auto">
+              {toast.type === 'success' ? 'Success' :
+               toast.type === 'error' ? 'Error' : 'Info'}
+            </strong>
+            <button
+              type="button"
+              className="btn-close btn-close-white"
+              onClick={() => setToast(null)}
+            ></button>
+          </div>
+          <div className="toast-body">
+            {toast.message}
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
