@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { requireRole, logAuditAction } from '@/lib/api-helpers';
 import crypto from 'crypto';
+import type { Json } from '@/lib/supabase/types';
 
 interface AudienceContact {
   email?: string;
@@ -174,11 +175,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               id: audienceId,
               name: name.trim(),
               total_records: normalizedContacts.length,
-              contacts: normalizedContacts,
+              contacts: normalizedContacts as Json[],
               uploaded_at: new Date().toISOString(),
               uploaded_by: authResult.user.id,
             },
-          },
+          } as Json,
         })
         .eq('id', request_id);
 
@@ -204,11 +205,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               id: audienceId,
               name: name.trim(),
               total_records: normalizedContacts.length,
-              contacts: normalizedContacts,
+              contacts: normalizedContacts as Json[],
               uploaded_at: new Date().toISOString(),
               uploaded_by: authResult.user.id,
             },
-          },
+          } as Json,
         });
 
       if (createError) {
