@@ -12,9 +12,38 @@ export default function CreateAudience() {
   const isAdmin = userProfile?.role === 'admin';
 
   const [loading, setLoading] = useState(false);
-  const [industries, setIndustries] = useState<string[]>([]);
-  const [departments, setDepartments] = useState<string[]>([]);
-  const [seniority, setSeniority] = useState<string[]>([]);
+
+  // Static fallback options for dropdowns
+  const STATIC_INDUSTRIES = [
+    'Accounting', 'Advertising', 'Aerospace', 'Agriculture', 'Automotive',
+    'Banking', 'Biotechnology', 'Broadcasting', 'Business Services', 'Chemicals',
+    'Communications', 'Computer Hardware', 'Computer Software', 'Construction',
+    'Consulting', 'Consumer Products', 'Education', 'Electronics', 'Energy',
+    'Engineering', 'Entertainment', 'Environmental', 'Finance', 'Food & Beverage',
+    'Government', 'Healthcare', 'Hospitality', 'Insurance', 'Internet',
+    'Legal', 'Manufacturing', 'Marketing', 'Media', 'Medical Devices',
+    'Mining', 'Non-Profit', 'Pharmaceuticals', 'Real Estate', 'Real Estate Agents And Brokers',
+    'Retail', 'Semiconductors', 'Technology', 'Telecommunications', 'Transportation',
+    'Travel', 'Utilities', 'Venture Capital', 'Wholesale',
+  ];
+
+  const STATIC_DEPARTMENTS = [
+    'Accounting', 'Administrative', 'Business Development', 'Community And Social Services',
+    'Customer Service', 'Engineering', 'Executive', 'Finance', 'General Management',
+    'Human Resources', 'Information Technology', 'Legal', 'Marketing',
+    'Operations', 'Product Management', 'Project Management', 'Public Relations',
+    'Purchasing', 'Quality Assurance', 'Research & Development', 'Sales',
+    'Strategy', 'Supply Chain', 'Training',
+  ];
+
+  const STATIC_SENIORITY = [
+    'Entry', 'Individual Contributor', 'Manager', 'Senior Manager',
+    'Director', 'Senior Director', 'VP', 'SVP', 'EVP', 'C-Level', 'Owner', 'Partner',
+  ];
+
+  const [industries, setIndustries] = useState<string[]>(STATIC_INDUSTRIES);
+  const [departments, setDepartments] = useState<string[]>(STATIC_DEPARTMENTS);
+  const [seniority, setSeniority] = useState<string[]>(STATIC_SENIORITY);
 
   // Form state
   const [name, setName] = useState('');
@@ -34,29 +63,42 @@ export default function CreateAudience() {
     loadAttributes();
   }, [router]);
 
+  // Helper to extract attributes from various response formats
+  const extractAttributes = (data: unknown): string[] => {
+    if (Array.isArray(data)) return data;
+    if (typeof data === 'object' && data !== null) {
+      const obj = data as Record<string, unknown>;
+      if (Array.isArray(obj.Attributes)) return obj.Attributes;
+      if (Array.isArray(obj.attributes)) return obj.attributes;
+      if (Array.isArray(obj.data)) return obj.data;
+    }
+    return [];
+  };
+
   const loadAttributes = async () => {
     try {
       const industriesData = await TrafficAPI.getAudienceAttributes('industries');
-      setIndustries((industriesData as unknown as { Attributes?: string[]; attributes?: string[] }).Attributes ||
-                   (industriesData as unknown as { attributes?: string[] }).attributes || []);
+      const extracted = extractAttributes(industriesData);
+      if (extracted.length > 0) setIndustries(extracted);
     } catch (error) {
-      console.error('Error loading industries:', error);
+      console.error('Error loading industries, using static list:', error);
+      // Keep static fallback (already set as default)
     }
 
     try {
       const departmentsData = await TrafficAPI.getAudienceAttributes('departments');
-      setDepartments((departmentsData as unknown as { Attributes?: string[]; attributes?: string[] }).Attributes ||
-                    (departmentsData as unknown as { attributes?: string[] }).attributes || []);
+      const extracted = extractAttributes(departmentsData);
+      if (extracted.length > 0) setDepartments(extracted);
     } catch (error) {
-      console.error('Error loading departments:', error);
+      console.error('Error loading departments, using static list:', error);
     }
 
     try {
       const seniorityData = await TrafficAPI.getAudienceAttributes('seniority');
-      setSeniority((seniorityData as unknown as { Attributes?: string[]; attributes?: string[] }).Attributes ||
-                  (seniorityData as unknown as { attributes?: string[] }).attributes || []);
+      const extracted = extractAttributes(seniorityData);
+      if (extracted.length > 0) setSeniority(extracted);
     } catch (error) {
-      console.error('Error loading seniority:', error);
+      console.error('Error loading seniority, using static list:', error);
     }
   };
 

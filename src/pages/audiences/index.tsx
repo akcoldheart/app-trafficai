@@ -56,10 +56,38 @@ export default function Audiences() {
   const [processing, setProcessing] = useState(false);
   const pageSize = 20;
 
+  // Static fallback options for dropdowns (used when API is unavailable)
+  const STATIC_INDUSTRIES = [
+    'Accounting', 'Advertising', 'Aerospace', 'Agriculture', 'Automotive',
+    'Banking', 'Biotechnology', 'Broadcasting', 'Business Services', 'Chemicals',
+    'Communications', 'Computer Hardware', 'Computer Software', 'Construction',
+    'Consulting', 'Consumer Products', 'Education', 'Electronics', 'Energy',
+    'Engineering', 'Entertainment', 'Environmental', 'Finance', 'Food & Beverage',
+    'Government', 'Healthcare', 'Hospitality', 'Insurance', 'Internet',
+    'Legal', 'Manufacturing', 'Marketing', 'Media', 'Medical Devices',
+    'Mining', 'Non-Profit', 'Pharmaceuticals', 'Real Estate', 'Real Estate Agents And Brokers',
+    'Retail', 'Semiconductors', 'Technology', 'Telecommunications', 'Transportation',
+    'Travel', 'Utilities', 'Venture Capital', 'Wholesale',
+  ];
+
+  const STATIC_DEPARTMENTS = [
+    'Accounting', 'Administrative', 'Business Development', 'Community And Social Services',
+    'Customer Service', 'Engineering', 'Executive', 'Finance', 'General Management',
+    'Human Resources', 'Information Technology', 'Legal', 'Marketing',
+    'Operations', 'Product Management', 'Project Management', 'Public Relations',
+    'Purchasing', 'Quality Assurance', 'Research & Development', 'Sales',
+    'Strategy', 'Supply Chain', 'Training',
+  ];
+
+  const STATIC_SENIORITY = [
+    'Entry', 'Individual Contributor', 'Manager', 'Senior Manager',
+    'Director', 'Senior Director', 'VP', 'SVP', 'EVP', 'C-Level', 'Owner', 'Partner',
+  ];
+
   // Attribute options for dropdowns
-  const [industryOptions, setIndustryOptions] = useState<string[]>([]);
-  const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
-  const [seniorityOptions, setSeniorityOptions] = useState<string[]>([]);
+  const [industryOptions, setIndustryOptions] = useState<string[]>(STATIC_INDUSTRIES);
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>(STATIC_DEPARTMENTS);
+  const [seniorityOptions, setSeniorityOptions] = useState<string[]>(STATIC_SENIORITY);
   const [attributesLoaded, setAttributesLoaded] = useState(false);
 
   // Edit modal state
@@ -83,46 +111,183 @@ export default function Audiences() {
   });
   const [adminNotes, setAdminNotes] = useState('');
 
-  // Load attribute options for dropdowns
+  // Manual audience creation state
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualAudienceUrl, setManualAudienceUrl] = useState('');
+  const [manualAudienceName, setManualAudienceName] = useState('');
+  const [manualAudienceData, setManualAudienceData] = useState<string>('');
+  const [fetchingManualAudience, setFetchingManualAudience] = useState(false);
+  const [creatingManualAudience, setCreatingManualAudience] = useState(false);
+
+  // Helper to extract attributes from various response formats
+  const extractAttributes = (data: unknown): string[] => {
+    if (Array.isArray(data)) return data;
+    if (typeof data === 'object' && data !== null) {
+      const obj = data as Record<string, unknown>;
+      if (Array.isArray(obj.Attributes)) return obj.Attributes;
+      if (Array.isArray(obj.attributes)) return obj.attributes;
+      if (Array.isArray(obj.data)) return obj.data;
+    }
+    return [];
+  };
+
+  // Load attribute options for dropdowns (use API if available, fallback to static)
   const loadAttributes = useCallback(async () => {
     if (attributesLoaded) return;
 
     try {
       const industriesData = await TrafficAPI.getAudienceAttributes('industries');
-      setIndustryOptions((industriesData as unknown as { Attributes?: string[]; attributes?: string[] }).Attributes ||
-                   (industriesData as unknown as { attributes?: string[] }).attributes || []);
+      const extracted = extractAttributes(industriesData);
+      if (extracted.length > 0) setIndustryOptions(extracted);
     } catch (error) {
-      console.error('Error loading industries:', error);
+      console.error('Error loading industries, using static list:', error);
+      // Keep static fallback (already set as default)
     }
 
     try {
       const departmentsData = await TrafficAPI.getAudienceAttributes('departments');
-      setDepartmentOptions((departmentsData as unknown as { Attributes?: string[]; attributes?: string[] }).Attributes ||
-                    (departmentsData as unknown as { attributes?: string[] }).attributes || []);
+      const extracted = extractAttributes(departmentsData);
+      if (extracted.length > 0) setDepartmentOptions(extracted);
     } catch (error) {
-      console.error('Error loading departments:', error);
+      console.error('Error loading departments, using static list:', error);
     }
 
     try {
       const seniorityData = await TrafficAPI.getAudienceAttributes('seniority');
-      setSeniorityOptions((seniorityData as unknown as { Attributes?: string[]; attributes?: string[] }).Attributes ||
-                  (seniorityData as unknown as { attributes?: string[] }).attributes || []);
+      const extracted = extractAttributes(seniorityData);
+      if (extracted.length > 0) setSeniorityOptions(extracted);
     } catch (error) {
-      console.error('Error loading seniority:', error);
+      console.error('Error loading seniority, using static list:', error);
     }
 
     setAttributesLoaded(true);
   }, [attributesLoaded]);
+
+  // Fetch audience data from manual URL
+  const handleFetchManualAudience = async () => {
+    if (!manualAudienceUrl) return;
+
+    setFetchingManualAudience(true);
+    try {
+      const response = await fetch(manualAudienceUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+      const data = await response.json();
+      setManualAudienceData(JSON.stringify(data, null, 2));
+    } catch (error) {
+      alert('Error fetching data: ' + (error as Error).message);
+    } finally {
+      setFetchingManualAudience(false);
+    }
+  };
+
+  // Create manual audience from fetched/uploaded data
+  const handleCreateManualAudience = async () => {
+    if (!manualAudienceName || !manualAudienceData) {
+      alert('Please provide a name and audience data');
+      return;
+    }
+
+    setCreatingManualAudience(true);
+    try {
+      let audienceData;
+      try {
+        audienceData = JSON.parse(manualAudienceData);
+      } catch {
+        alert('Invalid JSON data');
+        return;
+      }
+
+      const response = await fetch('/api/admin/audiences/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: manualAudienceName,
+          data: audienceData,
+          request_id: editingRequest?.id || null,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create audience');
+      }
+
+      alert('Audience created successfully!');
+      setShowManualModal(false);
+      setManualAudienceUrl('');
+      setManualAudienceName('');
+      setManualAudienceData('');
+
+      // Refresh audiences list
+      await loadAudiences(currentPage);
+      if (editingRequest) {
+        await loadAudienceRequests();
+        setShowEditModal(false);
+        setEditingRequest(null);
+      }
+    } catch (error) {
+      alert('Error: ' + (error as Error).message);
+    } finally {
+      setCreatingManualAudience(false);
+    }
+  };
 
   const loadAudiences = useCallback(async (page = 1) => {
     setLoading(true);
     setCurrentPage(page);
 
     try {
-      const data = await TrafficAPI.getAudiences(page, pageSize);
-      setAudiences(data.Data || []);
-      setTotalRecords(data.total_records || 0);
-      setTotalPages(Math.ceil((data.total_records || 0) / pageSize));
+      // Fetch from external API
+      let apiAudiences: Audience[] = [];
+      let apiTotalRecords = 0;
+
+      try {
+        const data = await TrafficAPI.getAudiences(page, pageSize);
+        apiAudiences = data.Data || [];
+        apiTotalRecords = data.total_records || 0;
+      } catch (apiError) {
+        console.error('Error loading audiences from API:', apiError);
+      }
+
+      // Fetch local manual audiences from approved requests
+      let localAudiences: Audience[] = [];
+      try {
+        const response = await fetch('/api/audience-requests?status=approved&has_manual=true');
+        const localData = await response.json();
+        if (response.ok && localData.requests) {
+          localAudiences = localData.requests
+            .filter((req: AudienceRequest) => {
+              const formData = req.form_data as Record<string, unknown>;
+              return formData?.manual_audience;
+            })
+            .map((req: AudienceRequest) => {
+              const formData = req.form_data as Record<string, unknown>;
+              const manualAudience = formData.manual_audience as Record<string, unknown>;
+              return {
+                id: req.audience_id || (manualAudience?.id as string) || req.id,
+                audienceId: req.audience_id || (manualAudience?.id as string),
+                name: req.name,
+                total_records: (manualAudience?.total_records as number) || 0,
+                created_at: req.created_at,
+                filters: { manual_upload: true },
+                isManual: true,
+              };
+            });
+        }
+      } catch (localError) {
+        console.error('Error loading local audiences:', localError);
+      }
+
+      // Combine both sources
+      const allAudiences = [...localAudiences, ...apiAudiences];
+      const totalRecordsCount = apiTotalRecords + localAudiences.length;
+
+      setAudiences(allAudiences);
+      setTotalRecords(totalRecordsCount);
+      setTotalPages(Math.ceil(totalRecordsCount / pageSize));
     } catch (error) {
       console.error('Error loading audiences:', error);
     } finally {
@@ -382,6 +547,15 @@ export default function Audiences() {
                     <IconPlus className="icon" />
                     {isAdmin ? 'Create Audience' : 'Request Audience'}
                   </Link>
+                  {isAdmin && (
+                    <button
+                      className="btn btn-outline-primary"
+                      onClick={() => setShowManualModal(true)}
+                    >
+                      <IconPlus className="icon" />
+                      Manual Upload
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -463,20 +637,26 @@ export default function Audiences() {
                           <tr key={id}>
                             <td>
                               <div className="d-flex align-items-center">
-                                <span className="avatar avatar-sm bg-primary-lt me-2">
+                                <span className={`avatar avatar-sm ${audience.isManual ? 'bg-purple-lt' : 'bg-primary-lt'} me-2`}>
                                   <IconUsers className="icon" />
                                 </span>
-                                <span className="text-reset">{audience.name || 'Unnamed Audience'}</span>
+                                <div>
+                                  <span className="text-reset">{audience.name || 'Unnamed Audience'}</span>
+                                  {audience.isManual && (
+                                    <span className="badge bg-purple-lt text-purple ms-2">Manual</span>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td><code className="small">{id}</code></td>
                             <td>{audience.total_records?.toLocaleString() || '-'}</td>
                             <td>
                               <span className={`badge ${
+                                audience.isManual ? 'bg-purple' :
                                 (audience as unknown as { status?: string }).status === 'ready' ? 'bg-green' :
                                 (audience as unknown as { status?: string }).status === 'processing' ? 'bg-yellow' : 'bg-blue'
                               }`}>
-                                {(audience as unknown as { status?: string }).status || 'Active'}
+                                {audience.isManual ? 'Manual' : ((audience as unknown as { status?: string }).status || 'Active')}
                               </span>
                             </td>
                             <td className="text-muted">
@@ -945,17 +1125,158 @@ export default function Audiences() {
                 </div>
               </div>
             <div className="card-footer">
+              <div className="d-flex justify-content-between">
+                <button
+                  type="button"
+                  className="btn btn-outline-primary"
+                  onClick={() => {
+                    setManualAudienceName(editFormData.name || editingRequest?.name || '');
+                    setShowManualModal(true);
+                  }}
+                  disabled={processing}
+                >
+                  <IconPlus size={16} className="me-1" />
+                  Manual Upload
+                </button>
+                <div className="d-flex gap-2">
+                  <button type="button" className="btn" onClick={() => setShowEditModal(false)} disabled={processing}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    onClick={handleApproveWithEdit}
+                    disabled={processing}
+                  >
+                    {processing ? (
+                      <>
+                        <IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <IconCheck size={16} className="me-1" />
+                        Approve & Create Audience
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Manual Audience Upload Modal */}
+      {showManualModal && (
+        <>
+          <div
+            className="modal-backdrop fade show"
+            style={{ zIndex: 1050 }}
+            onClick={() => setShowManualModal(false)}
+          />
+          <div
+            className="card"
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 1060,
+              width: '700px',
+              maxWidth: '95vw',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div className="card-header">
+              <h3 className="card-title">
+                <IconPlus size={20} className="me-2" />
+                Manual Audience Upload
+              </h3>
+              <div className="card-actions">
+                <button type="button" className="btn-close" onClick={() => setShowManualModal(false)} />
+              </div>
+            </div>
+            <div className="card-body" style={{ overflowY: 'auto', flex: 1 }}>
+              <div className="mb-3">
+                <label className="form-label">Audience Name <span className="text-danger">*</span></label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={manualAudienceName}
+                  onChange={(e) => setManualAudienceName(e.target.value)}
+                  placeholder="Enter audience name"
+                />
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Fetch from URL (Optional)</label>
+                <div className="input-group">
+                  <input
+                    type="url"
+                    className="form-control"
+                    value={manualAudienceUrl}
+                    onChange={(e) => setManualAudienceUrl(e.target.value)}
+                    placeholder="https://api.example.com/audience-data"
+                  />
+                  <button
+                    className="btn btn-outline-primary"
+                    onClick={handleFetchManualAudience}
+                    disabled={fetchingManualAudience || !manualAudienceUrl}
+                  >
+                    {fetchingManualAudience ? (
+                      <IconLoader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      'Fetch'
+                    )}
+                  </button>
+                </div>
+                <small className="form-hint">Enter a URL to fetch audience data, or paste JSON below</small>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Audience Data (JSON) <span className="text-danger">*</span></label>
+                <textarea
+                  className="form-control font-monospace"
+                  rows={12}
+                  value={manualAudienceData}
+                  onChange={(e) => setManualAudienceData(e.target.value)}
+                  placeholder={`Paste audience JSON data here...
+
+Example format:
+{
+  "contacts": [
+    {
+      "email": "john@example.com",
+      "first_name": "John",
+      "last_name": "Doe",
+      "company": "Acme Corp"
+    }
+  ]
+}`}
+                />
+              </div>
+
+              {editingRequest && (
+                <div className="alert alert-info">
+                  <strong>Note:</strong> This audience will be assigned to request: {editingRequest.name}
+                </div>
+              )}
+            </div>
+            <div className="card-footer">
               <div className="d-flex justify-content-end gap-2">
-                <button type="button" className="btn" onClick={() => setShowEditModal(false)} disabled={processing}>
+                <button type="button" className="btn" onClick={() => setShowManualModal(false)}>
                   Cancel
                 </button>
                 <button
                   type="button"
-                  className="btn btn-success"
-                  onClick={handleApproveWithEdit}
-                  disabled={processing}
+                  className="btn btn-primary"
+                  onClick={handleCreateManualAudience}
+                  disabled={creatingManualAudience || !manualAudienceName || !manualAudienceData}
                 >
-                  {processing ? (
+                  {creatingManualAudience ? (
                     <>
                       <IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
                       Creating...
@@ -963,7 +1284,7 @@ export default function Audiences() {
                   ) : (
                     <>
                       <IconCheck size={16} className="me-1" />
-                      Approve & Create Audience
+                      Create Audience
                     </>
                   )}
                 </button>

@@ -25,9 +25,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Filter by status if provided
-      const { status } = req.query;
+      const { status, has_manual } = req.query;
       if (status && typeof status === 'string' && ['pending', 'approved', 'rejected'].includes(status)) {
         query = query.eq('status', status as 'pending' | 'approved' | 'rejected');
+      }
+
+      // Filter for manual audiences only (has form_data.manual_audience)
+      if (has_manual === 'true') {
+        query = query.not('form_data->manual_audience', 'is', null);
       }
 
       const { data, error } = await query;

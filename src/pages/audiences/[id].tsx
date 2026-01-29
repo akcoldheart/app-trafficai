@@ -22,6 +22,7 @@ export default function AudienceView() {
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [columns, setColumns] = useState<string[]>([]);
+  const [isManual, setIsManual] = useState(false);
 
   const loadAudienceData = useCallback(async (page = 1) => {
     if (!id || typeof id !== 'string') return;
@@ -30,29 +31,62 @@ export default function AudienceView() {
     setCurrentPage(page);
 
     try {
-      const data = await TrafficAPI.getAudience(id, page, pageSize);
+      // Check if this is a manual audience
+      if (id.startsWith('manual_')) {
+        setIsManual(true);
+        // Fetch from local database
+        const response = await fetch(`/api/audiences/manual/${id}`);
+        const data = await response.json();
 
-      setAudienceName((data as unknown as { name?: string }).name || 'Audience');
-      setTotalRecords(data.total_records || 0);
-      setTotalPages((data as unknown as { total_pages?: number }).total_pages || 1);
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load manual audience');
+        }
 
-      const recordsData = (data as unknown as { Data?: AudienceRecord[] }).Data || [];
-      setRecords(recordsData);
+        setAudienceName(data.name || 'Manual Audience');
+        const contacts = data.contacts || [];
+        setTotalRecords(contacts.length);
+        setTotalPages(Math.ceil(contacts.length / pageSize));
 
-      // Extract columns from records
-      if (recordsData.length > 0) {
-        const allKeys = new Set<string>();
-        recordsData.forEach((record) => {
-          Object.keys(record).forEach((key) => allKeys.add(key));
-        });
-        setColumns(Array.from(allKeys).slice(0, 10)); // Limit to first 10 columns
+        // Paginate locally
+        const startIdx = (page - 1) * pageSize;
+        const paginatedContacts = contacts.slice(startIdx, startIdx + pageSize);
+        setRecords(paginatedContacts);
+
+        // Extract columns from records
+        if (paginatedContacts.length > 0) {
+          const allKeys = new Set<string>();
+          paginatedContacts.forEach((record: AudienceRecord) => {
+            Object.keys(record).forEach((key) => allKeys.add(key));
+          });
+          setColumns(Array.from(allKeys).slice(0, 10));
+        }
+      } else {
+        setIsManual(false);
+        // Fetch from external API
+        const data = await TrafficAPI.getAudience(id, page, pageSize);
+
+        setAudienceName((data as unknown as { name?: string }).name || 'Audience');
+        setTotalRecords(data.total_records || 0);
+        setTotalPages((data as unknown as { total_pages?: number }).total_pages || 1);
+
+        const recordsData = (data as unknown as { Data?: AudienceRecord[] }).Data || [];
+        setRecords(recordsData);
+
+        // Extract columns from records
+        if (recordsData.length > 0) {
+          const allKeys = new Set<string>();
+          recordsData.forEach((record) => {
+            Object.keys(record).forEach((key) => allKeys.add(key));
+          });
+          setColumns(Array.from(allKeys).slice(0, 10));
+        }
       }
     } catch (error) {
       console.error('Error loading audience:', error);
     } finally {
       setLoading(false);
     }
-  }, [id, pageSize, router]);
+  }, [id, pageSize]);
 
   useEffect(() => {
     if (id) {
@@ -64,7 +98,21 @@ export default function AudienceView() {
     if (!id || typeof id !== 'string') return;
 
     try {
-      await TrafficAPI.deleteAudience(id);
+      if (isManual) {
+        // Delete manual audience by updating the request
+        const response = await fetch(`/api/audiences/manual/${id}`, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'Failed to delete audience');
+        }
+      } else {
+        // Delete from external API
+        await TrafficAPI.deleteAudience(id);
+      }
+
       alert('Audience deleted successfully');
       router.push('/audiences');
     } catch (error) {

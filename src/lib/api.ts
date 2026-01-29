@@ -16,6 +16,7 @@ export interface Audience {
   filters?: Record<string, unknown>;
   segment?: string;
   days_back?: number;
+  isManual?: boolean;
 }
 
 export interface AudiencesResponse {
