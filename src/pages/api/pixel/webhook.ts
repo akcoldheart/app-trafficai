@@ -216,7 +216,6 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
   const city = resolution.PERSONAL_CITY || resolution.COMPANY_CITY || null;
   const state = resolution.PERSONAL_STATE || resolution.COMPANY_STATE || null;
   const country = 'US'; // Default to US based on the data format
-  const phone = getFirstPhone(resolution.MOBILE_PHONE) || getFirstPhone(resolution.DIRECT_NUMBER) || getFirstPhone(resolution.PERSONAL_PHONE);
 
   // Check for existing visitor by email or visitor_id
   let existingVisitor = null;
@@ -261,7 +260,6 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
     if (city) updates.city = city;
     if (state) updates.state = state;
     if (country) updates.country = country;
-    if (phone) updates.phone = phone;
 
     // Mark as identified if email provided
     if (email && !existingVisitor.is_identified) {
@@ -331,7 +329,6 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
       city: city,
       state: state,
       country: country,
-      phone: phone,
       first_seen_at: event.event_timestamp || new Date().toISOString(),
       last_seen_at: new Date().toISOString(),
       first_page_url: event.event_data?.url || event.referrer_url || null,
@@ -359,6 +356,7 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
       enrichment_source: isEnriched ? 'identitypxl' : null,
       enrichment_data: resolution,
       metadata: {
+        phone: getFirstPhone(resolution.MOBILE_PHONE) || getFirstPhone(resolution.DIRECT_NUMBER) || getFirstPhone(resolution.PERSONAL_PHONE) || null,
         gender: resolution.GENDER || null,
         age_range: resolution.AGE_RANGE || null,
         income_range: resolution.INCOME_RANGE || null,
