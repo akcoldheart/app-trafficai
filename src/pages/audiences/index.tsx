@@ -118,6 +118,7 @@ export default function Audiences() {
   const [manualAudienceData, setManualAudienceData] = useState<string>('');
   const [fetchingManualAudience, setFetchingManualAudience] = useState(false);
   const [creatingManualAudience, setCreatingManualAudience] = useState(false);
+  const [selectedRequestId, setSelectedRequestId] = useState<string>(''); // For linking to a user's request
 
   // Helper to extract attributes from various response formats
   const extractAttributes = (data: unknown): string[] => {
@@ -199,13 +200,16 @@ export default function Audiences() {
         return;
       }
 
+      // Use editingRequest if available, otherwise use selectedRequestId from dropdown
+      const linkedRequestId = editingRequest?.id || selectedRequestId || null;
+
       const response = await fetch('/api/admin/audiences/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: manualAudienceName,
           data: audienceData,
-          request_id: editingRequest?.id || null,
+          request_id: linkedRequestId,
         }),
       });
 
@@ -220,13 +224,17 @@ export default function Audiences() {
       setManualAudienceUrl('');
       setManualAudienceName('');
       setManualAudienceData('');
+      setSelectedRequestId('');
 
       // Refresh audiences list
       await loadAudiences(currentPage);
-      if (editingRequest) {
+      // If linked to a request (either via editingRequest or selectedRequestId), refresh requests
+      if (editingRequest || linkedRequestId) {
         await loadAudienceRequests();
-        setShowEditModal(false);
-        setEditingRequest(null);
+        if (editingRequest) {
+          setShowEditModal(false);
+          setEditingRequest(null);
+        }
       }
     } catch (error) {
       alert('Error: ' + (error as Error).message);
@@ -550,7 +558,15 @@ export default function Audiences() {
                   {isAdmin && (
                     <button
                       className="btn btn-outline-primary"
-                      onClick={() => setShowManualModal(true)}
+                      onClick={() => {
+                        // Clear any previous editing request to create standalone audience
+                        setEditingRequest(null);
+                        setManualAudienceName('');
+                        setSelectedRequestId('');
+                        setManualAudienceData('');
+                        setManualAudienceUrl('');
+                        setShowManualModal(true);
+                      }}
                     >
                       <IconPlus className="icon" />
                       Manual Upload
@@ -1259,9 +1275,32 @@ Example format:
                 />
               </div>
 
-              {editingRequest && (
+              {editingRequest ? (
                 <div className="alert alert-info">
                   <strong>Note:</strong> This audience will be assigned to request: {editingRequest.name}
+                </div>
+              ) : (
+                // Show request selector when opened from main button
+                <div className="mb-3">
+                  <label className="form-label">Assign to Request (Optional)</label>
+                  <select
+                    className="form-select"
+                    value={selectedRequestId}
+                    onChange={(e) => setSelectedRequestId(e.target.value)}
+                  >
+                    <option value="">-- No request (standalone audience) --</option>
+                    {audienceRequests
+                      .filter(r => r.status === 'pending')
+                      .map(r => (
+                        <option key={r.id} value={r.id}>
+                          {r.name} ({r.user?.email || 'Unknown user'})
+                        </option>
+                      ))
+                    }
+                  </select>
+                  <small className="form-hint">
+                    Select a pending request to fulfill. The audience will be visible to that user.
+                  </small>
                 </div>
               )}
             </div>
