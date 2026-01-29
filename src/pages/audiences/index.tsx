@@ -52,6 +52,7 @@ export default function Audiences() {
   const [totalPages, setTotalPages] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<'audiences' | 'requests'>('audiences');
   const [processing, setProcessing] = useState(false);
   const pageSize = 20;
@@ -120,6 +121,14 @@ export default function Audiences() {
   const [creatingManualAudience, setCreatingManualAudience] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string>(''); // For linking to a user's request
 
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
   // Helper to extract attributes from various response formats
   const extractAttributes = (data: unknown): string[] => {
     if (Array.isArray(data)) return data;
@@ -177,7 +186,7 @@ export default function Audiences() {
       const data = await response.json();
       setManualAudienceData(JSON.stringify(data, null, 2));
     } catch (error) {
-      alert('Error fetching data: ' + (error as Error).message);
+      showToast('Error fetching data: ' + (error as Error).message, 'error');
     } finally {
       setFetchingManualAudience(false);
     }
@@ -186,7 +195,7 @@ export default function Audiences() {
   // Create manual audience from fetched/uploaded data
   const handleCreateManualAudience = async () => {
     if (!manualAudienceName || !manualAudienceData) {
-      alert('Please provide a name and audience data');
+      showToast('Please provide a name and audience data', 'error');
       return;
     }
 
@@ -196,7 +205,7 @@ export default function Audiences() {
       try {
         audienceData = JSON.parse(manualAudienceData);
       } catch {
-        alert('Invalid JSON data');
+        showToast('Invalid JSON data', 'error');
         return;
       }
 
@@ -219,7 +228,7 @@ export default function Audiences() {
         throw new Error(result.error || 'Failed to create audience');
       }
 
-      alert('Audience created successfully!');
+      showToast('Audience created successfully!', 'success');
       setShowManualModal(false);
       setManualAudienceUrl('');
       setManualAudienceName('');
@@ -237,7 +246,7 @@ export default function Audiences() {
         }
       }
     } catch (error) {
-      alert('Error: ' + (error as Error).message);
+      showToast('Error: ' + (error as Error).message, 'error');
     } finally {
       setCreatingManualAudience(false);
     }
@@ -334,15 +343,47 @@ export default function Audiences() {
   }, [router.query.tab, router]);
 
   const handleDelete = async () => {
-    if (!deleteId) return;
+    console.log('handleDelete called, deleteId:', deleteId, 'deleting:', deleting);
+    if (!deleteId || deleting) {
+      console.log('Early return - deleteId empty or already deleting');
+      return;
+    }
 
+    setDeleting(true);
     try {
-      await TrafficAPI.deleteAudience(deleteId);
+      // Check if it's a manual audience
+      const isManualAudience = deleteId.startsWith('manual_');
+      console.log('Is manual audience:', isManualAudience);
+
+      if (isManualAudience) {
+        // Delete manual audience from local database
+        console.log('Deleting manual audience:', deleteId);
+        const response = await fetch(`/api/audiences/manual/${deleteId}`, {
+          method: 'DELETE',
+        });
+
+        const data = await response.json();
+        console.log('Delete response:', response.status, data);
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to delete audience');
+        }
+      } else {
+        // Delete from external API
+        console.log('Deleting from external API:', deleteId);
+        await TrafficAPI.deleteAudience(deleteId);
+      }
+
+      console.log('Delete successful');
       setShowDeleteModal(false);
       setDeleteId(null);
+      showToast('Audience deleted successfully', 'success');
       loadAudiences(currentPage);
     } catch (error) {
-      alert('Error deleting audience: ' + (error as Error).message);
+      console.error('Delete error:', error);
+      showToast('Error deleting audience: ' + (error as Error).message, 'error');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -465,9 +506,9 @@ export default function Audiences() {
       setEditingRequest(null);
       await Promise.all([loadAudiences(currentPage), loadAudienceRequests()]);
       setActiveTab('audiences');
-      alert('Request approved! Audience created successfully.');
+      showToast('Request approved! Audience created successfully.', 'success');
     } catch (error) {
-      alert((error as Error).message);
+      showToast((error as Error).message, 'error');
     } finally {
       setProcessing(false);
     }
@@ -494,9 +535,9 @@ export default function Audiences() {
       setAudienceRequests(audienceRequests.map(r =>
         r.id === request.id ? { ...r, status: 'rejected' as RequestStatus, admin_notes: reason } : r
       ));
-      alert('Request rejected.');
+      showToast('Request rejected.', 'info');
     } catch (error) {
-      alert((error as Error).message);
+      showToast((error as Error).message, 'error');
     } finally {
       setProcessing(false);
     }
@@ -516,8 +557,9 @@ export default function Audiences() {
       }
 
       setAudienceRequests(audienceRequests.filter(r => r.id !== id));
+      showToast('Request cancelled successfully', 'success');
     } catch (error) {
-      alert((error as Error).message);
+      showToast((error as Error).message, 'error');
     }
   };
 
@@ -849,42 +891,73 @@ export default function Audiences() {
 
       {/* Delete Modal */}
       {showDeleteModal && (
-        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex={-1}>
-          <div className="modal-dialog modal-sm modal-dialog-centered">
-            <div className="modal-content">
-              <button
-                type="button"
-                className="btn-close"
-                onClick={() => setShowDeleteModal(false)}
-              ></button>
-              <div className="modal-status bg-danger"></div>
-              <div className="modal-body text-center py-4">
-                <IconTrash className="icon mb-2 text-danger icon-lg" />
-                <h3>Are you sure?</h3>
-                <div className="text-muted">
-                  Do you really want to delete this audience? This action cannot be undone.
-                </div>
-              </div>
-              <div className="modal-footer">
-                <div className="w-100">
-                  <div className="row">
-                    <div className="col">
-                      <button className="btn w-100" onClick={() => setShowDeleteModal(false)}>
-                        Cancel
-                      </button>
+        <>
+          <div
+            className="modal-backdrop fade show"
+            style={{ zIndex: 1040 }}
+            onClick={() => !deleting && setShowDeleteModal(false)}
+          ></div>
+          <div
+            className="modal modal-blur fade show"
+            style={{ display: 'block', zIndex: 1050 }}
+            tabIndex={-1}
+          >
+            <div className="modal-dialog modal-sm modal-dialog-centered">
+              <div className="modal-content">
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => !deleting && setShowDeleteModal(false)}
+                  disabled={deleting}
+                ></button>
+                <div className="modal-status bg-danger"></div>
+                <div className="modal-body text-center py-4">
+                  <IconTrash className="icon mb-2 text-danger icon-lg" />
+                  <h3>Are you sure?</h3>
+                  <div className="text-muted">
+                    Do you really want to delete this audience? This action cannot be undone.
+                  </div>
+                  {deleteId && (
+                    <div className="text-muted small mt-2">
+                      ID: <code>{deleteId}</code>
                     </div>
-                    <div className="col">
-                      <button className="btn btn-danger w-100" onClick={handleDelete}>
-                        Delete
-                      </button>
+                  )}
+                </div>
+                <div className="modal-footer">
+                  <div className="w-100">
+                    <div className="row">
+                      <div className="col">
+                        <button
+                          className="btn w-100"
+                          onClick={() => setShowDeleteModal(false)}
+                          disabled={deleting}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <div className="col">
+                        <button
+                          className="btn btn-danger w-100"
+                          onClick={() => handleDelete()}
+                          disabled={deleting}
+                        >
+                          {deleting ? (
+                            <>
+                              <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                              Deleting...
+                            </>
+                          ) : (
+                            'Delete'
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <div className="modal-backdrop fade show" onClick={() => setShowDeleteModal(false)}></div>
-        </div>
+        </>
       )}
 
       {/* Edit/Review Modal */}
@@ -1216,6 +1289,35 @@ export default function Audiences() {
               </div>
             </div>
             <div className="card-body" style={{ overflowY: 'auto', flex: 1 }}>
+              {/* Assign to Request - shown first when opened from main button */}
+              {editingRequest ? (
+                <div className="alert alert-info mb-3">
+                  <strong>Note:</strong> This audience will be assigned to request: {editingRequest.name}
+                </div>
+              ) : (
+                <div className="mb-3">
+                  <label className="form-label">Assign to Request (Optional)</label>
+                  <select
+                    className="form-select"
+                    value={selectedRequestId}
+                    onChange={(e) => setSelectedRequestId(e.target.value)}
+                  >
+                    <option value="">-- No request (standalone audience) --</option>
+                    {audienceRequests
+                      .filter(r => r.status === 'pending')
+                      .map(r => (
+                        <option key={r.id} value={r.id}>
+                          {r.name} ({r.user?.email || 'Unknown user'})
+                        </option>
+                      ))
+                    }
+                  </select>
+                  <small className="form-hint">
+                    Select a pending request to fulfill. The audience will be visible to that user.
+                  </small>
+                </div>
+              )}
+
               <div className="mb-3">
                 <label className="form-label">Audience Name <span className="text-danger">*</span></label>
                 <input
@@ -1256,7 +1358,7 @@ export default function Audiences() {
                 <label className="form-label">Audience Data (JSON) <span className="text-danger">*</span></label>
                 <textarea
                   className="form-control font-monospace"
-                  rows={12}
+                  rows={10}
                   value={manualAudienceData}
                   onChange={(e) => setManualAudienceData(e.target.value)}
                   placeholder={`Paste audience JSON data here...
@@ -1274,35 +1376,6 @@ Example format:
 }`}
                 />
               </div>
-
-              {editingRequest ? (
-                <div className="alert alert-info">
-                  <strong>Note:</strong> This audience will be assigned to request: {editingRequest.name}
-                </div>
-              ) : (
-                // Show request selector when opened from main button
-                <div className="mb-3">
-                  <label className="form-label">Assign to Request (Optional)</label>
-                  <select
-                    className="form-select"
-                    value={selectedRequestId}
-                    onChange={(e) => setSelectedRequestId(e.target.value)}
-                  >
-                    <option value="">-- No request (standalone audience) --</option>
-                    {audienceRequests
-                      .filter(r => r.status === 'pending')
-                      .map(r => (
-                        <option key={r.id} value={r.id}>
-                          {r.name} ({r.user?.email || 'Unknown user'})
-                        </option>
-                      ))
-                    }
-                  </select>
-                  <small className="form-hint">
-                    Select a pending request to fulfill. The audience will be visible to that user.
-                  </small>
-                </div>
-              )}
             </div>
             <div className="card-footer">
               <div className="d-flex justify-content-end gap-2">
@@ -1331,6 +1404,38 @@ Example format:
             </div>
           </div>
         </>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`toast show position-fixed`}
+          style={{
+            top: '20px',
+            right: '20px',
+            zIndex: 9999,
+            minWidth: '300px',
+          }}
+        >
+          <div className={`toast-header ${
+            toast.type === 'success' ? 'bg-success text-white' :
+            toast.type === 'error' ? 'bg-danger text-white' :
+            'bg-info text-white'
+          }`}>
+            <strong className="me-auto">
+              {toast.type === 'success' ? 'Success' :
+               toast.type === 'error' ? 'Error' : 'Info'}
+            </strong>
+            <button
+              type="button"
+              className="btn-close btn-close-white"
+              onClick={() => setToast(null)}
+            ></button>
+          </div>
+          <div className="toast-body">
+            {toast.message}
+          </div>
+        </div>
       )}
 
       <style jsx>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>

@@ -23,6 +23,12 @@ export default function AudienceView() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [columns, setColumns] = useState<string[]>([]);
   const [isManual, setIsManual] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const loadAudienceData = useCallback(async (page = 1) => {
     if (!id || typeof id !== 'string') return;
@@ -113,10 +119,12 @@ export default function AudienceView() {
         await TrafficAPI.deleteAudience(id);
       }
 
-      alert('Audience deleted successfully');
-      router.push('/audiences');
+      setShowDeleteModal(false);
+      showToast('Audience deleted successfully', 'success');
+      // Redirect after a short delay to show toast
+      setTimeout(() => router.push('/audiences'), 1500);
     } catch (error) {
-      alert('Error deleting audience: ' + (error as Error).message);
+      showToast('Error deleting audience: ' + (error as Error).message, 'error');
     }
   };
 
@@ -353,6 +361,35 @@ export default function AudienceView() {
             </div>
           </div>
           <div className="modal-backdrop fade show" onClick={() => setShowDeleteModal(false)}></div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className="toast show position-fixed"
+          style={{
+            top: '20px',
+            right: '20px',
+            zIndex: 9999,
+            minWidth: '300px',
+          }}
+        >
+          <div className={`toast-header ${
+            toast.type === 'success' ? 'bg-success text-white' : 'bg-danger text-white'
+          }`}>
+            <strong className="me-auto">
+              {toast.type === 'success' ? 'Success' : 'Error'}
+            </strong>
+            <button
+              type="button"
+              className="btn-close btn-close-white"
+              onClick={() => setToast(null)}
+            ></button>
+          </div>
+          <div className="toast-body">
+            {toast.message}
+          </div>
         </div>
       )}
     </Layout>
