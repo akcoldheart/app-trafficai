@@ -53,6 +53,7 @@ export default function CreateAudience() {
 
   // Form state
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [daysBack, setDaysBack] = useState(7);
   const [minAge, setMinAge] = useState('');
   const [maxAge, setMaxAge] = useState('');
@@ -144,6 +145,7 @@ export default function CreateAudience() {
     return {
       filters,
       days_back: daysBack,
+      ...(description ? { description } : {}),
       ...(segmentList.length > 0 ? { segment: segmentList } : {}),
     };
   };
@@ -229,6 +231,18 @@ export default function CreateAudience() {
                     required
                   />
                   <small className="form-hint">Give your audience a descriptive name</small>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label">Description</label>
+                  <textarea
+                    className="form-control"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                    placeholder="e.g., Target technology professionals working in New York City for our enterprise software campaign"
+                  />
+                  <small className="form-hint">Describe the purpose of this audience (optional)</small>
                 </div>
 
                 <div className="mb-3">
