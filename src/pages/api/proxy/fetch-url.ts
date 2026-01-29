@@ -127,35 +127,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Handle pagination for audiencelab.io API
     // If response has pagination metadata, fetch all remaining pages
     if (parsedUrl.hostname.includes('audiencelab.io')) {
-      const totalPages = (data.total_pages || data.TotalPages || data.totalPages) as number | undefined;
-      const currentPage = (data.page || data.Page || data.current_page || 1) as number;
+      const totalPages = Number(data.total_pages || data.TotalPages || data.totalPages || 0);
+      const currentPage = Number(data.page || data.Page || data.current_page || 1);
 
-      if (totalPages && totalPages > 1 && currentPage === 1) {
+      console.log(`[Proxy] audiencelab.io pagination check - totalPages: ${totalPages}, currentPage: ${currentPage}`);
+
+      if (totalPages > 1 && currentPage === 1) {
         // Collect all records from first page
         let allRecords = (data.Data || data.data || data.records || data.contacts || []) as unknown[];
+        console.log(`[Proxy] Page 1 records: ${allRecords.length}, fetching ${totalPages - 1} more pages...`);
 
-        // Fetch remaining pages
-        for (let page = 2; page <= totalPages; page++) {
-          try {
-            // Build URL for next page
+        // Fetch remaining pages in parallel batches of 5
+        const batchSize = 5;
+        for (let batchStart = 2; batchStart <= totalPages; batchStart += batchSize) {
+          const batchEnd = Math.min(batchStart + batchSize - 1, totalPages);
+          const pagePromises = [];
+
+          for (let page = batchStart; page <= batchEnd; page++) {
             const nextPageUrl = new URL(url);
             nextPageUrl.searchParams.set('page', String(page));
 
-            const pageResponse = await fetch(nextPageUrl.toString(), {
-              method: 'GET',
-              headers,
-            });
-
-            if (pageResponse.ok) {
-              const pageData = await pageResponse.json();
-              const pageRecords = (pageData.Data || pageData.data || pageData.records || pageData.contacts || []) as unknown[];
-              allRecords = allRecords.concat(pageRecords);
-            }
-          } catch (pageError) {
-            console.error(`Error fetching page ${page}:`, pageError);
-            // Continue with what we have
+            pagePromises.push(
+              fetch(nextPageUrl.toString(), { method: 'GET', headers })
+                .then(async (pageResponse) => {
+                  if (pageResponse.ok) {
+                    const pageData = await pageResponse.json();
+                    return (pageData.Data || pageData.data || pageData.records || pageData.contacts || []) as unknown[];
+                  }
+                  return [];
+                })
+                .catch((err) => {
+                  console.error(`[Proxy] Error fetching page ${page}:`, err);
+                  return [];
+                })
+            );
           }
+
+          const batchResults = await Promise.all(pagePromises);
+          for (const records of batchResults) {
+            allRecords = allRecords.concat(records);
+          }
+          console.log(`[Proxy] Fetched pages ${batchStart}-${batchEnd}, total records so far: ${allRecords.length}`);
         }
+
+        console.log(`[Proxy] All pages fetched. Total records: ${allRecords.length}`);
 
         // Return combined data with all records
         return res.status(200).json({

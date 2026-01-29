@@ -58,13 +58,30 @@ export default function AudienceView() {
         const paginatedContacts = contacts.slice(startIdx, startIdx + pageSize);
         setRecords(paginatedContacts);
 
-        // Extract columns from records
+        // Extract columns from records - prioritize useful fields
         if (paginatedContacts.length > 0) {
           const allKeys = new Set<string>();
           paginatedContacts.forEach((record: AudienceRecord) => {
             Object.keys(record).forEach((key) => allKeys.add(key));
           });
-          setColumns(Array.from(allKeys).slice(0, 10));
+
+          // Prioritize these columns in order
+          const priorityColumns = [
+            'first_name', 'last_name', 'full_name', 'email', 'verified_email',
+            'company', 'job_title', 'phone', 'mobile_phone', 'city', 'state',
+            'country', 'gender', 'linkedin_url', 'company_domain'
+          ];
+
+          const sortedColumns = Array.from(allKeys).sort((a, b) => {
+            const aIndex = priorityColumns.indexOf(a);
+            const bIndex = priorityColumns.indexOf(b);
+            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+            if (aIndex !== -1) return -1;
+            if (bIndex !== -1) return 1;
+            return a.localeCompare(b);
+          });
+
+          setColumns(sortedColumns.slice(0, 12));
         }
       } else {
         setIsManual(false);

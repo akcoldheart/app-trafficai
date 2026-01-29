@@ -100,31 +100,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return null;
       };
 
-      const firstName = getField('first_name', 'firstName', 'FIRST_NAME', 'FirstName');
-      const lastName = getField('last_name', 'lastName', 'LAST_NAME', 'LastName');
+      const firstName = getField('FIRST_NAME', 'first_name', 'firstName', 'FirstName');
+      const lastName = getField('LAST_NAME', 'last_name', 'lastName', 'LastName');
 
       // Build normalized object with standard field names
+      // Prioritize audiencelab.io UPPERCASE fields first
       const normalized: Record<string, unknown> = {
-        email: getField('email', 'EMAIL', 'Email', 'PERSONAL_EMAILS', 'BUSINESS_EMAIL'),
+        // Email: prefer verified emails, then business, then personal
+        email: getField(
+          'PERSONAL_VERIFIED_EMAILS', 'BUSINESS_VERIFIED_EMAILS', 'BUSINESS_EMAIL',
+          'email', 'EMAIL', 'Email', 'PERSONAL_EMAILS'
+        ),
+        business_email: getField('BUSINESS_EMAIL', 'business_email'),
+        verified_email: getField('PERSONAL_VERIFIED_EMAILS', 'BUSINESS_VERIFIED_EMAILS'),
         first_name: firstName,
         last_name: lastName,
         full_name: [firstName, lastName].filter(Boolean).join(' ') || null,
-        company: getField('company', 'COMPANY', 'Company', 'COMPANY_NAME', 'company_name'),
-        job_title: getField('title', 'job_title', 'jobTitle', 'JOB_TITLE', 'JobTitle'),
-        linkedin_url: getField('linkedin_url', 'linkedinUrl', 'LINKEDIN_URL', 'COMPANY_LINKEDIN_URL'),
-        phone: getField('phone', 'PHONE', 'mobile_phone', 'MOBILE_PHONE', 'PERSONAL_PHONE', 'DIRECT_NUMBER'),
-        city: getField('city', 'CITY', 'City', 'PERSONAL_CITY', 'personal_city'),
-        state: getField('state', 'STATE', 'State', 'PERSONAL_STATE', 'personal_state'),
-        country: getField('country', 'COUNTRY', 'Country'),
-        gender: getField('gender', 'GENDER', 'Gender'),
-        age_range: getField('age_range', 'AGE_RANGE', 'AgeRange'),
-        income_range: getField('income_range', 'INCOME_RANGE', 'IncomeRange'),
-        seniority: getField('seniority', 'SENIORITY_LEVEL', 'seniority_level'),
-        department: getField('department', 'DEPARTMENT', 'Department'),
-        url: getField('url', 'URL', 'page_url'),
-        ip_address: getField('ip_address', 'IP_ADDRESS'),
-        event_type: getField('event_type', 'EVENT_TYPE'),
-        referrer_url: getField('referrer_url', 'REFERRER_URL'),
+        // Company fields
+        company: getField('COMPANY_NAME', 'company', 'COMPANY', 'Company', 'company_name'),
+        company_domain: getField('COMPANY_DOMAIN', 'company_domain', 'website'),
+        company_description: getField('COMPANY_DESCRIPTION', 'company_description'),
+        company_revenue: getField('COMPANY_REVENUE', 'company_revenue', 'revenue'),
+        company_phone: getField('COMPANY_PHONE', 'company_phone'),
+        // Job fields
+        job_title: getField('JOB_TITLE', 'title', 'job_title', 'jobTitle', 'JobTitle'),
+        seniority: getField('SENIORITY_LEVEL', 'seniority', 'seniority_level'),
+        department: getField('DEPARTMENT', 'department', 'Department'),
+        // Contact fields
+        phone: getField('MOBILE_PHONE', 'DIRECT_NUMBER', 'phone', 'PHONE', 'mobile_phone', 'PERSONAL_PHONE'),
+        mobile_phone: getField('MOBILE_PHONE', 'mobile_phone'),
+        direct_number: getField('DIRECT_NUMBER', 'direct_number'),
+        linkedin_url: getField('LINKEDIN_URL', 'COMPANY_LINKEDIN_URL', 'linkedin_url', 'linkedinUrl'),
+        // Location fields
+        city: getField('CITY', 'PERSONAL_CITY', 'city', 'City', 'personal_city'),
+        state: getField('STATE', 'PERSONAL_STATE', 'state', 'State', 'personal_state'),
+        country: getField('COUNTRY', 'country', 'Country'),
+        // Demographics
+        gender: getField('GENDER', 'gender', 'Gender'),
+        age_range: getField('AGE_RANGE', 'age_range', 'AgeRange'),
+        income_range: getField('INCOME_RANGE', 'income_range', 'IncomeRange'),
+        // Other fields
+        url: getField('URL', 'url', 'page_url'),
+        ip_address: getField('IP_ADDRESS', 'ip_address'),
+        event_type: getField('EVENT_TYPE', 'event_type'),
+        referrer_url: getField('REFERRER_URL', 'referrer_url'),
       };
 
       // Add remaining original fields that aren't already normalized (skip empty strings and duplicates)
