@@ -324,14 +324,20 @@ export default function Audiences() {
     }
   }, []);
 
+  // Initial data load - only run once on mount
   useEffect(() => {
     loadAudiences();
     loadAudienceRequests();
-    // Preload attributes for admin modal
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load attributes for admin modal when admin status is confirmed
+  useEffect(() => {
     if (isAdmin) {
       loadAttributes();
     }
-  }, [loadAudiences, loadAudienceRequests, isAdmin, loadAttributes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
 
   // Handle tab query parameter from URL
   useEffect(() => {

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { TrafficAPI } from '@/lib/api';
-import { IconPlus, IconInfoCircle } from '@tabler/icons-react';
+import { IconPlus, IconInfoCircle, IconArrowLeft } from '@tabler/icons-react';
 
 export default function CreateAudience() {
   const router = useRouter();
@@ -197,6 +197,14 @@ export default function CreateAudience() {
 
   return (
     <Layout title="Create Audience" pageTitle="Create Audience" pagePretitle="Traffic AI">
+      {/* Back Button */}
+      <div className="d-flex justify-content-end mb-3">
+        <Link href="/audiences" className="btn btn-outline-secondary">
+          <IconArrowLeft className="icon" />
+          Back to Audiences
+        </Link>
+      </div>
+
       <div className="row row-cards">
         <div className="col-lg-8">
           <form onSubmit={handleSubmit}>
