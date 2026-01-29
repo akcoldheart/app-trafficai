@@ -173,18 +173,29 @@ export default function Audiences() {
     setAttributesLoaded(true);
   }, [attributesLoaded]);
 
-  // Fetch audience data from manual URL
+  // Fetch audience data from manual URL (via server proxy to avoid CORS)
   const handleFetchManualAudience = async () => {
     if (!manualAudienceUrl) return;
 
     setFetchingManualAudience(true);
     try {
-      const response = await fetch(manualAudienceUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`);
-      }
+      // Use server-side proxy to avoid CORS issues
+      // API key is automatically retrieved from settings (any admin's key)
+      const response = await fetch('/api/proxy/fetch-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ url: manualAudienceUrl }),
+      });
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error: ${response.status}`);
+      }
+
       setManualAudienceData(JSON.stringify(data, null, 2));
+      showToast('Data fetched successfully!', 'success');
     } catch (error) {
       showToast('Error fetching data: ' + (error as Error).message, 'error');
     } finally {
@@ -1357,7 +1368,7 @@ export default function Audiences() {
                     )}
                   </button>
                 </div>
-                <small className="form-hint">Enter a URL to fetch audience data, or paste JSON below</small>
+                <small className="form-hint">Enter a URL to fetch audience data, or paste JSON below. API key from Settings will be used automatically.</small>
               </div>
 
               <div className="mb-3">
