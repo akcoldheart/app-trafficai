@@ -197,13 +197,17 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
 
   const resolution = event.resolution || {};
 
-  // Generate or use provided visitor ID
-  const visitorId = resolution.UUID || `webhook_${crypto.randomUUID()}`;
+  // hem_sha256 is the hashed email - primary identifier for audience building
+  const hemSha256 = event.hem_sha256 || null;
+
+  // Use hem_sha256 as visitor_id if available (consistent across visits for same person)
+  // Fall back to UUID from resolution, then generate random ID
+  const visitorId = hemSha256 || resolution.UUID || `webhook_${crypto.randomUUID()}`;
 
   // Get IP address
   const ipAddress = event.ip_address || 'unknown';
 
-  // Extract visitor data from resolution
+  // Extract visitor data from resolution (may be empty for anonymous visitors)
   const email = getFirstEmail(resolution.PERSONAL_EMAILS) || getFirstEmail(resolution.BUSINESS_EMAIL);
   const firstName = resolution.FIRST_NAME || null;
   const lastName = resolution.LAST_NAME || null;
@@ -215,12 +219,24 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
     null;
   const city = resolution.PERSONAL_CITY || resolution.COMPANY_CITY || null;
   const state = resolution.PERSONAL_STATE || resolution.COMPANY_STATE || null;
-  const country = 'US'; // Default to US based on the data format
+  const country = resolution.PERSONAL_STATE ? 'US' : null; // Only set if we have state data
 
-  // Check for existing visitor by email or visitor_id
+  // Check for existing visitor - prioritize hem_sha256 (fingerprint_hash) as it's most reliable
   let existingVisitor = null;
 
-  if (email) {
+  // First, try to find by hem_sha256 (stored in fingerprint_hash)
+  if (hemSha256) {
+    const { data: visitorByHem } = await supabaseAdmin
+      .from('visitors')
+      .select('*')
+      .eq('pixel_id', pixel.id)
+      .eq('fingerprint_hash', hemSha256)
+      .single();
+    existingVisitor = visitorByHem;
+  }
+
+  // If not found by hem, try by email
+  if (!existingVisitor && email) {
     const { data: visitorByEmail } = await supabaseAdmin
       .from('visitors')
       .select('*')
@@ -230,6 +246,7 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
     existingVisitor = visitorByEmail;
   }
 
+  // If still not found, try by visitor_id
   if (!existingVisitor && visitorId) {
     const { data: visitorById } = await supabaseAdmin
       .from('visitors')
@@ -249,6 +266,11 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
       ip_address: ipAddress,
     };
 
+    // Store hem_sha256 in fingerprint_hash if we have it and don't have one yet
+    if (hemSha256 && !existingVisitor.fingerprint_hash) {
+      updates.fingerprint_hash = hemSha256;
+    }
+
     // Update visitor details if provided (don't overwrite with null)
     if (email) updates.email = email;
     if (firstName) updates.first_name = firstName;
@@ -267,21 +289,33 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
       updates.identified_at = new Date().toISOString();
     }
 
-    // Mark as enriched if we have resolution data
-    if (Object.keys(resolution).length > 0 && !existingVisitor.is_enriched) {
+    // Mark as enriched if we have resolution data with actual person/company info
+    const hasEnrichmentData = Object.keys(resolution).length > 0;
+    if (hasEnrichmentData && !existingVisitor.is_enriched) {
       updates.is_enriched = true;
       updates.enriched_at = new Date().toISOString();
       updates.enrichment_source = 'identitypxl';
     }
 
-    // Store full resolution data
+    // Store full resolution data and hem_sha256
     updates.enrichment_data = {
       ...existingVisitor.enrichment_data,
       ...resolution,
+      hem_sha256: hemSha256 || existingVisitor.enrichment_data?.hem_sha256,
     };
 
-    // Increment pageviews
-    updates.total_pageviews = (existingVisitor.total_pageviews || 0) + 1;
+    // Update event counts based on event type
+    const eventType = event.event_type || 'pageview';
+    if (eventType === 'page_view' || eventType === 'pageview') {
+      updates.total_pageviews = (existingVisitor.total_pageviews || 0) + 1;
+    }
+    if (eventType === 'click') {
+      updates.total_clicks = (existingVisitor.total_clicks || 0) + 1;
+    }
+    if (eventType === 'scroll_depth' && event.event_data) {
+      const scrollDepth = (event.event_data.depth as number) || (event.event_data.max_depth as number) || 0;
+      updates.max_scroll_depth = Math.max(existingVisitor.max_scroll_depth || 0, scrollDepth);
+    }
 
     // Check for new session (30 min timeout)
     const lastSeen = new Date(existingVisitor.last_seen_at).getTime();
@@ -292,14 +326,15 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
 
     // Recalculate lead score
     updates.lead_score = calculateLeadScore({
-      total_pageviews: updates.total_pageviews as number,
-      total_sessions: (updates.total_sessions as number) || existingVisitor.total_sessions || 1,
+      total_pageviews: (updates.total_pageviews as number) ?? existingVisitor.total_pageviews ?? 0,
+      total_sessions: (updates.total_sessions as number) ?? existingVisitor.total_sessions ?? 1,
       total_time_on_site: existingVisitor.total_time_on_site || 0,
-      max_scroll_depth: existingVisitor.max_scroll_depth || 0,
-      total_clicks: existingVisitor.total_clicks || 0,
+      max_scroll_depth: (updates.max_scroll_depth as number) ?? existingVisitor.max_scroll_depth ?? 0,
+      total_clicks: (updates.total_clicks as number) ?? existingVisitor.total_clicks ?? 0,
       form_submissions: existingVisitor.form_submissions || 0,
       is_identified: (updates.is_identified as boolean) || existingVisitor.is_identified,
       is_enriched: (updates.is_enriched as boolean) || existingVisitor.is_enriched,
+      has_hem: !!hemSha256 || !!existingVisitor.fingerprint_hash,
     });
 
     await supabaseAdmin
@@ -309,14 +344,22 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
 
     visitorRecordId = existingVisitor.id;
   } else {
-    // Create new visitor record
+    // Create new visitor record - track ALL visitors, even anonymous ones
     const isIdentified = !!email;
-    const isEnriched = Object.keys(resolution).length > 0;
+    const hasEnrichmentData = Object.keys(resolution).length > 0;
+    const eventType = event.event_type || 'pageview';
+
+    // Calculate initial event counts based on event type
+    const initialPageviews = (eventType === 'page_view' || eventType === 'pageview') ? 1 : 0;
+    const initialClicks = eventType === 'click' ? 1 : 0;
+    const initialScrollDepth = eventType === 'scroll_depth' ?
+      ((event.event_data?.depth as number) || (event.event_data?.max_depth as number) || 0) : 0;
 
     const newVisitor = {
       pixel_id: pixel.id,
       user_id: pixel.user_id,
       visitor_id: visitorId,
+      fingerprint_hash: hemSha256,  // Store hem_sha256 for audience building
       ip_address: ipAddress,
       user_agent: null,
       email: email,
@@ -333,29 +376,31 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
       last_seen_at: new Date().toISOString(),
       first_page_url: event.event_data?.url || event.referrer_url || null,
       first_referrer: event.referrer_url || null,
-      total_pageviews: 1,
+      total_pageviews: initialPageviews,
       total_sessions: 1,
       total_time_on_site: 0,
-      max_scroll_depth: 0,
-      total_clicks: event.event_type === 'click' ? 1 : 0,
+      max_scroll_depth: initialScrollDepth,
+      total_clicks: initialClicks,
       form_submissions: 0,
       lead_score: calculateLeadScore({
-        total_pageviews: 1,
+        total_pageviews: initialPageviews,
         total_sessions: 1,
         total_time_on_site: 0,
-        max_scroll_depth: 0,
-        total_clicks: event.event_type === 'click' ? 1 : 0,
+        max_scroll_depth: initialScrollDepth,
+        total_clicks: initialClicks,
         form_submissions: 0,
         is_identified: isIdentified,
-        is_enriched: isEnriched,
+        is_enriched: hasEnrichmentData,
+        has_hem: !!hemSha256,
       }),
       is_identified: isIdentified,
       identified_at: isIdentified ? new Date().toISOString() : null,
-      is_enriched: isEnriched,
-      enriched_at: isEnriched ? new Date().toISOString() : null,
-      enrichment_source: isEnriched ? 'identitypxl' : null,
-      enrichment_data: resolution,
+      is_enriched: hasEnrichmentData,
+      enriched_at: hasEnrichmentData ? new Date().toISOString() : null,
+      enrichment_source: hasEnrichmentData ? 'identitypxl' : (hemSha256 ? 'identitypxl' : null),
+      enrichment_data: { ...resolution, hem_sha256: hemSha256 },
       metadata: {
+        hem_sha256: hemSha256,  // Also store in metadata for easy access
         phone: getFirstPhone(resolution.MOBILE_PHONE) || getFirstPhone(resolution.DIRECT_NUMBER) || getFirstPhone(resolution.PERSONAL_PHONE) || null,
         gender: resolution.GENDER || null,
         age_range: resolution.AGE_RANGE || null,
@@ -435,35 +480,41 @@ function calculateLeadScore(visitor: {
   form_submissions: number;
   is_identified?: boolean;
   is_enriched?: boolean;
+  has_hem?: boolean;
 }): number {
   let score = 0;
 
-  // Pageviews (max 20 points)
-  score += Math.min(visitor.total_pageviews * 2, 20);
+  // Pageviews (max 15 points)
+  score += Math.min(visitor.total_pageviews * 2, 15);
 
-  // Sessions/return visits (max 20 points)
-  score += Math.min(visitor.total_sessions * 5, 20);
+  // Sessions/return visits (max 15 points)
+  score += Math.min(visitor.total_sessions * 5, 15);
 
-  // Time on site in seconds (max 20 points)
-  score += Math.min(Math.floor(visitor.total_time_on_site / 30), 20);
+  // Time on site in seconds (max 15 points)
+  score += Math.min(Math.floor(visitor.total_time_on_site / 30), 15);
 
-  // Scroll depth (max 15 points)
-  score += Math.floor(visitor.max_scroll_depth / 100 * 15);
+  // Scroll depth (max 10 points)
+  score += Math.floor(visitor.max_scroll_depth / 100 * 10);
 
-  // Clicks (max 15 points)
-  score += Math.min(visitor.total_clicks, 15);
+  // Clicks (max 10 points)
+  score += Math.min(visitor.total_clicks, 10);
 
   // Form submissions (10 points each, max 10 points)
   score += Math.min(visitor.form_submissions * 10, 10);
 
-  // Bonus for identified visitors
-  if (visitor.is_identified) {
-    score += 15;
+  // Bonus for having HEM (can be used for audience targeting)
+  if (visitor.has_hem) {
+    score += 10;
   }
 
-  // Bonus for enriched visitors
-  if (visitor.is_enriched) {
+  // Bonus for identified visitors (has email)
+  if (visitor.is_identified) {
     score += 10;
+  }
+
+  // Bonus for enriched visitors (has company/job data)
+  if (visitor.is_enriched) {
+    score += 5;
   }
 
   return Math.min(score, 100);
