@@ -2,15 +2,6 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { requireRole, logAuditAction } from '@/lib/api-helpers';
 
-function generatePixelCode(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let code = 'px_';
-  for (let i = 0; i < 16; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -20,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const authResult = await requireRole(req, res, 'admin');
   if (!authResult) return;
 
-  const { name, domain, user_id, custom_installation_code } = req.body;
+  const { name, domain, user_id, pixel_id, custom_installation_code } = req.body;
 
   if (!name || typeof name !== 'string') {
     return res.status(400).json({ error: 'Pixel name is required' });
@@ -32,6 +23,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (!user_id || typeof user_id !== 'string') {
     return res.status(400).json({ error: 'User ID is required' });
+  }
+
+  if (!pixel_id || typeof pixel_id !== 'string') {
+    return res.status(400).json({ error: 'Pixel ID is required' });
+  }
+
+  if (!custom_installation_code || typeof custom_installation_code !== 'string') {
+    return res.status(400).json({ error: 'Custom installation code is required' });
   }
 
   const supabase = createClient(req, res);
@@ -48,20 +47,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Generate pixel code
-    const pixelCode = generatePixelCode();
-
-    // Create the pixel with optional custom installation code
+    // Create the pixel with custom pixel ID and installation code
     const { data: pixel, error: pixelError } = await supabase
       .from('pixels')
       .insert({
         user_id: user_id,
         name: name.trim(),
         domain: domain.trim().toLowerCase(),
-        pixel_code: pixelCode,
+        pixel_code: pixel_id.trim(),
         status: 'active',
         events_count: 0,
-        custom_installation_code: custom_installation_code || null,
+        custom_installation_code: custom_installation_code.trim(),
       })
       .select()
       .single();

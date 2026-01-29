@@ -18,7 +18,6 @@ import {
   IconClock,
   IconX,
   IconUser,
-  IconSearch,
   IconDeviceFloppy,
 } from '@tabler/icons-react';
 import type { Pixel, PixelStatus, PixelRequest, RequestStatus } from '@/lib/supabase/types';
@@ -50,9 +49,8 @@ export default function Pixels() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [userSearchTerm, setUserSearchTerm] = useState('');
   const [customInstallationCode, setCustomInstallationCode] = useState('');
-  const [useCustomCode, setUseCustomCode] = useState(false);
+  const [customPixelId, setCustomPixelId] = useState('');
   const [processing, setProcessing] = useState(false);
 
   // Code editing state
@@ -185,9 +183,8 @@ export default function Pixels() {
   // Open create modal for admin
   const handleOpenCreateModal = (prefillRequest?: PixelRequest) => {
     setShowCreateModal(true);
-    setUserSearchTerm('');
     setCustomInstallationCode('');
-    setUseCustomCode(false);
+    setCustomPixelId('');
     fetchUsers();
 
     // If called with a prefill request, set the data
@@ -229,7 +226,7 @@ export default function Pixels() {
     setSelectedUserId('');
     setNewPixel({ name: '', domain: '' });
     setCustomInstallationCode('');
-    setUseCustomCode(false);
+    setCustomPixelId('');
     setFilledFromRequest(null);
   };
 
@@ -240,13 +237,24 @@ export default function Pixels() {
       return;
     }
 
+    if (!customPixelId.trim()) {
+      showToast('error', 'Please enter a Pixel ID');
+      return;
+    }
+
+    if (!customInstallationCode.trim()) {
+      showToast('error', 'Please enter the custom installation code');
+      return;
+    }
+
     setProcessing(true);
     try {
       const payload = {
         name: newPixel.name,
         domain: newPixel.domain,
         user_id: selectedUserId,
-        custom_installation_code: useCustomCode && customInstallationCode.trim() ? customInstallationCode.trim() : null,
+        pixel_id: customPixelId.trim(),
+        custom_installation_code: customInstallationCode.trim(),
       };
 
       console.log('Creating pixel with payload:', payload);
@@ -481,8 +489,6 @@ export default function Pixels() {
   };
 
   const pendingRequestCount = pixelRequests.filter(r => r.status === 'pending').length;
-  const filteredUsers = users.filter(u => u.email.toLowerCase().includes(userSearchTerm.toLowerCase()));
-  const selectedUser = users.find(u => u.id === selectedUserId);
 
   if (loading) {
     return (
@@ -670,7 +676,7 @@ export default function Pixels() {
                             <span className={`badge ms-2 ${getStatusBadgeClass(pixel.status)}`} style={{ fontSize: '10px' }}>
                               {pixel.status}
                             </span>
-                            {pixel.custom_installation_code && (
+                            {isAdmin && pixel.custom_installation_code && (
                               <span className="badge bg-purple-lt text-purple ms-1" style={{ fontSize: '9px' }}>custom</span>
                             )}
                           </div>
@@ -773,7 +779,7 @@ export default function Pixels() {
                   <h3 className="card-title d-flex align-items-center">
                     {selectedPixel.name}
                     <span className={`badge ms-2 ${getStatusBadgeClass(selectedPixel.status)}`}>{selectedPixel.status}</span>
-                    {selectedPixel.custom_installation_code && (
+                    {isAdmin && selectedPixel.custom_installation_code && (
                       <span className="badge bg-purple-lt text-purple ms-1">Custom Code</span>
                     )}
                   </h3>
@@ -851,7 +857,7 @@ export default function Pixels() {
                     <div>
                       <div className="alert alert-info mb-3 py-2">
                         <IconInfoCircle size={16} className="me-2" />
-                        Enter custom code below or leave empty to use auto-generated code. Copy and paste in the <code>&lt;head&gt;</code> section.
+                        Enter the custom installation code below. Copy and paste in the <code>&lt;head&gt;</code> section.
                       </div>
                       <div className="position-relative">
                         <textarea
@@ -873,7 +879,7 @@ export default function Pixels() {
                       <div className="d-flex justify-content-between align-items-center mt-2">
                         <div className="d-flex align-items-center gap-2">
                           <small className="text-muted">
-                            {editedCode ? 'Using custom code' : 'Using auto-generated code (type to customize)'}
+                            {editedCode ? 'Using custom code' : 'No custom code set'}
                           </small>
                           {saveMessage && (
                             <span className={`badge ${saveMessage.type === 'success' ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`}>
@@ -903,9 +909,9 @@ export default function Pixels() {
                               className="btn btn-outline-secondary btn-sm"
                               onClick={() => setEditedCode('')}
                               disabled={savingCode}
-                              title="Clear custom code and use auto-generated"
+                              title="Clear custom code"
                             >
-                              Reset to Auto
+                              Clear Code
                             </button>
                           )}
                         </div>
@@ -1060,32 +1066,38 @@ export default function Pixels() {
                   </div>
                 </div>
 
-                {/* Step 3: Custom Code (Optional) */}
-                <div className="mb-3">
-                  <label className="form-check form-switch mb-0" style={{ paddingLeft: '3.5rem' }}>
-                    <input
-                      className="form-check-input"
-                      type="checkbox"
-                      checked={useCustomCode}
-                      onChange={(e) => setUseCustomCode(e.target.checked)}
-                      style={{ width: '2.5rem', height: '1.25rem', marginLeft: '-3.5rem' }}
-                    />
-                    <span className="form-check-label">
-                      Use custom installation code <span className="text-muted">(Optional)</span>
-                    </span>
+                {/* Step 3: Pixel ID */}
+                <div className="mb-4">
+                  <label className="form-label fw-semibold">
+                    <span className="badge bg-primary me-2">3</span>
+                    Pixel ID
                   </label>
-                  {useCustomCode && (
-                    <div className="mt-2">
-                      <textarea
-                        className="form-control font-monospace"
-                        rows={6}
-                        placeholder="<!-- Paste your custom tracking code here -->"
-                        value={customInstallationCode}
-                        onChange={(e) => setCustomInstallationCode(e.target.value)}
-                        style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0' }}
-                      />
-                    </div>
-                  )}
+                  <input
+                    type="text"
+                    className="form-control font-monospace"
+                    placeholder="e.g., 588b2ebe-b6ec-4a0d-b896-fc29986afe74"
+                    value={customPixelId}
+                    onChange={(e) => setCustomPixelId(e.target.value)}
+                    style={{ fontSize: '13px' }}
+                  />
+                  <small className="text-muted">Enter the UUID pixel identifier</small>
+                </div>
+
+                {/* Step 4: Custom Installation Code */}
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">
+                    <span className="badge bg-primary me-2">4</span>
+                    Custom Installation Code
+                  </label>
+                  <textarea
+                    className="form-control font-monospace"
+                    rows={6}
+                    placeholder='<script src="https://cdn.v3.identitypxl.app/pixels/YOUR-PIXEL-ID/" async></script>'
+                    value={customInstallationCode}
+                    onChange={(e) => setCustomInstallationCode(e.target.value)}
+                    style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0' }}
+                  />
+                  <small className="text-muted">Paste the custom tracking script code</small>
                 </div>
               </div>
               <div className="modal-footer">
@@ -1096,7 +1108,7 @@ export default function Pixels() {
                   type="button"
                   className="btn btn-primary"
                   onClick={handleAdminCreatePixel}
-                  disabled={processing || !selectedUserId || !newPixel.name || !newPixel.domain}
+                  disabled={processing || !selectedUserId || !newPixel.name || !newPixel.domain || !customPixelId.trim() || !customInstallationCode.trim()}
                 >
                   {processing ? (
                     <><IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Creating...</>
