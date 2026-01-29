@@ -12,6 +12,7 @@ import {
   IconFilter,
   IconRefresh,
   IconInbox,
+  IconTrash,
 } from '@tabler/icons-react';
 
 interface PixelRequest {
@@ -61,8 +62,15 @@ export default function AdminRequests() {
   // Modal state
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<{ type: 'pixel' | 'audience'; request: PixelRequest | AudienceRequest } | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const fetchRequests = useCallback(async () => {
     if (!isAdmin) return;
@@ -159,6 +167,36 @@ export default function AdminRequests() {
     } catch (error) {
       console.error('Error rejecting request:', error);
       alert('Failed to reject request');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedRequest) return;
+
+    setProcessingId(selectedRequest.request.id);
+    try {
+      const endpoint = selectedRequest.type === 'pixel'
+        ? `/api/pixel-requests/${selectedRequest.request.id}`
+        : `/api/audience-requests/${selectedRequest.request.id}`;
+
+      const response = await fetch(endpoint, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        fetchRequests();
+        setShowDeleteModal(false);
+        setSelectedRequest(null);
+        showToast('Request deleted successfully', 'success');
+      } else {
+        const data = await response.json();
+        showToast(data.error || 'Failed to delete request', 'error');
+      }
+    } catch (error) {
+      console.error('Error deleting request:', error);
+      showToast('Failed to delete request', 'error');
     } finally {
       setProcessingId(null);
     }
@@ -344,49 +382,56 @@ export default function AdminRequests() {
                     <td>{getStatusBadge(request.status)}</td>
                     <td className="text-muted">{formatTimeAgo(request.created_at)}</td>
                     <td>
-                      {request.status === 'pending' ? (
-                        <div className="d-flex gap-1">
-                          <button
-                            className="btn btn-success btn-sm"
-                            onClick={() => {
-                              setSelectedRequest({ type, request });
-                              setAdminNotes('');
-                              setShowApproveModal(true);
-                            }}
-                            disabled={processingId === request.id}
-                            title="Approve"
-                          >
-                            <IconCheck size={14} />
-                          </button>
-                          <button
-                            className="btn btn-danger btn-sm"
-                            onClick={() => {
-                              setSelectedRequest({ type, request });
-                              setAdminNotes('');
-                              setShowRejectModal(true);
-                            }}
-                            disabled={processingId === request.id}
-                            title="Reject"
-                          >
-                            <IconX size={14} />
-                          </button>
-                          <button
-                            className="btn btn-outline-secondary btn-sm"
-                            onClick={() => {
-                              router.push(type === 'pixel' ? '/pixels?tab=requests' : '/audiences?tab=requests');
-                            }}
-                            title="View in context"
-                          >
-                            <IconEye size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-muted small">
-                          {request.admin_notes && (
-                            <span title={request.admin_notes}>Notes attached</span>
-                          )}
-                        </span>
-                      )}
+                      <div className="d-flex gap-1">
+                        {request.status === 'pending' && (
+                          <>
+                            <button
+                              className="btn btn-success btn-sm"
+                              onClick={() => {
+                                setSelectedRequest({ type, request });
+                                setAdminNotes('');
+                                setShowApproveModal(true);
+                              }}
+                              disabled={processingId === request.id}
+                              title="Approve"
+                            >
+                              <IconCheck size={14} />
+                            </button>
+                            <button
+                              className="btn btn-danger btn-sm"
+                              onClick={() => {
+                                setSelectedRequest({ type, request });
+                                setAdminNotes('');
+                                setShowRejectModal(true);
+                              }}
+                              disabled={processingId === request.id}
+                              title="Reject"
+                            >
+                              <IconX size={14} />
+                            </button>
+                            <button
+                              className="btn btn-outline-secondary btn-sm"
+                              onClick={() => {
+                                router.push(type === 'pixel' ? '/pixels?tab=requests' : '/audiences?tab=requests');
+                              }}
+                              title="View in context"
+                            >
+                              <IconEye size={14} />
+                            </button>
+                          </>
+                        )}
+                        <button
+                          className="btn btn-outline-danger btn-sm"
+                          onClick={() => {
+                            setSelectedRequest({ type, request });
+                            setShowDeleteModal(true);
+                          }}
+                          disabled={processingId === request.id}
+                          title="Delete"
+                        >
+                          <IconTrash size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -522,6 +567,91 @@ export default function AdminRequests() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Delete Modal */}
+      {showDeleteModal && selectedRequest && (
+        <>
+          <div className="modal-backdrop fade show" style={{ zIndex: 1040 }} />
+          <div className="modal modal-blur fade show" style={{ display: 'block', zIndex: 1050 }}>
+            <div className="modal-dialog modal-sm modal-dialog-centered">
+              <div className="modal-content">
+                <div className="modal-status bg-danger" />
+                <div className="modal-body text-center py-4">
+                  <IconTrash size={48} className="text-danger mb-3" />
+                  <h3>Delete Request?</h3>
+                  <p className="text-muted">
+                    Are you sure you want to delete the{' '}
+                    <strong>{selectedRequest.type}</strong> request:{' '}
+                    <strong>{selectedRequest.request.name}</strong>?
+                    <br />
+                    This action cannot be undone.
+                  </p>
+                </div>
+                <div className="modal-footer">
+                  <div className="w-100">
+                    <div className="row">
+                      <div className="col">
+                        <button
+                          className="btn w-100"
+                          onClick={() => setShowDeleteModal(false)}
+                          disabled={processingId === selectedRequest.request.id}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <div className="col">
+                        <button
+                          className="btn btn-danger w-100"
+                          onClick={handleDelete}
+                          disabled={processingId === selectedRequest.request.id}
+                        >
+                          {processingId === selectedRequest.request.id ? (
+                            <>
+                              <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                              Deleting...
+                            </>
+                          ) : (
+                            'Delete'
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className="toast show position-fixed"
+          style={{
+            top: '20px',
+            right: '20px',
+            zIndex: 9999,
+            minWidth: '300px',
+          }}
+        >
+          <div className={`toast-header ${
+            toast.type === 'success' ? 'bg-success text-white' : 'bg-danger text-white'
+          }`}>
+            <strong className="me-auto">
+              {toast.type === 'success' ? 'Success' : 'Error'}
+            </strong>
+            <button
+              type="button"
+              className="btn-close btn-close-white"
+              onClick={() => setToast(null)}
+            ></button>
+          </div>
+          <div className="toast-body">
+            {toast.message}
+          </div>
+        </div>
       )}
 
       <style jsx>{`

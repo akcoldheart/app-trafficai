@@ -432,8 +432,10 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
 
   // Create pixel event
   const eventType = event.event_type || 'pageview';
-  const eventTimestamp = event.event_timestamp || new Date().toISOString();
+  const originalEventTimestamp = event.event_timestamp || null;
 
+  // Always use current timestamp for created_at so events appear in recent charts
+  // Store the original event timestamp in metadata for reference
   const { error: eventError } = await supabaseAdmin
     .from('pixel_events')
     .insert({
@@ -449,10 +451,11 @@ async function processEvent(event: PixelEvent): Promise<{ pixel_id: string; visi
         hem_sha256: event.hem_sha256,
         activity_start_date: event.activity_start_date,
         activity_end_date: event.activity_end_date,
+        original_event_timestamp: originalEventTimestamp,
         event_data: event.event_data,
         has_resolution: !!resolution && Object.keys(resolution).length > 0,
       },
-      created_at: eventTimestamp,
+      // Use NOW() for created_at - don't use event_timestamp as it may be old
     });
 
   if (eventError) {
