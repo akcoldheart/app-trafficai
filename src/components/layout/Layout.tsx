@@ -37,7 +37,7 @@ export default function Layout({
             </PageHeader>
           )}
 
-          <div className="page-body" style={{ paddingBottom: '60px' }}>
+          <div className="page-body">
             <div className="container-xl">
               {children}
             </div>
