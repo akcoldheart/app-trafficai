@@ -19,6 +19,7 @@ import {
   IconX,
   IconUser,
   IconDeviceFloppy,
+  IconPencil,
 } from '@tabler/icons-react';
 import type { Pixel, PixelStatus, PixelRequest, RequestStatus } from '@/lib/supabase/types';
 
@@ -55,6 +56,7 @@ export default function Pixels() {
 
   // Code editing state
   const [editedCode, setEditedCode] = useState('');
+  const [isEditingCode, setIsEditingCode] = useState(false);
   const [savingCode, setSavingCode] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -132,6 +134,7 @@ export default function Pixels() {
   useEffect(() => {
     if (selectedPixel && selectedPixel.id !== lastSelectedId) {
       setEditedCode(selectedPixel.custom_installation_code || '');
+      setIsEditingCode(false); // Exit edit mode when switching pixels
       setSaveMessage(null); // Clear any previous message only when switching pixels
       setLastSelectedId(selectedPixel.id);
     }
@@ -676,9 +679,6 @@ export default function Pixels() {
                             <span className={`badge ms-2 ${getStatusBadgeClass(pixel.status)}`} style={{ fontSize: '10px' }}>
                               {pixel.status}
                             </span>
-                            {isAdmin && pixel.custom_installation_code && (
-                              <span className="badge bg-purple-lt text-purple ms-1" style={{ fontSize: '9px' }}>custom</span>
-                            )}
                           </div>
                           <div className={`text-truncate ${selectedPixel?.id === pixel.id ? 'text-white-50' : 'text-muted'}`} style={{ fontSize: '12px' }}>
                             {pixel.domain}
@@ -779,9 +779,6 @@ export default function Pixels() {
                   <h3 className="card-title d-flex align-items-center">
                     {selectedPixel.name}
                     <span className={`badge ms-2 ${getStatusBadgeClass(selectedPixel.status)}`}>{selectedPixel.status}</span>
-                    {isAdmin && selectedPixel.custom_installation_code && (
-                      <span className="badge bg-purple-lt text-purple ms-1">Custom Code</span>
-                    )}
                   </h3>
                   <div className="text-muted" style={{ fontSize: '13px' }}>
                     <IconWorldWww size={14} className="me-1" />{selectedPixel.domain}
@@ -796,19 +793,26 @@ export default function Pixels() {
               <div className="card-body">
                 {/* Stats */}
                 <div className="row g-3 mb-4">
-                  <div className="col-md-4">
-                    <div className="card card-sm">
-                      <div className="card-body">
+                  <div className="col-md-6">
+                    <div className="card card-sm h-100">
+                      <div className="card-body py-3">
                         <div className="d-flex align-items-center">
                           <span className="avatar bg-primary-lt me-3"><IconCode size={20} /></span>
-                          <div className="flex-fill">
+                          <div className="flex-fill" style={{ minWidth: 0 }}>
                             <div className="text-muted" style={{ fontSize: '12px' }}>Pixel ID</div>
                             <div className="d-flex align-items-center gap-2">
-                              <code style={{ fontSize: '11px' }}>{selectedPixel.pixel_code}</code>
+                              <code
+                                className="text-truncate d-block"
+                                style={{ fontSize: '12px', maxWidth: '180px' }}
+                                title={selectedPixel.pixel_code}
+                              >
+                                {selectedPixel.pixel_code}
+                              </code>
                               <button
-                                className={`btn btn-icon btn-sm ${copiedId === 'pixelId' ? 'btn-success' : 'btn-ghost-secondary'}`}
+                                className={`btn btn-icon btn-sm flex-shrink-0 ${copiedId === 'pixelId' ? 'btn-success' : 'btn-ghost-secondary'}`}
                                 onClick={() => copyToClipboard(selectedPixel.pixel_code, 'pixelId')}
                                 style={{ padding: '2px 6px' }}
+                                title="Copy Pixel ID"
                               >
                                 {copiedId === 'pixelId' ? <IconCheck size={12} /> : <IconCopy size={12} />}
                               </button>
@@ -818,9 +822,9 @@ export default function Pixels() {
                       </div>
                     </div>
                   </div>
-                  <div className="col-md-4">
-                    <div className="card card-sm">
-                      <div className="card-body">
+                  <div className="col-md-3">
+                    <div className="card card-sm h-100">
+                      <div className="card-body py-3">
                         <div className="d-flex align-items-center">
                           <span className="avatar bg-green-lt me-3"><IconCircleCheck size={20} /></span>
                           <div>
@@ -831,9 +835,9 @@ export default function Pixels() {
                       </div>
                     </div>
                   </div>
-                  <div className="col-md-4">
-                    <div className="card card-sm">
-                      <div className="card-body">
+                  <div className="col-md-3">
+                    <div className="card card-sm h-100">
+                      <div className="card-body py-3">
                         <div className="d-flex align-items-center">
                           <span className={`avatar ${selectedPixel.status === 'active' ? 'bg-green-lt' : 'bg-yellow-lt'} me-3`}>
                             {selectedPixel.status === 'active' ? <IconCircleCheck size={20} /> : <IconAlertCircle size={20} />}
@@ -853,93 +857,183 @@ export default function Pixels() {
                   <h4 className="mb-3">Installation Code</h4>
 
                   {isAdmin ? (
-                    // Admin view - editable code
-                    <div>
-                      <div className="alert alert-info mb-3 py-2">
-                        <IconInfoCircle size={16} className="me-2" />
-                        Enter the custom installation code below. Copy and paste in the <code>&lt;head&gt;</code> section.
-                      </div>
-                      <div className="position-relative">
-                        <textarea
-                          className="form-control font-monospace"
-                          rows={10}
-                          value={editedCode}
-                          onChange={(e) => setEditedCode(e.target.value)}
-                          placeholder={getInstallationCode(selectedPixel)}
-                          style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0', resize: 'vertical' }}
-                        />
-                        <button
-                          className={`btn btn-sm ${copiedId === 'code' ? 'btn-success' : 'btn-primary'} position-absolute`}
-                          style={{ top: '12px', right: '12px' }}
-                          onClick={() => copyToClipboard(editedCode || getInstallationCode(selectedPixel), 'code')}
+                    // Admin view - with edit mode toggle
+                    <div className="card" style={{ backgroundColor: '#1e293b', border: 'none' }}>
+                      <div className="card-body p-0">
+                        <div
+                          className="p-3"
+                          style={{
+                            backgroundColor: '#0f172a',
+                            borderRadius: '8px 8px 0 0',
+                            borderBottom: '1px solid #334155'
+                          }}
                         >
-                          {copiedId === 'code' ? <><IconCheck size={14} className="me-1" />Copied!</> : <><IconCopy size={14} className="me-1" />Copy</>}
-                        </button>
-                      </div>
-                      <div className="d-flex justify-content-between align-items-center mt-2">
-                        <div className="d-flex align-items-center gap-2">
-                          <small className="text-muted">
-                            {editedCode ? 'Using custom code' : 'No custom code set'}
-                          </small>
-                          {saveMessage && (
-                            <span className={`badge ${saveMessage.type === 'success' ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`}>
-                              {saveMessage.type === 'success' ? <IconCheck size={12} className="me-1" /> : <IconX size={12} className="me-1" />}
-                              {saveMessage.text}
-                            </span>
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div className="d-flex align-items-center">
+                              <IconCode size={16} className="me-2" style={{ color: '#94a3b8' }} />
+                              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 500 }}>Installation Script</span>
+                              {isEditingCode && (
+                                <span className="badge bg-yellow-lt text-yellow ms-2" style={{ fontSize: '10px' }}>Editing</span>
+                              )}
+                            </div>
+                            <button
+                              className={`btn btn-sm ${copiedId === 'code' ? 'btn-success' : 'btn-primary'}`}
+                              onClick={() => copyToClipboard(editedCode || getInstallationCode(selectedPixel), 'code')}
+                            >
+                              {copiedId === 'code' ? <><IconCheck size={14} className="me-1" />Copied!</> : <><IconCopy size={14} className="me-1" />Copy</>}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          {isEditingCode ? (
+                            <textarea
+                              className="form-control font-monospace border-0"
+                              rows={6}
+                              value={editedCode}
+                              onChange={(e) => setEditedCode(e.target.value)}
+                              placeholder="Enter installation code..."
+                              autoFocus
+                              style={{
+                                fontSize: '13px',
+                                backgroundColor: 'transparent',
+                                color: '#e2e8f0',
+                                resize: 'vertical',
+                                lineHeight: '1.6'
+                              }}
+                            />
+                          ) : (
+                            <pre
+                              className="mb-0"
+                              style={{
+                                color: '#e2e8f0',
+                                fontSize: '13px',
+                                lineHeight: '1.6',
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-all',
+                                margin: 0,
+                                fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace'
+                              }}
+                            >
+                              <code>{editedCode || <span style={{ color: '#64748b', fontStyle: 'italic' }}>No installation code set</span>}</code>
+                            </pre>
                           )}
                         </div>
-                        <div className="d-flex gap-2">
-                          {editedCode !== (selectedPixel.custom_installation_code || '') && (
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              onClick={handleSaveCode}
-                              disabled={savingCode}
-                            >
-                              {savingCode ? (
-                                <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Saving...</>
-                              ) : (
-                                <><IconDeviceFloppy size={14} className="me-1" />Save Changes</>
-                              )}
-                            </button>
-                          )}
-                          {editedCode && (
-                            <button
-                              type="button"
-                              className="btn btn-outline-secondary btn-sm"
-                              onClick={() => setEditedCode('')}
-                              disabled={savingCode}
-                              title="Clear custom code"
-                            >
-                              Clear Code
-                            </button>
-                          )}
+                        <div
+                          className="p-3 d-flex align-items-center justify-content-between"
+                          style={{
+                            backgroundColor: '#0f172a',
+                            borderRadius: '0 0 8px 8px',
+                            borderTop: '1px solid #334155'
+                          }}
+                        >
+                          <div className="d-flex align-items-center gap-2">
+                            {saveMessage && (
+                              <span className={`badge ${saveMessage.type === 'success' ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`}>
+                                {saveMessage.type === 'success' ? <IconCheck size={12} className="me-1" /> : <IconX size={12} className="me-1" />}
+                                {saveMessage.text}
+                              </span>
+                            )}
+                          </div>
+                          <div className="d-flex gap-2">
+                            {isEditingCode ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost-secondary btn-sm"
+                                  onClick={() => {
+                                    setEditedCode(selectedPixel.custom_installation_code || '');
+                                    setIsEditingCode(false);
+                                  }}
+                                  disabled={savingCode}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  onClick={() => {
+                                    handleSaveCode();
+                                    setIsEditingCode(false);
+                                  }}
+                                  disabled={savingCode || editedCode === (selectedPixel.custom_installation_code || '')}
+                                >
+                                  {savingCode ? (
+                                    <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Saving...</>
+                                  ) : (
+                                    <><IconDeviceFloppy size={14} className="me-1" />Save</>
+                                  )}
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-ghost-secondary btn-sm"
+                                onClick={() => setIsEditingCode(true)}
+                              >
+                                <IconPencil size={14} className="me-1" />Edit
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
                   ) : (
                     // User view - read-only code
-                    <>
-                      <div className="alert alert-info mb-3">
-                        <IconInfoCircle size={18} className="me-2" />
-                        Copy this code and paste it in the <code>&lt;head&gt;</code> section of your website.
-                      </div>
-                      <div className="position-relative">
-                        <pre
-                          className="p-3 rounded mb-0"
-                          style={{ backgroundColor: '#1e293b', color: '#e2e8f0', fontSize: '12px', lineHeight: '1.5', overflow: 'auto', maxHeight: '250px' }}
+                    <div className="card" style={{ backgroundColor: '#1e293b', border: 'none' }}>
+                      <div className="card-body p-0">
+                        <div
+                          className="p-3"
+                          style={{
+                            backgroundColor: '#0f172a',
+                            borderRadius: '8px 8px 0 0',
+                            borderBottom: '1px solid #334155'
+                          }}
                         >
-                          <code>{getInstallationCode(selectedPixel)}</code>
-                        </pre>
-                        <button
-                          className={`btn ${copiedId === 'code' ? 'btn-success' : 'btn-primary'} position-absolute`}
-                          style={{ top: '12px', right: '12px' }}
-                          onClick={() => copyToClipboard(getInstallationCode(selectedPixel), 'code')}
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div className="d-flex align-items-center">
+                              <IconCode size={16} className="me-2" style={{ color: '#94a3b8' }} />
+                              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 500 }}>Installation Script</span>
+                            </div>
+                            <span className="badge bg-green-lt text-green" style={{ fontSize: '10px' }}>Ready to use</span>
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <pre
+                            className="mb-0"
+                            style={{
+                              color: '#e2e8f0',
+                              fontSize: '13px',
+                              lineHeight: '1.6',
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-all',
+                              margin: 0,
+                              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace'
+                            }}
+                          >
+                            <code>{getInstallationCode(selectedPixel)}</code>
+                          </pre>
+                        </div>
+                        <div
+                          className="p-3 d-flex align-items-center justify-content-between"
+                          style={{
+                            backgroundColor: '#0f172a',
+                            borderRadius: '0 0 8px 8px',
+                            borderTop: '1px solid #334155'
+                          }}
                         >
-                          {copiedId === 'code' ? <><IconCheck size={16} className="me-1" />Copied!</> : <><IconCopy size={16} className="me-1" />Copy Code</>}
-                        </button>
+                          <small style={{ color: '#64748b' }}>
+                            <IconInfoCircle size={14} className="me-1" />
+                            Paste in the <code style={{ color: '#a5b4fc' }}>&lt;head&gt;</code> section of your website
+                          </small>
+                          <button
+                            className={`btn btn-sm ${copiedId === 'code' ? 'btn-success' : 'btn-primary'}`}
+                            onClick={() => copyToClipboard(getInstallationCode(selectedPixel), 'code')}
+                          >
+                            {copiedId === 'code' ? <><IconCheck size={14} className="me-1" />Copied!</> : <><IconCopy size={14} className="me-1" />Copy Code</>}
+                          </button>
+                        </div>
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
 

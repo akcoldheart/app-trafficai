@@ -23,6 +23,8 @@ import {
   IconCurrencyDollar,
   IconTrendingUp as IconGrowth,
   IconRocket,
+  IconWebhook,
+  IconCopy,
 } from '@tabler/icons-react';
 import type { UserWebsite } from '@/lib/supabase/types';
 
@@ -114,6 +116,14 @@ export default function Settings() {
   });
   const [editingPricing, setEditingPricing] = useState(false);
   const [savingPricing, setSavingPricing] = useState(false);
+
+  // Webhook API key state
+  const [webhookKeyExists, setWebhookKeyExists] = useState(false);
+  const [webhookKeyMasked, setWebhookKeyMasked] = useState('');
+  const [webhookKeyLoading, setWebhookKeyLoading] = useState(true);
+  const [generatingWebhookKey, setGeneratingWebhookKey] = useState(false);
+  const [newWebhookKey, setNewWebhookKey] = useState<string | null>(null);
+  const [webhookKeyCopied, setWebhookKeyCopied] = useState(false);
 
   const fetchWebsites = useCallback(async () => {
     try {
@@ -207,6 +217,64 @@ export default function Settings() {
       console.error('Error fetching users:', error);
     }
   }, [isAdmin]);
+
+  const fetchWebhookKey = useCallback(async () => {
+    if (!isAdmin) return;
+
+    try {
+      setWebhookKeyLoading(true);
+      const response = await fetch('/api/admin/settings/webhook-key');
+      const data = await response.json();
+      if (response.ok) {
+        setWebhookKeyExists(data.exists);
+        setWebhookKeyMasked(data.maskedKey || '');
+      }
+    } catch (error) {
+      console.error('Error fetching webhook key:', error);
+    } finally {
+      setWebhookKeyLoading(false);
+    }
+  }, [isAdmin]);
+
+  const handleGenerateWebhookKey = async () => {
+    if (!confirm('Are you sure you want to generate a new webhook API key? This will invalidate any existing key.')) {
+      return;
+    }
+
+    setGeneratingWebhookKey(true);
+    setNewWebhookKey(null);
+
+    try {
+      const response = await fetch('/api/admin/settings/webhook-key', {
+        method: 'POST',
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate webhook key');
+      }
+
+      setNewWebhookKey(data.apiKey);
+      setWebhookKeyExists(true);
+      setWebhookKeyMasked(data.apiKey.substring(0, 8) + '••••••••' + data.apiKey.slice(-8));
+    } catch (error) {
+      alert((error as Error).message);
+    } finally {
+      setGeneratingWebhookKey(false);
+    }
+  };
+
+  const handleCopyWebhookKey = async () => {
+    if (!newWebhookKey) return;
+
+    try {
+      await navigator.clipboard.writeText(newWebhookKey);
+      setWebhookKeyCopied(true);
+      setTimeout(() => setWebhookKeyCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
 
   const handleAddWebsite = async () => {
     if (!newWebsite.url) return;
@@ -462,8 +530,9 @@ export default function Settings() {
       fetchAdminSettings();
       fetchApiKeys();
       fetchAllUsers();
+      fetchWebhookKey();
     }
-  }, [fetchWebsites, fetchAdminSettings, fetchApiKeys, fetchAllUsers, isAdmin]);
+  }, [fetchWebsites, fetchAdminSettings, fetchApiKeys, fetchAllUsers, fetchWebhookKey, isAdmin]);
 
   const testConnection = async () => {
     setConnectionStatus('testing');
@@ -1052,6 +1121,101 @@ export default function Settings() {
                       </ul>
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* Webhook API Key */}
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="card-title">
+                    <IconWebhook className="icon me-2" />
+                    Webhook API Key
+                  </h3>
+                </div>
+                <div className="card-body">
+                  <p className="text-muted small mb-3">
+                    Use this API key to authenticate webhook requests from identitypxl.app.
+                    Send it in the <code>X-API-Key</code> header.
+                  </p>
+
+                  {webhookKeyLoading ? (
+                    <div className="text-center py-3">
+                      <IconLoader2 size={24} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+                    </div>
+                  ) : (
+                    <>
+                      {newWebhookKey ? (
+                        <div className="alert alert-success mb-3">
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div>
+                              <strong>New API Key Generated!</strong>
+                              <p className="mb-0 small">Copy this key now. It won&apos;t be shown again.</p>
+                            </div>
+                          </div>
+                          <div className="mt-2">
+                            <div className="input-group">
+                              <input
+                                type="text"
+                                className="form-control form-control-sm font-monospace"
+                                value={newWebhookKey}
+                                readOnly
+                              />
+                              <button
+                                className="btn btn-outline-success btn-sm"
+                                onClick={handleCopyWebhookKey}
+                                title="Copy to clipboard"
+                              >
+                                {webhookKeyCopied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                                {webhookKeyCopied ? ' Copied!' : ' Copy'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : webhookKeyExists ? (
+                        <div className="mb-3">
+                          <label className="form-label small text-muted">Current Key (masked)</label>
+                          <code className="d-block p-2 rounded" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
+                            {webhookKeyMasked}
+                          </code>
+                        </div>
+                      ) : (
+                        <div className="alert alert-warning mb-3">
+                          <strong>No webhook key configured.</strong>
+                          <p className="mb-0 small">Generate a key to enable webhook authentication.</p>
+                        </div>
+                      )}
+
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={handleGenerateWebhookKey}
+                        disabled={generatingWebhookKey}
+                      >
+                        {generatingWebhookKey ? (
+                          <>
+                            <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <IconKey size={14} className="me-1" />
+                            {webhookKeyExists ? 'Regenerate Key' : 'Generate Key'}
+                          </>
+                        )}
+                      </button>
+
+                      <hr className="my-3" />
+
+                      <div className="small">
+                        <strong>Webhook Endpoint:</strong>
+                        <code className="d-block mt-1 p-2 rounded" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)', wordBreak: 'break-all' }}>
+                          POST /api/pixel/webhook
+                        </code>
+                        <p className="text-muted mt-2 mb-0">
+                          Configure identitypxl.app to send visitor data to this endpoint with the API key in the <code>X-API-Key</code> header.
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
