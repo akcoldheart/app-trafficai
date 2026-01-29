@@ -695,12 +695,12 @@ export default function Audiences() {
                           <tr key={id}>
                             <td>
                               <div className="d-flex align-items-center">
-                                <span className={`avatar avatar-sm ${audience.isManual ? 'bg-purple-lt' : 'bg-primary-lt'} me-2`}>
+                                <span className={`avatar avatar-sm ${audience.isManual && isAdmin ? 'bg-purple-lt' : 'bg-primary-lt'} me-2`}>
                                   <IconUsers className="icon" />
                                 </span>
                                 <div>
                                   <span className="text-reset">{audience.name || 'Unnamed Audience'}</span>
-                                  {audience.isManual && (
+                                  {audience.isManual && isAdmin && (
                                     <span className="badge bg-purple-lt text-purple ms-2">Manual</span>
                                   )}
                                 </div>
@@ -710,11 +710,11 @@ export default function Audiences() {
                             <td>{audience.total_records?.toLocaleString() || '-'}</td>
                             <td>
                               <span className={`badge ${
-                                audience.isManual ? 'bg-purple' :
+                                audience.isManual && isAdmin ? 'bg-purple' :
                                 (audience as unknown as { status?: string }).status === 'ready' ? 'bg-green' :
                                 (audience as unknown as { status?: string }).status === 'processing' ? 'bg-yellow' : 'bg-blue'
                               }`}>
-                                {audience.isManual ? 'Manual' : ((audience as unknown as { status?: string }).status || 'Active')}
+                                {audience.isManual && isAdmin ? 'Manual' : ((audience as unknown as { status?: string }).status || 'Active')}
                               </span>
                             </td>
                             <td className="text-muted">
