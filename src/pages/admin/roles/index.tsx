@@ -88,7 +88,7 @@ export default function AdminRoles() {
   // Show loading while checking auth
   if (authLoading) {
     return (
-      <Layout title="Admin - Roles" pageTitle="Role Management" pagePretitle="Admin">
+      <Layout title="Admin - Roles" pageTitle="Role Management">
         <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
           <IconLoader2 size={48} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
         </div>
@@ -105,7 +105,7 @@ export default function AdminRoles() {
     <Layout
       title="Admin - Roles"
       pageTitle="Role Management"
-      pagePretitle="Admin"
+     
       pageActions={
         <div className="d-flex gap-2">
           <button className="btn btn-outline-primary" onClick={fetchRoles}>

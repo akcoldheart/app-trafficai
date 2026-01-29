@@ -171,7 +171,7 @@ export default function ConversationDetail() {
 
   if (loading) {
     return (
-      <Layout title="Loading..." pageTitle="Conversation" pagePretitle="Chat">
+      <Layout title="Loading..." pageTitle="Conversation">
         <div className="card">
           <div className="card-body text-center py-5">
             <div className="spinner-border text-primary" role="status" />
@@ -184,7 +184,7 @@ export default function ConversationDetail() {
 
   if (error || !conversation) {
     return (
-      <Layout title="Error" pageTitle="Conversation" pagePretitle="Chat">
+      <Layout title="Error" pageTitle="Conversation">
         <div className="card">
           <div className="card-body">
             <div className="alert alert-danger mb-3">
@@ -207,7 +207,7 @@ export default function ConversationDetail() {
     <Layout
       title={`Chat with ${customerName}`}
       pageTitle={customerName}
-      pagePretitle="Conversation"
+     
       pageActions={pageActions}
     >
       <div className="row g-3">

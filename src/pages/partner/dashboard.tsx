@@ -108,7 +108,7 @@ export default function PartnerDashboard() {
 
   if (authLoading) {
     return (
-      <Layout title="Partner Dashboard" pageTitle="Partner Dashboard" pagePretitle="Loading...">
+      <Layout title="Partner Dashboard" pageTitle="Partner Dashboard">
         <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
           <IconLoader2 size={48} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
         </div>
@@ -117,7 +117,7 @@ export default function PartnerDashboard() {
   }
 
   return (
-    <Layout title="Partner Dashboard" pageTitle="Partner Dashboard" pagePretitle={`Welcome, ${userName}`}>
+    <Layout title="Partner Dashboard" pageTitle="Partner Dashboard">
       {/* Welcome Banner */}
       <div className="card mb-4" style={{ background: 'linear-gradient(135deg, var(--tblr-primary) 0%, #1a56db 100%)' }}>
         <div className="card-body">

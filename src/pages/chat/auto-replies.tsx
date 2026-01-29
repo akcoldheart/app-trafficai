@@ -180,7 +180,7 @@ export default function AutoRepliesPage() {
   );
 
   return (
-    <Layout title="Auto Replies" pageTitle="Auto Replies" pagePretitle="Chat Settings" pageActions={pageActions}>
+    <Layout title="Auto Replies" pageTitle="Auto Replies" pageActions={pageActions}>
       <div className="row">
         <div className="col-12">
           {/* Info Card */}

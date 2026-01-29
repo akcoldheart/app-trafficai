@@ -127,7 +127,7 @@ export default function Profile() {
   };
 
   return (
-    <Layout title="My Profile" pageTitle="My Profile" pagePretitle="Account">
+    <Layout title="My Profile" pageTitle="My Profile">
       <div className="row row-cards">
         <div className="col-lg-8">
           {/* Profile Information */}

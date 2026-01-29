@@ -583,7 +583,7 @@ export default function Audiences() {
   const end = Math.min(currentPage * pageSize, totalRecords);
 
   return (
-    <Layout title="Audiences" pageTitle="Audiences" pagePretitle="Traffic AI">
+    <Layout title="Audiences" pageTitle="Audiences">
       <div className="row row-cards">
         {/* Header Actions */}
         <div className="col-12">

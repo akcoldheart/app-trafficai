@@ -258,7 +258,7 @@ export default function Visitors() {
   };
 
   return (
-    <Layout title="Visitors" pageTitle="Visitors" pagePretitle="Pixel Tracking">
+    <Layout title="Visitors" pageTitle="Visitors">
       {/* Filters Card */}
       <div className="card mb-4">
         <div className="card-body py-3">

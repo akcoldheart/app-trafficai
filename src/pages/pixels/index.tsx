@@ -495,7 +495,7 @@ export default function Pixels() {
 
   if (loading) {
     return (
-      <Layout title="Pixel Creation" pageTitle="Pixel Creation" pagePretitle="Traffic AI">
+      <Layout title="Pixel Creation" pageTitle="Pixel Creation">
         <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
           <div className="text-center">
             <IconLoader2 size={48} className="text-muted mb-3" style={{ animation: 'spin 1s linear infinite' }} />
@@ -509,7 +509,7 @@ export default function Pixels() {
 
   if (error) {
     return (
-      <Layout title="Pixel Creation" pageTitle="Pixel Creation" pagePretitle="Traffic AI">
+      <Layout title="Pixel Creation" pageTitle="Pixel Creation">
         <div className="alert alert-danger">
           <div className="d-flex align-items-center">
             <div className="flex-fill">{error}</div>
@@ -523,7 +523,7 @@ export default function Pixels() {
   }
 
   return (
-    <Layout title="Pixel Creation" pageTitle="Pixel Creation" pagePretitle="Traffic AI">
+    <Layout title="Pixel Creation" pageTitle="Pixel Creation">
       {/* Toast Notification */}
       {toast && (
         <div

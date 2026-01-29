@@ -139,7 +139,7 @@ export default function RoleEdit() {
       <Layout
         title={isNew ? 'Create Role' : 'Edit Role'}
         pageTitle={isNew ? 'Create Role' : 'Edit Role'}
-        pagePretitle="Admin"
+       
       >
         <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
           <IconLoader2 size={48} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
@@ -157,7 +157,7 @@ export default function RoleEdit() {
     <Layout
       title={isNew ? 'Create Role' : 'Edit Role'}
       pageTitle={isNew ? 'Create New Role' : `Edit Role: ${role.name}`}
-      pagePretitle="Admin"
+     
       pageActions={
         <Link href="/admin/roles" className="btn btn-outline-secondary">
           <IconArrowLeft size={16} className="me-1" />

@@ -170,7 +170,7 @@ export default function Dashboard() {
   };
 
   return (
-    <Layout title="Dashboard" pageTitle={isAdmin ? "Admin Dashboard" : "Dashboard"} pagePretitle="Overview">
+    <Layout title="Dashboard" pageTitle={isAdmin ? "Admin Dashboard" : "Dashboard"}>
       {/* Welcome Banner */}
       <div className="card mb-4" style={{ background: isAdmin ? 'linear-gradient(135deg, rgb(137, 38, 220) 0%, rgb(153, 27, 27) 100%)' : 'linear-gradient(135deg, var(--tblr-primary) 0%, #1a56db 100%)' }}>
         <div className="card-body">

@@ -575,7 +575,7 @@ export default function Settings() {
   );
 
   return (
-    <Layout title="Settings" pageTitle="Settings" pagePretitle="Traffic AI">
+    <Layout title="Settings" pageTitle="Settings">
       <div className="row row-cards">
         <div className="col-lg-8">
           {/* Connection Test */}

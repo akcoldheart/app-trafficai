@@ -196,7 +196,7 @@ export default function CreateAudience() {
   };
 
   return (
-    <Layout title="Create Audience" pageTitle="Create Audience" pagePretitle="Traffic AI">
+    <Layout title="Create Audience" pageTitle="Create Audience">
       {/* Back Button */}
       <div className="d-flex justify-content-end mb-3">
         <Link href="/audiences" className="btn btn-outline-secondary">

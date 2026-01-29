@@ -147,7 +147,7 @@ export default function AudienceView() {
   const end = Math.min(currentPage * pageSize, totalRecords);
 
   return (
-    <Layout title={audienceName} pageTitle="Audience Details" pagePretitle="Traffic AI">
+    <Layout title={audienceName} pageTitle="Audience Details">
       <div className="row row-cards">
         {/* Audience Info */}
         <div className="col-12">

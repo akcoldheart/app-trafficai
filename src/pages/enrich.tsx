@@ -81,7 +81,7 @@ export default function Enrich() {
   };
 
   return (
-    <Layout title="Contact Enrichment" pageTitle="Contact Enrichment" pagePretitle="Traffic AI">
+    <Layout title="Contact Enrichment" pageTitle="Contact Enrichment">
       <div className="row row-cards">
         {/* Search Form */}
         <div className="col-lg-4">

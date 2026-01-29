@@ -100,7 +100,7 @@ export default function ChatInbox() {
   );
 
   return (
-    <Layout title="Messages" pageTitle="Messages" pagePretitle="Chat" pageActions={pageActions}>
+    <Layout title="Messages" pageTitle="Messages" pageActions={pageActions}>
       <div className="row">
         <div className="col-12">
           <div className="card">

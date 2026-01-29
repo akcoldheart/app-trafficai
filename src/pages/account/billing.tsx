@@ -250,7 +250,7 @@ export default function Billing() {
   };
 
   return (
-    <Layout title="Billing & Plan" pageTitle="Billing & Plan" pagePretitle="Account">
+    <Layout title="Billing & Plan" pageTitle="Billing & Plan">
       <div className="row row-cards">
         {/* Current Usage */}
         <div className="col-12">

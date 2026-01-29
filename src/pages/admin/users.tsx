@@ -225,7 +225,7 @@ export default function AdminUsers() {
   // Show loading while checking auth
   if (authLoading) {
     return (
-      <Layout title="Admin - Users" pageTitle="User Management" pagePretitle="Admin">
+      <Layout title="Admin - Users" pageTitle="User Management">
         <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
           <IconLoader2 size={48} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
         </div>
@@ -242,7 +242,7 @@ export default function AdminUsers() {
     <Layout
       title="Admin - Users"
       pageTitle="User Management"
-      pagePretitle="Admin"
+     
       pageActions={
         <button className="btn btn-outline-primary" onClick={fetchUsers}>
           <IconRefresh size={16} className="me-1" />

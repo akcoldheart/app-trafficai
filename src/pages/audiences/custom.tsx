@@ -65,7 +65,7 @@ export default function CustomAudience() {
   };
 
   return (
-    <Layout title="Create Custom Audience" pageTitle="Create Custom Audience" pagePretitle="Traffic AI">
+    <Layout title="Create Custom Audience" pageTitle="Create Custom Audience">
       <div className="row row-cards">
         <div className="col-lg-8">
           <form onSubmit={handleSubmit}>

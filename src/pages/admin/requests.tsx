@@ -222,7 +222,7 @@ export default function AdminRequests() {
   }
 
   return (
-    <Layout title="All Requests" pageTitle="All Requests" pagePretitle="Admin">
+    <Layout title="All Requests" pageTitle="All Requests">
       <div className="card">
         <div className="card-header">
           <h3 className="card-title">
