@@ -67,11 +67,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const formData = request.form_data as Record<string, unknown>;
     const manualAudience = formData?.manual_audience as Record<string, unknown>;
 
+    // Debug logging
+    console.log('GET manual audience - form_data keys:', Object.keys(formData || {}));
+    console.log('GET manual audience - manual_audience keys:', Object.keys(manualAudience || {}));
+
     if (!manualAudience) {
       return res.status(404).json({ error: 'Manual audience data not found' });
     }
 
     const contacts = (manualAudience.contacts || []) as Record<string, unknown>[];
+
+    // Log sample contact for debugging
+    if (contacts.length > 0) {
+      console.log('GET manual audience - Sample contact:', JSON.stringify(contacts[0], null, 2));
+    }
 
     return res.status(200).json({
       id: request.audience_id,

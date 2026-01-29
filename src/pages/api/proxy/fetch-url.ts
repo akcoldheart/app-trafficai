@@ -110,20 +110,66 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const contentType = response.headers.get('content-type');
+    let data: Record<string, unknown>;
 
     if (contentType && contentType.includes('application/json')) {
-      const data = await response.json();
-      return res.status(200).json(data);
+      data = await response.json();
     } else {
       const text = await response.text();
       // Try to parse as JSON anyway
       try {
-        const data = JSON.parse(text);
-        return res.status(200).json(data);
+        data = JSON.parse(text);
       } catch {
         return res.status(400).json({ error: 'Response is not valid JSON' });
       }
     }
+
+    // Handle pagination for audiencelab.io API
+    // If response has pagination metadata, fetch all remaining pages
+    if (parsedUrl.hostname.includes('audiencelab.io')) {
+      const totalPages = (data.total_pages || data.TotalPages || data.totalPages) as number | undefined;
+      const currentPage = (data.page || data.Page || data.current_page || 1) as number;
+
+      if (totalPages && totalPages > 1 && currentPage === 1) {
+        // Collect all records from first page
+        let allRecords = (data.Data || data.data || data.records || data.contacts || []) as unknown[];
+
+        // Fetch remaining pages
+        for (let page = 2; page <= totalPages; page++) {
+          try {
+            // Build URL for next page
+            const nextPageUrl = new URL(url);
+            nextPageUrl.searchParams.set('page', String(page));
+
+            const pageResponse = await fetch(nextPageUrl.toString(), {
+              method: 'GET',
+              headers,
+            });
+
+            if (pageResponse.ok) {
+              const pageData = await pageResponse.json();
+              const pageRecords = (pageData.Data || pageData.data || pageData.records || pageData.contacts || []) as unknown[];
+              allRecords = allRecords.concat(pageRecords);
+            }
+          } catch (pageError) {
+            console.error(`Error fetching page ${page}:`, pageError);
+            // Continue with what we have
+          }
+        }
+
+        // Return combined data with all records
+        return res.status(200).json({
+          ...data,
+          Data: allRecords,
+          data: allRecords,
+          total_records: allRecords.length,
+          fetched_all_pages: true,
+          original_total_pages: totalPages,
+        });
+      }
+    }
+
+    return res.status(200).json(data);
   } catch (error) {
     console.error('Proxy fetch error:', error);
     return res.status(500).json({

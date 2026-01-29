@@ -76,21 +76,74 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Generate a local audience ID for manual audiences
     const audienceId = `manual_${crypto.randomUUID()}`;
 
-    // Normalize contacts
-    const normalizedContacts = contacts.map((contact) => ({
-      email: contact.email || null,
-      first_name: contact.first_name || contact.firstName || null,
-      last_name: contact.last_name || contact.lastName || null,
-      full_name: [contact.first_name || contact.firstName, contact.last_name || contact.lastName]
-        .filter(Boolean).join(' ') || null,
-      company: contact.company || null,
-      job_title: contact.title || contact.job_title || contact.jobTitle || null,
-      linkedin_url: contact.linkedin_url || contact.linkedinUrl || null,
-      phone: contact.phone || contact.mobile_phone || null,
-      city: contact.city || null,
-      state: contact.state || null,
-      country: contact.country || null,
-    }));
+    // Log sample of incoming data for debugging
+    console.log('Manual audience - Sample contact (first):', JSON.stringify(contacts[0], null, 2));
+    console.log('Manual audience - Total contacts received:', contacts.length);
+
+    // Normalize contacts - handle various field name formats and nested resolution object
+    const normalizedContacts = contacts.map((contact, index) => {
+      // Audiencelab.io may return data nested in 'resolution' object
+      const resolution = (contact.resolution || contact.Resolution || {}) as Record<string, unknown>;
+
+      // Merge top-level contact with resolution data (resolution takes priority for contact info)
+      const merged = { ...contact, ...resolution };
+
+      // Helper to get field value from multiple possible keys (treats empty strings as missing)
+      const getField = (...keys: string[]): unknown => {
+        for (const key of keys) {
+          const val = merged[key];
+          if (val !== undefined && val !== null && val !== '') {
+            return val;
+          }
+        }
+        return null;
+      };
+
+      const firstName = getField('first_name', 'firstName', 'FIRST_NAME', 'FirstName');
+      const lastName = getField('last_name', 'lastName', 'LAST_NAME', 'LastName');
+
+      // Build normalized object with standard field names
+      const normalized: Record<string, unknown> = {
+        email: getField('email', 'EMAIL', 'Email', 'PERSONAL_EMAILS', 'BUSINESS_EMAIL'),
+        first_name: firstName,
+        last_name: lastName,
+        full_name: [firstName, lastName].filter(Boolean).join(' ') || null,
+        company: getField('company', 'COMPANY', 'Company', 'COMPANY_NAME', 'company_name'),
+        job_title: getField('title', 'job_title', 'jobTitle', 'JOB_TITLE', 'JobTitle'),
+        linkedin_url: getField('linkedin_url', 'linkedinUrl', 'LINKEDIN_URL', 'COMPANY_LINKEDIN_URL'),
+        phone: getField('phone', 'PHONE', 'mobile_phone', 'MOBILE_PHONE', 'PERSONAL_PHONE', 'DIRECT_NUMBER'),
+        city: getField('city', 'CITY', 'City', 'PERSONAL_CITY', 'personal_city'),
+        state: getField('state', 'STATE', 'State', 'PERSONAL_STATE', 'personal_state'),
+        country: getField('country', 'COUNTRY', 'Country'),
+        gender: getField('gender', 'GENDER', 'Gender'),
+        age_range: getField('age_range', 'AGE_RANGE', 'AgeRange'),
+        income_range: getField('income_range', 'INCOME_RANGE', 'IncomeRange'),
+        seniority: getField('seniority', 'SENIORITY_LEVEL', 'seniority_level'),
+        department: getField('department', 'DEPARTMENT', 'Department'),
+        url: getField('url', 'URL', 'page_url'),
+        ip_address: getField('ip_address', 'IP_ADDRESS'),
+        event_type: getField('event_type', 'EVENT_TYPE'),
+        referrer_url: getField('referrer_url', 'REFERRER_URL'),
+      };
+
+      // Add remaining original fields that aren't already normalized (skip empty strings and duplicates)
+      for (const [key, value] of Object.entries(merged)) {
+        const lowerKey = key.toLowerCase();
+        if (value !== '' && value !== null && value !== undefined && !normalized[lowerKey]) {
+          normalized[lowerKey] = value;
+        }
+      }
+
+      // Log first normalized contact for debugging
+      if (index === 0) {
+        console.log('Manual audience - Normalized contact (first):', JSON.stringify(normalized, null, 2));
+      }
+
+      return normalized;
+    });
+
+    // Log summary
+    console.log('Manual audience - Normalized contacts count:', normalizedContacts.length);
 
     // If linked to a request, update it with the audience data
     if (request_id) {
