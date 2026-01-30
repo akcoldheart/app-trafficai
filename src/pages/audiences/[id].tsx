@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
 import { TrafficAPI } from '@/lib/api';
-import { IconArrowLeft, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconRefresh, IconTrash, IconDownload, IconEye } from '@tabler/icons-react';
 
 interface AudienceRecord {
   [key: string]: unknown;
@@ -24,6 +24,32 @@ export default function AudienceView() {
   const [columns, setColumns] = useState<string[]>([]);
   const [isManual, setIsManual] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<AudienceRecord | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  // Minimal columns to display in table
+  const minimalColumns = ['full_name', 'email', 'company', 'job_title'];
+
+  // Priority columns for display in modal
+  const priorityColumns = [
+    'first_name', 'last_name', 'full_name', 'email', 'verified_email',
+    'company', 'job_title', 'phone', 'mobile_phone', 'city', 'state',
+    'country', 'gender', 'age_range', 'linkedin_url', 'company_domain',
+    'business_email', 'business_verified_emails', 'company_city',
+    'company_revenue', 'uuid', 'valid_phones'
+  ];
+
+  const getSortedColumns = (record: AudienceRecord) => {
+    const keys = Object.keys(record);
+    return keys.sort((a, b) => {
+      const aIndex = priorityColumns.indexOf(a);
+      const bIndex = priorityColumns.indexOf(b);
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  };
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -81,7 +107,9 @@ export default function AudienceView() {
             return a.localeCompare(b);
           });
 
-          setColumns(sortedColumns.slice(0, 12));
+          // Filter to only show minimal columns that exist in data
+          const displayColumns = minimalColumns.filter(col => allKeys.has(col));
+          setColumns(displayColumns.length > 0 ? displayColumns : sortedColumns.slice(0, 4));
         }
       } else {
         setIsManual(false);
@@ -101,7 +129,10 @@ export default function AudienceView() {
           recordsData.forEach((record) => {
             Object.keys(record).forEach((key) => allKeys.add(key));
           });
-          setColumns(Array.from(allKeys).slice(0, 10));
+          const sortedColumns = Array.from(allKeys);
+          // Filter to only show minimal columns that exist in data
+          const displayColumns = minimalColumns.filter(col => allKeys.has(col));
+          setColumns(displayColumns.length > 0 ? displayColumns : sortedColumns.slice(0, 4));
         }
       }
     } catch (error) {
@@ -160,8 +191,161 @@ export default function AudienceView() {
     return String(value);
   };
 
+  const handleExport = async () => {
+    if (!id || typeof id !== 'string') return;
+
+    setExporting(true);
+    try {
+      let allRecords: AudienceRecord[] = [];
+
+      if (isManual) {
+        // Fetch all records for manual audience
+        const response = await fetch(`/api/audiences/manual/${id}`);
+        const data = await response.json();
+        if (response.ok) {
+          allRecords = data.contacts || [];
+        }
+      } else {
+        // For external API, export current page data
+        allRecords = records;
+      }
+
+      if (allRecords.length === 0) {
+        showToast('No data to export', 'error');
+        setExporting(false);
+        return;
+      }
+
+      // Get all columns from the data, excluding uuid
+      const allColumns = new Set<string>();
+      allRecords.forEach((record) => {
+        Object.keys(record).forEach((key) => allColumns.add(key));
+      });
+      // Remove uuid from export columns
+      allColumns.delete('uuid');
+
+      // Sort columns with full_name first, then other priority columns
+      const exportPriorityColumns = [
+        'full_name', 'first_name', 'last_name', 'email', 'verified_email',
+        'company', 'job_title', 'phone', 'mobile_phone', 'city', 'state',
+        'country', 'gender', 'age_range', 'linkedin_url', 'company_domain',
+        'business_email', 'business_verified_emails', 'company_city',
+        'company_revenue', 'valid_phones'
+      ];
+
+      const exportColumns = Array.from(allColumns).sort((a, b) => {
+        const aIndex = exportPriorityColumns.indexOf(a);
+        const bIndex = exportPriorityColumns.indexOf(b);
+        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
+        return a.localeCompare(b);
+      });
+
+      // Create CSV content
+      const csvRows: string[] = [];
+
+      // Header row - add S.No. as first column
+      csvRows.push(['"S.No."', ...exportColumns.map(col => `"${formatColumnName(col)}"`)].join(','));
+
+      // Data rows - add serial number as first column
+      allRecords.forEach((record, index) => {
+        const row = exportColumns.map((col) => {
+          const value = record[col];
+          if (value === null || value === undefined) return '';
+          if (typeof value === 'object') return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
+          return `"${String(value).replace(/"/g, '""')}"`;
+        });
+        csvRows.push([`"${index + 1}"`, ...row].join(','));
+      });
+
+      const csvContent = csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${audienceName.replace(/[^a-z0-9]/gi, '_')}_export.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`Exported ${allRecords.length} records successfully`, 'success');
+    } catch (error) {
+      showToast('Error exporting data: ' + (error as Error).message, 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const start = records.length > 0 ? (currentPage - 1) * pageSize + 1 : 0;
   const end = Math.min(currentPage * pageSize, totalRecords);
+
+  // If viewing contact details, show inline view
+  if (selectedRecord) {
+    return (
+      <Layout title="Contact Details" pageTitle="Contact Details">
+        <div className="row row-cards">
+          {/* Header */}
+          <div className="col-12">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h2 className="mb-1">
+                      {selectedRecord.full_name ? String(selectedRecord.full_name) : 'Contact Details'}
+                    </h2>
+                    <div className="text-muted">From audience: {audienceName}</div>
+                  </div>
+                  <button
+                    className="btn btn-outline-secondary"
+                    onClick={() => setSelectedRecord(null)}
+                  >
+                    <IconArrowLeft className="icon" />
+                    Back to Audience
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Contact Details */}
+          <div className="col-12">
+            <div className="row g-3">
+              {getSortedColumns(selectedRecord).map((key) => {
+                const value = selectedRecord[key];
+                if (value === null || value === undefined || value === '') return null;
+                return (
+                  <div key={key} className="col-md-6 col-lg-4">
+                    <div className="card h-100">
+                      <div className="card-body">
+                        <div className="text-muted small mb-1">{formatColumnName(key)}</div>
+                        <div
+                          className="fw-medium"
+                          style={{
+                            wordBreak: 'break-word',
+                            whiteSpace: typeof value === 'object' ? 'pre-wrap' : 'normal'
+                          }}
+                        >
+                          {typeof value === 'object' ? (
+                            <code className="small d-block bg-light p-2 rounded">
+                              {JSON.stringify(value, null, 2)}
+                            </code>
+                          ) : (
+                            String(value)
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout title={audienceName} pageTitle="Audience Details">
@@ -264,6 +448,19 @@ export default function AudienceView() {
                     <option value={100}>100 per page</option>
                     <option value={500}>500 per page</option>
                   </select>
+                  <button className="btn btn-sm" onClick={handleExport} disabled={exporting}>
+                    {exporting ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                        Exporting...
+                      </>
+                    ) : (
+                      <>
+                        <IconDownload className="icon" />
+                        Export
+                      </>
+                    )}
+                  </button>
                   <button className="btn btn-sm" onClick={() => loadAudienceData(currentPage)}>
                     <IconRefresh className="icon" />
                     Refresh
@@ -275,33 +472,45 @@ export default function AudienceView() {
               <table className="table table-vcenter card-table table-striped">
                 <thead>
                   <tr>
+                    <th style={{ width: '60px' }}>S.No.</th>
                     {columns.length > 0 ? (
                       columns.map((col) => <th key={col}>{formatColumnName(col)}</th>)
                     ) : (
                       <th>Loading...</th>
                     )}
+                    <th style={{ width: '80px' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={columns.length || 1} className="text-center py-4">
+                      <td colSpan={columns.length + 2 || 3} className="text-center py-4">
                         <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                         Loading audience data...
                       </td>
                     </tr>
                   ) : records.length === 0 ? (
                     <tr>
-                      <td colSpan={columns.length || 1} className="text-center text-muted py-4">
+                      <td colSpan={columns.length + 2 || 3} className="text-center text-muted py-4">
                         No data available for this audience
                       </td>
                     </tr>
                   ) : (
                     records.map((record, idx) => (
                       <tr key={idx}>
+                        <td className="text-muted">{(currentPage - 1) * pageSize + idx + 1}</td>
                         {columns.map((col) => (
                           <td key={col}>{formatCellValue(record[col])}</td>
                         ))}
+                        <td>
+                          <button
+                            className="btn btn-sm btn-ghost-primary"
+                            onClick={() => setSelectedRecord(record)}
+                            title="View Details"
+                          >
+                            <IconEye className="icon" />
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
