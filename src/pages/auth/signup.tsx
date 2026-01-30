@@ -95,7 +95,7 @@ export default function Signup() {
   return (
     <>
       <Head>
-        <title>Sign Up - Traffic AI</title>
+        <title>TrafficAi</title>
       </Head>
 
       <div className="auth-page">

@@ -159,7 +159,7 @@ export default function Login() {
     return (
       <>
         <Head>
-          <title>Signing in... - Traffic AI</title>
+          <title>TrafficAi</title>
         </Head>
         <div className="page page-center" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="text-center">
@@ -178,7 +178,7 @@ export default function Login() {
   return (
     <>
       <Head>
-        <title>Login - Traffic AI</title>
+        <title>TrafficAi</title>
       </Head>
 
       <div className="auth-page">

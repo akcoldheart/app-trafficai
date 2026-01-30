@@ -22,7 +22,7 @@ export default function Layout({
   return (
     <>
       <Head>
-        <title>{title ? `${title} - Traffic AI` : 'Traffic AI'}</title>
+        <title>TrafficAi</title>
       </Head>
 
       <div className="page">

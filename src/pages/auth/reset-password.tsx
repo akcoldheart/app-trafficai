@@ -35,7 +35,7 @@ export default function ResetPassword() {
   return (
     <>
       <Head>
-        <title>Reset Password - Traffic AI</title>
+        <title>TrafficAi</title>
       </Head>
 
       <div className="auth-page">
