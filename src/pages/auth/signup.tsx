@@ -57,8 +57,13 @@ export default function Signup() {
 
       if (error) throw error;
 
-      if (data.user) {
-        router.push('/auth/login?message=Account created successfully. Please sign in.');
+      if (data.session) {
+        // User is immediately authenticated (email verification disabled)
+        // Redirect directly to dashboard
+        router.push('/');
+      } else if (data.user) {
+        // User created but needs email verification
+        router.push('/auth/login?message=Please check your email to verify your account.');
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred during signup');

@@ -64,7 +64,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // User doesn't have role_id - assign based on role string or default to 'user'
-    const roleName = userData?.role || 'user';
+    // Map 'partner' to 'user' since partner role was deprecated
+    let roleName = userData?.role || 'user';
+    if (roleName === 'partner') {
+      roleName = 'user';
+      // Also update the user's role string
+      await supabaseAdmin
+        .from('users')
+        .update({ role: 'user' })
+        .eq('id', user.id);
+    }
     console.log('Assigning role for user:', userData?.email, 'role name:', roleName);
 
     // Look up the role
