@@ -122,7 +122,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      // Clear all Supabase cookies immediately
+      // Sign out from Supabase first (this clears the session properly)
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (err) {
+      console.error('Error during Supabase signOut:', err);
+    }
+
+    // Clear state
+    setUser(null);
+    setUserProfile(null);
+    setUserRole(null);
+    setUserMenuItems([]);
+    setSession(null);
+
+    try {
+      // Clear Supabase cookies
       document.cookie.split(';').forEach((c) => {
         const name = c.trim().split('=')[0];
         if (name.startsWith('sb-') || name.includes('supabase')) {
@@ -131,35 +145,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
-      // Clear localStorage items related to supabase
+      // Clear localStorage items related to supabase session (but not auth settings)
       Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith('sb-') || key.includes('supabase')) {
+        // Only clear session-related items, not PKCE verifiers or other auth config
+        if (key.startsWith('sb-') && (key.includes('-auth-token') || key.includes('session'))) {
           localStorage.removeItem(key);
         }
       });
 
-      // Clear sessionStorage as well
-      Object.keys(sessionStorage).forEach((key) => {
-        if (key.startsWith('sb-') || key.includes('supabase')) {
-          sessionStorage.removeItem(key);
-        }
-      });
-
-      // Try to sign out from Supabase (non-blocking)
-      supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+      // Clear auth-related sessionStorage
+      sessionStorage.removeItem('authRedirect');
     } catch (err) {
       console.error('Error during signOut cleanup:', err);
     }
 
-    // Use multiple redirect methods to ensure navigation happens
-    // Method 1: Try Next.js router first
-    router.push('/auth/login').then(() => {
-      // Method 2: Force a full page reload after router navigation
-      window.location.reload();
-    }).catch(() => {
-      // Method 3: Fallback to direct location change
-      window.location.href = '/auth/login';
-    });
+    // Redirect to login page with a full navigation (clears any stale React state)
+    window.location.href = '/auth/login';
   };
 
   const refreshUser = async () => {

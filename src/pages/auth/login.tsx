@@ -43,16 +43,38 @@ export default function Login() {
         setIsProcessingAuth(true);
         console.log('OAuth code detected, exchanging...');
 
+        // Clear code from URL immediately to prevent re-processing on refresh
+        window.history.replaceState({}, '', '/auth/login');
+
         try {
+          // First check if we already have a session (code might have been processed)
+          const { data: { session: existingSession } } = await supabase.auth.getSession();
+          if (existingSession) {
+            console.log('Session already exists, redirecting...');
+            const redirectUrl = sessionStorage.getItem('authRedirect') || '/';
+            sessionStorage.removeItem('authRedirect');
+            window.location.href = redirectUrl;
+            return;
+          }
+
           // Exchange the code for a session (client-side has access to PKCE verifier)
           const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
           if (exchangeError) {
             console.error('Code exchange error:', exchangeError);
+
+            // Check if session was created despite the error (race condition)
+            const { data: { session: retrySession } } = await supabase.auth.getSession();
+            if (retrySession) {
+              console.log('Session found after error, redirecting...');
+              const redirectUrl = sessionStorage.getItem('authRedirect') || '/';
+              sessionStorage.removeItem('authRedirect');
+              window.location.href = redirectUrl;
+              return;
+            }
+
             setError('Authentication failed. Please try again.');
             setIsProcessingAuth(false);
-            // Clear code from URL
-            window.history.replaceState({}, '', '/auth/login');
             return;
           }
 
@@ -68,7 +90,6 @@ export default function Login() {
           console.error('OAuth callback error:', err);
           setError('Authentication failed. Please try again.');
           setIsProcessingAuth(false);
-          window.history.replaceState({}, '', '/auth/login');
         }
       }
     };

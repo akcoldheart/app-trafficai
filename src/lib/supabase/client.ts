@@ -12,7 +12,9 @@ export function createClient() {
     {
       auth: {
         flowType: 'pkce',
-        detectSessionInUrl: true,
+        // Disable auto-detection to prevent race conditions with manual code exchange
+        // We handle code exchange manually in login.tsx and callback.tsx
+        detectSessionInUrl: false,
         persistSession: true,
         autoRefreshToken: true,
       },
