@@ -423,27 +423,6 @@ export default function Visitors() {
                     <IconFilter size={16} className="me-1" />
                     Apply
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary"
-                    onClick={handleExport}
-                    disabled={exporting}
-                    title="Export to CSV"
-                  >
-                    {exporting ? (
-                      <span className="spinner-border spinner-border-sm" role="status"></span>
-                    ) : (
-                      <IconDownload size={16} />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-icon"
-                    onClick={fetchVisitors}
-                    title="Refresh"
-                  >
-                    <IconRefresh size={16} />
-                  </button>
                 </div>
               </div>
             </div>
@@ -491,6 +470,39 @@ export default function Visitors() {
                   <>{pagination.total.toLocaleString()} Visitor{pagination.total !== 1 ? 's' : ''}</>
                 )}
               </h3>
+              <div className="card-actions">
+                <div className="btn-list">
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={handleExport}
+                    disabled={exporting || loading}
+                    title="Export to CSV"
+                  >
+                    {exporting ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                        Exporting...
+                      </>
+                    ) : (
+                      <>
+                        <IconDownload size={16} className="me-1" />
+                        Export
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={fetchVisitors}
+                    disabled={loading}
+                    title="Refresh"
+                  >
+                    <IconRefresh size={16} className="me-1" />
+                    Refresh
+                  </button>
+                </div>
+              </div>
             </div>
             {loading ? (
               <div className="card-body text-center py-5">
