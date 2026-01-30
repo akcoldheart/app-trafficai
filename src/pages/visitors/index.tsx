@@ -106,6 +106,12 @@ export default function Visitors() {
   const [visitorDetails, setVisitorDetails] = useState<VisitorDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   // Filters
   const [search, setSearch] = useState('');
@@ -286,7 +292,7 @@ export default function Visitors() {
       const allVisitors = data.visitors || [];
 
       if (allVisitors.length === 0) {
-        alert('No visitors to export');
+        showToast('No visitors to export', 'error');
         setExporting(false);
         return;
       }
@@ -330,9 +336,10 @@ export default function Visitors() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      showToast(`Exported ${allVisitors.length} visitors successfully`, 'success');
     } catch (err) {
       console.error('Export error:', err);
-      alert('Failed to export visitors');
+      showToast('Failed to export visitors', 'error');
     } finally {
       setExporting(false);
     }
@@ -925,6 +932,35 @@ export default function Visitors() {
           </div>
         )}
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className="toast show position-fixed"
+          style={{
+            top: '20px',
+            right: '20px',
+            zIndex: 9999,
+            minWidth: '300px',
+          }}
+        >
+          <div className={`toast-header ${
+            toast.type === 'success' ? 'bg-success text-white' : 'bg-danger text-white'
+          }`}>
+            <strong className="me-auto">
+              {toast.type === 'success' ? 'Success' : 'Error'}
+            </strong>
+            <button
+              type="button"
+              className="btn-close btn-close-white"
+              onClick={() => setToast(null)}
+            ></button>
+          </div>
+          <div className="toast-body">
+            {toast.message}
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         @keyframes spin {
