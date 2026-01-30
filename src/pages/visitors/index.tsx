@@ -24,6 +24,7 @@ import {
   IconLink,
   IconForms,
   IconPlayerPlay,
+  IconDownload,
 } from '@tabler/icons-react';
 
 interface Visitor {
@@ -104,6 +105,7 @@ export default function Visitors() {
   const [selectedVisitor, setSelectedVisitor] = useState<Visitor | null>(null);
   const [visitorDetails, setVisitorDetails] = useState<VisitorDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -257,6 +259,85 @@ export default function Visitors() {
     return { browser, os };
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      // Fetch all visitors with current filters (without pagination limit)
+      const params = new URLSearchParams({
+        page: '1',
+        limit: '10000', // Get all records
+        sort: sortBy,
+        order: sortOrder,
+      });
+
+      if (search) params.set('search', search);
+      if (selectedPixel) params.set('pixel_id', selectedPixel);
+      if (identifiedOnly) params.set('identified_only', 'true');
+      if (enrichedOnly) params.set('enriched_only', 'true');
+      if (minScore) params.set('min_score', minScore);
+
+      const response = await fetch(`/api/visitors?${params}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch visitors');
+      }
+
+      const allVisitors = data.visitors || [];
+
+      if (allVisitors.length === 0) {
+        alert('No visitors to export');
+        setExporting(false);
+        return;
+      }
+
+      // Define export columns in priority order
+      const exportColumns = [
+        'full_name', 'email', 'company', 'job_title', 'city', 'state', 'country',
+        'lead_score', 'total_pageviews', 'total_sessions', 'total_clicks',
+        'form_submissions', 'first_seen_at', 'last_seen_at', 'is_identified', 'is_enriched'
+      ];
+
+      const formatColumnName = (name: string) => {
+        return name.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+      };
+
+      // Create CSV content
+      const csvRows: string[] = [];
+
+      // Header row with S.No.
+      csvRows.push(['"S.No."', ...exportColumns.map(col => `"${formatColumnName(col)}"`)].join(','));
+
+      // Data rows
+      allVisitors.forEach((visitor: Visitor, index: number) => {
+        const row = exportColumns.map((col) => {
+          const value = visitor[col as keyof Visitor];
+          if (value === null || value === undefined) return '';
+          if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+          if (typeof value === 'object') return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
+          return `"${String(value).replace(/"/g, '""')}"`;
+        });
+        csvRows.push([`"${index + 1}"`, ...row].join(','));
+      });
+
+      const csvContent = csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `visitors_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Failed to export visitors');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <Layout title="Visitors" pageTitle="Visitors">
       {/* Filters Card */}
@@ -341,6 +422,19 @@ export default function Visitors() {
                   <button type="submit" className="btn btn-primary flex-fill">
                     <IconFilter size={16} className="me-1" />
                     Apply
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={handleExport}
+                    disabled={exporting}
+                    title="Export to CSV"
+                  >
+                    {exporting ? (
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                    ) : (
+                      <IconDownload size={16} />
+                    )}
                   </button>
                   <button
                     type="button"
