@@ -35,6 +35,7 @@ interface Plan {
   contactSales?: boolean;
   stripePriceIdMonthly?: string;
   stripePriceIdYearly?: string;
+  buttonText?: string;
 }
 
 const defaultPlans: Plan[] = [
@@ -47,9 +48,10 @@ const defaultPlans: Plan[] = [
     visitors: '3,000',
     stripePriceIdMonthly: '',
     stripePriceIdYearly: '',
+    buttonText: 'Get Started with Starter',
     features: [
       { name: 'Up to 3,000 identified visitors', included: true },
-      { name: 'Intent data & lead scoring', included: true },
+      { name: 'Intent data & lead scoring', included: false },
       { name: 'Email & LinkedIn enrichment', included: false },
       { name: 'Multi-channel activation tools', included: false },
       { name: 'Dedicated account manager & support', included: false },
@@ -65,6 +67,7 @@ const defaultPlans: Plan[] = [
     popular: true,
     stripePriceIdMonthly: '',
     stripePriceIdYearly: '',
+    buttonText: 'Upgrade To Growth',
     features: [
       { name: 'Up to 5,000 identified visitors', included: true },
       { name: 'Intent data & lead scoring', included: true },
@@ -82,6 +85,7 @@ const defaultPlans: Plan[] = [
     visitors: '10,000',
     stripePriceIdMonthly: '',
     stripePriceIdYearly: '',
+    buttonText: 'Go Pro Now',
     features: [
       { name: 'Up to 10,000 identified visitors', included: true },
       { name: 'Intent data & lead scoring', included: true },
@@ -98,6 +102,7 @@ const defaultPlans: Plan[] = [
     description: 'For large organizations with custom needs & support.',
     visitors: 'Unlimited',
     contactSales: true,
+    buttonText: 'Contact Sales',
     features: [
       { name: 'Unlimited identified visitors', included: true },
       { name: 'Intent data & lead scoring', included: true },
@@ -330,32 +335,30 @@ export default function Billing() {
         {/* Plans */}
         <div className="col-12">
           <div className="card">
-            <div className="card-header">
+            <div className="card-header position-relative">
               <h3 className="card-title">
                 <IconRocket className="icon me-2" />
                 Choose Your Plan
               </h3>
-            </div>
-            <div className="card-body">
-              {/* Billing Period Toggle */}
-              <div className="d-flex justify-content-center align-items-center gap-3 mb-4">
-                <span className={billingPeriod === 'monthly' ? 'fw-bold' : 'text-muted'}>
+              {/* Billing Period Toggle - Centered */}
+              <div className="billing-toggle-wrapper">
+                <span className={`billing-label ${billingPeriod === 'monthly' ? 'active' : ''}`}>
                   Monthly
                 </span>
-                <label className="form-switch m-0">
+                <label className="billing-switch">
                   <input
                     type="checkbox"
-                    className="form-check-input"
                     checked={billingPeriod === 'yearly'}
                     onChange={() => setBillingPeriod(billingPeriod === 'monthly' ? 'yearly' : 'monthly')}
                   />
+                  <span className="billing-slider"></span>
                 </label>
-                <span className={billingPeriod === 'yearly' ? 'fw-bold' : 'text-muted'}>
+                <span className={`billing-label ${billingPeriod === 'yearly' ? 'active' : ''}`}>
                   Annually
-                  <span className="badge bg-green-lt text-green ms-2">Save up to 17%</span>
                 </span>
               </div>
-
+            </div>
+            <div className="card-body">
               <div className="row g-4">
                 {plans.map((plan) => {
                   const price = getDisplayPrice(plan);
@@ -380,7 +383,7 @@ export default function Billing() {
                             </span>
                             <h3 className="mb-1">{plan.name}</h3>
                             {plan.contactSales ? (
-                              <div className="h2 mb-0">Contact Us</div>
+                              <div className="h3 mb-0">Contact us for<br />custom solutions</div>
                             ) : (
                               <>
                                 <div className="h1 mb-0">
@@ -429,7 +432,7 @@ export default function Billing() {
                                 href="mailto:sales@trafficai.io?subject=Enterprise Plan Inquiry"
                                 className="btn btn-outline-primary w-100"
                               >
-                                Contact Sales
+                                {plan.buttonText || 'Contact Sales'}
                               </a>
                             ) : (
                               <button
@@ -443,7 +446,7 @@ export default function Billing() {
                                     Processing...
                                   </>
                                 ) : (
-                                  `Get Started with ${plan.name}`
+                                  plan.buttonText || `Get Started with ${plan.name}`
                                 )}
                               </button>
                             )}
@@ -543,6 +546,67 @@ export default function Billing() {
         }
         .space-y-2 > li + li {
           margin-top: 0.5rem;
+        }
+        .billing-toggle-wrapper {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .billing-label {
+          font-size: 1rem;
+          font-weight: 500;
+          color: var(--tblr-secondary-color);
+          transition: color 0.2s ease;
+        }
+        .billing-label.active {
+          color: var(--tblr-body-color);
+          font-weight: 600;
+        }
+        .billing-switch {
+          position: relative;
+          display: inline-block;
+          width: 64px;
+          height: 32px;
+          margin: 0;
+          cursor: pointer;
+        }
+        .billing-switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+        .billing-slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: var(--tblr-primary);
+          transition: 0.3s;
+          border-radius: 32px;
+        }
+        .billing-slider:before {
+          position: absolute;
+          content: "";
+          height: 24px;
+          width: 24px;
+          left: 4px;
+          bottom: 4px;
+          background-color: white;
+          transition: 0.3s;
+          border-radius: 50%;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .billing-switch input:checked + .billing-slider:before {
+          transform: translateX(32px);
+        }
+        .billing-switch:hover .billing-slider {
+          box-shadow: 0 0 8px rgba(217, 57, 123, 0.5);
         }
       `}</style>
     </Layout>
