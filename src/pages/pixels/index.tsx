@@ -129,10 +129,24 @@ export default function Pixels() {
     }
   };
 
+  // Handle initial load and tab query parameter from URL
   useEffect(() => {
-    fetchPixels(true); // Select first pixel on initial load
+    // Wait for router to be ready before checking query params
+    if (!router.isReady) return;
+
+    // Check if coming from requests tab
+    const isRequestsTab = router.query.tab === 'requests';
+
+    if (isRequestsTab) {
+      setActiveTab('requests');
+      // Clear the query parameter from URL
+      router.replace('/pixels', undefined, { shallow: true });
+    }
+
+    // Fetch pixels - only auto-select first if not on requests tab
+    fetchPixels(!isRequestsTab);
     fetchPixelRequests();
-  }, [fetchPixels, fetchPixelRequests]);
+  }, [router.isReady]); // Run when router is ready
 
   // Load custom code when pixel is selected (by ID change only)
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
@@ -144,15 +158,6 @@ export default function Pixels() {
       setLastSelectedId(selectedPixel.id);
     }
   }, [selectedPixel, lastSelectedId]);
-
-  // Handle tab query parameter from URL
-  useEffect(() => {
-    if (router.query.tab === 'requests') {
-      setActiveTab('requests');
-      // Clear the query parameter from URL
-      router.replace('/pixels', undefined, { shallow: true });
-    }
-  }, [router.query.tab, router]);
 
   const getBaseUrl = () => {
     if (typeof window !== 'undefined') {
