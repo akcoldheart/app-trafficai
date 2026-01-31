@@ -3,6 +3,7 @@ import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { UpgradeProvider } from '@/contexts/UpgradeContext';
 import ChatBubble from '@/components/ChatBubble';
 
 // Import Bootstrap and Tabler CSS
@@ -31,8 +32,10 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta httpEquiv="X-UA-Compatible" content="ie=edge" />
       </Head>
       <AuthProvider>
-        <Component {...pageProps} />
-        {!isAuthPage && <ChatBubble />}
+        <UpgradeProvider>
+          <Component {...pageProps} />
+          {!isAuthPage && <ChatBubble />}
+        </UpgradeProvider>
       </AuthProvider>
     </>
   );

@@ -3,6 +3,8 @@ import Sidebar from './Sidebar';
 import Footer from './Footer';
 import PageHeader from './PageHeader';
 import TopBar from './TopBar';
+import TrialNotification from '@/components/TrialNotification';
+import UpgradeNotification from '@/components/UpgradeNotification';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -39,6 +41,8 @@ export default function Layout({
 
           <div className="page-body">
             <div className="container-xl">
+              <TrialNotification />
+              <UpgradeNotification />
               {children}
             </div>
           </div>

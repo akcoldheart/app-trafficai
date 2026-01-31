@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
-import { TrafficAPI } from '@/lib/api';
 import {
   IconCreditCard,
   IconCheck,
@@ -16,6 +15,7 @@ import {
   IconEye,
   IconRefresh,
   IconExternalLink,
+  IconClock,
 } from '@tabler/icons-react';
 
 interface PlanFeature {
@@ -113,27 +113,63 @@ const defaultPlans: Plan[] = [
   },
 ];
 
+// Plan limits for visitor tracking
+const PLAN_VISITOR_LIMITS: Record<string, number> = {
+  free: 100,
+  starter: 3000,
+  growth: 5000,
+  professional: 10000,
+  enterprise: Infinity,
+};
+
 export default function Billing() {
   const { userProfile } = useAuth();
-  const [credits, setCredits] = useState<number | null>(null);
-  const [loadingCredits, setLoadingCredits] = useState(true);
+  const [identifiedVisitors, setIdentifiedVisitors] = useState<number | null>(null);
+  const [loadingStats, setLoadingStats] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [plans, setPlans] = useState<Plan[]>(defaultPlans);
 
   const currentPlan = userProfile?.plan || 'free';
+  const visitorLimit = PLAN_VISITOR_LIMITS[currentPlan] || PLAN_VISITOR_LIMITS.free;
 
-  const loadCredits = useCallback(async () => {
+  // Calculate trial status
+  const trialStatus = useMemo(() => {
+    if (!userProfile || currentPlan !== 'free') return null;
+
+    let trialEnd: Date;
+    if (userProfile.trial_ends_at) {
+      trialEnd = new Date(userProfile.trial_ends_at);
+    } else if (userProfile.created_at) {
+      const createdAt = new Date(userProfile.created_at);
+      trialEnd = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+    } else {
+      return null;
+    }
+
+    const now = new Date();
+    const daysRemaining = Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+
+    return {
+      daysRemaining: Math.max(0, daysRemaining),
+      isExpired: daysRemaining <= 0,
+      isExpiring: daysRemaining <= 2 && daysRemaining > 0,
+    };
+  }, [userProfile, currentPlan]);
+
+  const loadVisitorStats = useCallback(async () => {
     try {
-      setLoadingCredits(true);
-      const data = await TrafficAPI.getCredits();
-      setCredits(data.credits || data.available || 0);
+      setLoadingStats(true);
+      const response = await fetch('/api/dashboard/stats');
+      if (response.ok) {
+        const data = await response.json();
+        setIdentifiedVisitors(data.overview?.identifiedVisitors || 0);
+      }
     } catch (error) {
-      console.error('Error loading credits:', error);
-      setCredits(null);
+      console.error('Error loading visitor stats:', error);
     } finally {
-      setLoadingCredits(false);
+      setLoadingStats(false);
     }
   }, []);
 
@@ -174,9 +210,9 @@ export default function Billing() {
   }, []);
 
   useEffect(() => {
-    loadCredits();
+    loadVisitorStats();
     loadStripePrices();
-  }, [loadCredits, loadStripePrices]);
+  }, [loadVisitorStats, loadStripePrices]);
 
   const handleUpgrade = async (plan: Plan) => {
     if (plan.contactSales) {
@@ -266,7 +302,7 @@ export default function Billing() {
                 Current Usage
               </h3>
               <div className="card-actions">
-                <button className="btn btn-ghost-primary btn-sm" onClick={loadCredits}>
+                <button className="btn btn-ghost-primary btn-sm" onClick={loadVisitorStats}>
                   <IconRefresh size={16} className="me-1" />
                   Refresh
                 </button>
@@ -277,23 +313,36 @@ export default function Billing() {
                 <div className="col-md-4">
                   <div className="card card-sm">
                     <div className="card-body">
-                      <div className="d-flex align-items-center">
-                        <span className="avatar bg-primary-lt me-3">
-                          <IconCreditCard size={20} />
-                        </span>
-                        <div>
-                          <div className="text-muted small">Available Credits</div>
-                          <div className="h3 mb-0">
-                            {loadingCredits ? (
-                              <IconLoader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
-                            ) : credits !== null ? (
-                              credits.toLocaleString()
-                            ) : (
-                              '-'
-                            )}
+                      {(() => {
+                        // Calculate available credits as (Plan Limit - Used Visitors)
+                        const availableCredits = visitorLimit !== Infinity && identifiedVisitors !== null
+                          ? Math.max(0, visitorLimit - identifiedVisitors)
+                          : visitorLimit === Infinity ? null : visitorLimit;
+                        const isLow = availableCredits !== null && visitorLimit !== Infinity
+                          ? availableCredits < visitorLimit * 0.2
+                          : false;
+                        const isZero = availableCredits === 0;
+
+                        return (
+                          <div className="d-flex align-items-center">
+                            <span className={`avatar me-3 ${isZero ? 'bg-danger-lt' : isLow ? 'bg-warning-lt' : 'bg-primary-lt'}`}>
+                              <IconCreditCard size={20} />
+                            </span>
+                            <div>
+                              <div className="text-muted small">Available Credits</div>
+                              <div className={`h3 mb-0 ${isZero ? 'text-danger' : isLow ? 'text-warning' : ''}`}>
+                                {loadingStats || identifiedVisitors === null ? (
+                                  <IconLoader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
+                                ) : availableCredits !== null ? (
+                                  availableCredits.toLocaleString()
+                                ) : (
+                                  'Unlimited'
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -315,15 +364,51 @@ export default function Billing() {
                 <div className="col-md-4">
                   <div className="card card-sm">
                     <div className="card-body">
-                      <div className="d-flex align-items-center">
-                        <span className="avatar bg-azure-lt me-3">
-                          <IconUsers size={20} />
-                        </span>
-                        <div>
-                          <div className="text-muted small">Visitors This Month</div>
-                          <div className="h3 mb-0">-</div>
-                        </div>
-                      </div>
+                      {(() => {
+                        const usagePercent = identifiedVisitors !== null && visitorLimit !== Infinity
+                          ? Math.round((identifiedVisitors / visitorLimit) * 100)
+                          : 0;
+                        const isOverLimit = usagePercent >= 100;
+                        const isNearLimit = usagePercent >= 80;
+
+                        return (
+                          <>
+                            <div className="d-flex align-items-center mb-2">
+                              <span className={`avatar me-3 ${isOverLimit ? 'bg-danger-lt' : isNearLimit ? 'bg-warning-lt' : 'bg-azure-lt'}`}>
+                                <IconUsers size={20} />
+                              </span>
+                              <div className="flex-grow-1">
+                                <div className="text-muted small">Identified Visitors</div>
+                                <div className={`h3 mb-0 ${isOverLimit ? 'text-danger' : isNearLimit ? 'text-warning' : ''}`}>
+                                  {identifiedVisitors !== null ? identifiedVisitors.toLocaleString() : '-'}
+                                  {visitorLimit !== Infinity && (
+                                    <span className="text-muted fs-5"> / {visitorLimit.toLocaleString()}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {visitorLimit !== Infinity && identifiedVisitors !== null && (
+                              <div className="progress progress-sm">
+                                <div
+                                  className={`progress-bar ${isOverLimit ? 'bg-danger' : isNearLimit ? 'bg-warning' : 'bg-primary'}`}
+                                  style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                                />
+                              </div>
+                            )}
+                            {trialStatus && (
+                              <div className="mt-2 small">
+                                <span className={trialStatus.isExpired ? 'text-danger' : trialStatus.isExpiring ? 'text-warning' : 'text-muted'}>
+                                  {trialStatus.isExpired ? (
+                                    <>Trial expired</>
+                                  ) : (
+                                    <><IconClock size={14} className="me-1" />{trialStatus.daysRemaining} days left in trial</>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

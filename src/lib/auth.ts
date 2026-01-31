@@ -14,6 +14,8 @@ export interface UserProfile {
   phone: string | null;
   company: string | null;
   plan: string | null;
+  trial_ends_at: string | null;
+  created_at: string | null;
 }
 
 export interface UserRoleData {
