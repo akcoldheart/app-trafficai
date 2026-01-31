@@ -587,7 +587,13 @@ export default function Pixels() {
                   <li className="nav-item">
                     <button
                       className={`nav-link ${activeTab === 'pixels' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('pixels')}
+                      onClick={() => {
+                        setActiveTab('pixels');
+                        // Select first pixel if none selected
+                        if (!selectedPixel && pixels.length > 0) {
+                          setSelectedPixel(pixels[0]);
+                        }
+                      }}
                     >
                       Pixels ({pixels.length})
                     </button>
@@ -595,7 +601,11 @@ export default function Pixels() {
                   <li className="nav-item">
                     <button
                       className={`nav-link ${activeTab === 'requests' ? 'active' : ''}`}
-                      onClick={() => setActiveTab('requests')}
+                      onClick={() => {
+                        setActiveTab('requests');
+                        // Clear selected pixel when viewing requests
+                        setSelectedPixel(null);
+                      }}
                     >
                       Requests
                       {pendingRequestCount > 0 && (
@@ -1077,9 +1087,15 @@ export default function Pixels() {
           ) : (
             <div className="card">
               <div className="card-body text-center py-5">
-                <span className="avatar avatar-xl bg-azure-lt mb-3"><IconCode size={32} /></span>
-                <h3>Select a Pixel</h3>
-                <p className="text-muted mb-0">Choose a pixel from the list to view details</p>
+                <span className={`avatar avatar-xl ${activeTab === 'requests' ? 'bg-yellow-lt' : 'bg-azure-lt'} mb-3`}>
+                  {activeTab === 'requests' ? <IconClock size={32} /> : <IconCode size={32} />}
+                </span>
+                <h3>{activeTab === 'requests' ? 'Pending Requests' : 'Select a Pixel'}</h3>
+                <p className="text-muted mb-0">
+                  {activeTab === 'requests'
+                    ? 'Review and approve pixel requests from users'
+                    : 'Choose a pixel from the list to view details'}
+                </p>
               </div>
             </div>
           )}
