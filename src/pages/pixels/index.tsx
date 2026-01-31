@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
+import InstallationGuideModal from '@/components/InstallationGuideModal';
 import {
   IconCode,
   IconCopy,
@@ -58,6 +59,10 @@ export default function Pixels() {
   const [editedCode, setEditedCode] = useState('');
   const [isEditingCode, setIsEditingCode] = useState(false);
   const [savingCode, setSavingCode] = useState(false);
+
+  // Installation guide modal state
+  const [guideModalOpen, setGuideModalOpen] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState('');
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Toast notification state
@@ -1037,27 +1042,36 @@ export default function Pixels() {
                   )}
                 </div>
 
-                {/* Quick Install */}
-                <div>
-                  <h4 className="mb-3">Quick Installation</h4>
-                  <div className="row g-3">
-                    {[
-                      { name: 'WordPress', icon: 'wordpress/wordpress-original.svg', desc: 'Plugin or theme editor' },
-                      { name: 'Shopify', icon: 'woocommerce/woocommerce-original.svg', desc: 'Add to theme.liquid' },
-                      { name: 'Manual', icon: 'html5/html5-original.svg', desc: 'Paste in HTML head' },
-                    ].map((opt) => (
-                      <div className="col-md-4" key={opt.name}>
-                        <div className="card card-sm card-link" style={{ cursor: 'pointer' }}>
-                          <div className="card-body text-center py-3">
-                            <img src={`https://cdn.jsdelivr.net/gh/devicons/devicon/icons/${opt.icon}`} alt={opt.name} width="28" height="28" className="mb-2" />
-                            <div className="fw-semibold" style={{ fontSize: '13px' }}>{opt.name}</div>
-                            <div className="text-muted" style={{ fontSize: '11px' }}>{opt.desc}</div>
+                {/* Quick Install - Only show for non-admin users */}
+                {!isAdmin && (
+                  <div>
+                    <h4 className="mb-3">Quick Installation</h4>
+                    <div className="row g-3">
+                      {[
+                        { name: 'WordPress', platform: 'wordpress', icon: 'wordpress/wordpress-original.svg', desc: 'Plugin or theme editor' },
+                        { name: 'Shopify', platform: 'shopify', icon: 'woocommerce/woocommerce-original.svg', desc: 'Add to theme.liquid' },
+                        { name: 'Manual', platform: 'manual', icon: 'html5/html5-original.svg', desc: 'Paste in HTML head' },
+                      ].map((opt) => (
+                        <div className="col-md-4" key={opt.name}>
+                          <div
+                            className="card card-sm card-link"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => {
+                              setSelectedPlatform(opt.platform);
+                              setGuideModalOpen(true);
+                            }}
+                          >
+                            <div className="card-body text-center py-3">
+                              <img src={`https://cdn.jsdelivr.net/gh/devicons/devicon/icons/${opt.icon}`} alt={opt.name} width="28" height="28" className="mb-2" />
+                              <div className="fw-semibold" style={{ fontSize: '13px' }}>{opt.name}</div>
+                              <div className="text-muted" style={{ fontSize: '11px' }}>{opt.desc}</div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           ) : (
@@ -1215,6 +1229,14 @@ export default function Pixels() {
           </div>
         </div>
       )}
+
+      {/* Installation Guide Modal */}
+      <InstallationGuideModal
+        platform={selectedPlatform}
+        isOpen={guideModalOpen}
+        onClose={() => setGuideModalOpen(false)}
+        pixelCode={selectedPixel?.custom_installation_code || selectedPixel?.pixel_code}
+      />
 
       <style jsx>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

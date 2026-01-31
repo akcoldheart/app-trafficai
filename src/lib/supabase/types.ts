@@ -808,6 +808,45 @@ export interface Database {
         };
         Relationships: [];
       };
+      installation_guides: {
+        Row: {
+          id: string;
+          platform: string;
+          title: string;
+          description: string | null;
+          content: string;
+          icon: string | null;
+          display_order: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          platform: string;
+          title: string;
+          description?: string | null;
+          content: string;
+          icon?: string | null;
+          display_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          platform?: string;
+          title?: string;
+          description?: string | null;
+          content?: string;
+          icon?: string | null;
+          display_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
