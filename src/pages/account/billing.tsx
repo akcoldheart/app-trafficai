@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/router';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -123,13 +124,16 @@ const PLAN_VISITOR_LIMITS: Record<string, number> = {
 };
 
 export default function Billing() {
-  const { userProfile } = useAuth();
+  const router = useRouter();
+  const { userProfile, refreshUser } = useAuth();
   const [identifiedVisitors, setIdentifiedVisitors] = useState<number | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [plans, setPlans] = useState<Plan[]>(defaultPlans);
+  const [verifyingSession, setVerifyingSession] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const currentPlan = userProfile?.plan || 'free';
   const visitorLimit = PLAN_VISITOR_LIMITS[currentPlan] || PLAN_VISITOR_LIMITS.free;
@@ -213,6 +217,52 @@ export default function Billing() {
     loadVisitorStats();
     loadStripePrices();
   }, [loadVisitorStats, loadStripePrices]);
+
+  // Verify checkout session when returning from Stripe with success
+  useEffect(() => {
+    const verifyCheckoutSession = async () => {
+      const { success, session_id, canceled } = router.query;
+
+      if (canceled) {
+        // Clear the URL params
+        router.replace('/account/billing', undefined, { shallow: true });
+        return;
+      }
+
+      if (success === 'true' && session_id && typeof session_id === 'string') {
+        setVerifyingSession(true);
+        try {
+          const response = await fetch('/api/stripe/verify-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: session_id }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.success) {
+            setSuccessMessage(`Successfully upgraded to ${data.plan} plan!`);
+            // Refresh user profile to get updated plan
+            if (refreshUser) {
+              await refreshUser();
+            }
+          } else {
+            console.error('Session verification failed:', data.error);
+          }
+        } catch (error) {
+          console.error('Error verifying session:', error);
+        } finally {
+          setVerifyingSession(false);
+          // Clear the URL params
+          router.replace('/account/billing', undefined, { shallow: true });
+        }
+      }
+    };
+
+    if (router.isReady) {
+      verifyCheckoutSession();
+    }
+  }, [router.isReady, router.query, refreshUser, router]);
 
   const handleUpgrade = async (plan: Plan) => {
     if (plan.contactSales) {
@@ -304,6 +354,37 @@ export default function Billing() {
   return (
     <Layout title="Billing & Plan" pageTitle="Billing & Plan">
       <div className="row row-cards">
+        {/* Success Message */}
+        {successMessage && (
+          <div className="col-12">
+            <div className="alert alert-success alert-dismissible" role="alert">
+              <div className="d-flex">
+                <div>
+                  <IconCheck className="alert-icon" />
+                </div>
+                <div>{successMessage}</div>
+              </div>
+              <button
+                className="btn-close"
+                onClick={() => setSuccessMessage(null)}
+                aria-label="close"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Verifying Session Loading */}
+        {verifyingSession && (
+          <div className="col-12">
+            <div className="alert alert-info">
+              <div className="d-flex align-items-center">
+                <IconLoader2 className="me-2" style={{ animation: 'spin 1s linear infinite' }} />
+                Verifying your payment...
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Current Usage */}
         <div className="col-12">
           <div className="card">

@@ -9,6 +9,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip auth for Stripe webhook (uses signature verification instead)
+  if (pathname === '/api/stripe/webhook') {
+    return NextResponse.next();
+  }
+
   return await updateSession(request);
 }
 
