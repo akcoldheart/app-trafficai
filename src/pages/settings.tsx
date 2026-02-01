@@ -98,6 +98,7 @@ export default function Settings() {
     app_url: '',
   });
   const [stripeSettingsHasValue, setStripeSettingsHasValue] = useState<Record<string, boolean>>({});
+  const [stripeMode, setStripeMode] = useState<'test' | 'live' | null>(null);
   const [editingStripe, setEditingStripe] = useState(false);
   const [savingStripe, setSavingStripe] = useState(false);
   const [showStripeSecrets, setShowStripeSecrets] = useState<Record<string, boolean>>({});
@@ -181,6 +182,11 @@ export default function Settings() {
         setStripeSettings(prev => ({ ...prev, ...stripeData }));
         setStripeSettingsHasValue(hasValueData);
         setPricingSettings(prev => ({ ...prev, ...pricingData }));
+      }
+
+      // Set Stripe mode (test/live)
+      if (data.stripeMode) {
+        setStripeMode(data.stripeMode);
       }
     } catch (error) {
       console.error('Error fetching admin settings:', error);
@@ -1319,6 +1325,35 @@ export default function Settings() {
                         </div>
                       </div>
 
+                      {/* Webhook URL (read-only) */}
+                      <div className="mb-3">
+                        <label className="form-label">Webhook Endpoint URL</label>
+                        <div className="input-group input-group-sm">
+                          <input
+                            type="text"
+                            className="form-control font-monospace"
+                            value={`${stripeSettings.app_url || 'https://your-app.com'}/api/stripe/webhook`}
+                            readOnly
+                          />
+                          <button
+                            className="btn btn-outline-secondary"
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${stripeSettings.app_url || ''}/api/stripe/webhook`);
+                            }}
+                            title="Copy to clipboard"
+                          >
+                            <IconCopy size={14} />
+                          </button>
+                        </div>
+                        <small className="text-muted">
+                          Add this URL in your{' '}
+                          <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener noreferrer">
+                            Stripe Dashboard → Webhooks
+                          </a>
+                        </small>
+                      </div>
+
                       <hr className="my-3" />
                       <h5 className="mb-2">Price IDs</h5>
                       <p className="text-muted small mb-3">
@@ -1436,6 +1471,23 @@ export default function Settings() {
                     </div>
                   ) : (
                     <div>
+                      {/* Test Mode Indicator */}
+                      {stripeMode && (
+                        <div className="mb-3">
+                          {stripeMode === 'test' ? (
+                            <span className="badge bg-yellow-lt text-yellow">
+                              <IconCreditCard size={12} className="me-1" />
+                              Test Mode
+                            </span>
+                          ) : (
+                            <span className="badge bg-green-lt text-green">
+                              <IconCreditCard size={12} className="me-1" />
+                              Live Mode
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                       {/* Display current settings status */}
                       <div className="mb-2">
                         <span className="text-muted small">App URL:</span>
@@ -1453,6 +1505,32 @@ export default function Settings() {
                           {stripeSettingsHasValue.stripe_webhook_secret ? 'Configured' : 'Not set'}
                         </span>
                       </div>
+
+                      {/* Webhook URL */}
+                      <div className="mb-2">
+                        <span className="text-muted small d-block mb-1">Webhook URL:</span>
+                        <div className="d-flex align-items-center gap-2">
+                          <code className="small" style={{ wordBreak: 'break-all' }}>
+                            {stripeSettings.app_url ? `${stripeSettings.app_url}/api/stripe/webhook` : 'Configure App URL first'}
+                          </code>
+                          {stripeSettings.app_url && (
+                            <button
+                              className="btn btn-ghost-secondary btn-sm p-1"
+                              onClick={() => navigator.clipboard.writeText(`${stripeSettings.app_url}/api/stripe/webhook`)}
+                              title="Copy webhook URL"
+                            >
+                              <IconCopy size={14} />
+                            </button>
+                          )}
+                        </div>
+                        <small className="text-muted">
+                          Add this in{' '}
+                          <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener noreferrer">
+                            Stripe Dashboard → Webhooks
+                          </a>
+                        </small>
+                      </div>
+
                       <hr className="my-2" />
                       <div className="text-muted small mb-1">Price IDs:</div>
                       <div className="d-flex flex-wrap gap-1">

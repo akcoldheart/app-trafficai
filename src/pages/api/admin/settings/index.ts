@@ -23,15 +23,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Convert array to object for easier access
       const settings: Record<string, { id: string; value: string; description: string | null }> = {};
+      let stripeMode: 'test' | 'live' | null = null;
+
       data?.forEach((setting) => {
         settings[setting.key] = {
           id: setting.id,
           value: setting.value,
           description: setting.description,
         };
+
+        // Determine Stripe mode from secret key
+        if (setting.key === 'stripe_secret_key' && setting.value) {
+          if (setting.value.startsWith('sk_test_')) {
+            stripeMode = 'test';
+          } else if (setting.value.startsWith('sk_live_')) {
+            stripeMode = 'live';
+          }
+        }
       });
 
-      return res.status(200).json({ settings, raw: data });
+      return res.status(200).json({ settings, raw: data, stripeMode });
     }
 
     if (req.method === 'POST') {
