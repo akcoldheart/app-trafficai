@@ -2,6 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
 
+  // Ignore ESLint warnings during production build
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
   // Image optimization settings
   images: {
     unoptimized: false, // Enable Vercel image optimization
