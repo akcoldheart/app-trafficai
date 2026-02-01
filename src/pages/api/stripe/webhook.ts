@@ -228,9 +228,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice;
         const customerId = invoice.customer as string;
-        const subscriptionId = typeof invoice.subscription === 'string'
-          ? invoice.subscription
-          : invoice.subscription?.id || null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const invoiceAny = invoice as any;
+        const subscriptionId = typeof invoiceAny.subscription === 'string'
+          ? invoiceAny.subscription
+          : invoiceAny.subscription?.id || null;
 
         console.log('invoice.payment_succeeded:', {
           invoiceId: invoice.id,
