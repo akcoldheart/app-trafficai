@@ -51,6 +51,12 @@ export default function AdminUsers() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
+  // Delete modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
@@ -210,22 +216,33 @@ export default function AdminUsers() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleDeleteUser = async (user: User) => {
-    // Double confirmation for safety
-    const confirmMessage = `Are you sure you want to delete user "${user.email}"?\n\nThis will permanently delete:\n- User account\n- All pixels and tracking data\n- All visitors data\n- All integrations\n- All API keys\n\nThis action cannot be undone!`;
+  const handleOpenDeleteModal = (user: User) => {
+    setUserToDelete(user);
+    setDeleteConfirmText('');
+    setDeleteError(null);
+    setShowDeleteModal(true);
+  };
 
-    if (!confirm(confirmMessage)) return;
+  const handleCloseDeleteModal = () => {
+    setShowDeleteModal(false);
+    setUserToDelete(null);
+    setDeleteConfirmText('');
+    setDeleteError(null);
+  };
 
-    // Second confirmation
-    const finalConfirm = prompt(`Type "DELETE" to confirm deletion of ${user.email}:`);
-    if (finalConfirm !== 'DELETE') {
-      alert('Deletion cancelled. You must type DELETE to confirm.');
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+
+    if (deleteConfirmText !== 'DELETE') {
+      setDeleteError('Please type DELETE to confirm');
       return;
     }
 
-    setDeletingUserId(user.id);
+    setDeletingUserId(userToDelete.id);
+    setDeleteError(null);
+
     try {
-      const response = await fetch(`/api/admin/users/${user.id}/delete`, {
+      const response = await fetch(`/api/admin/users/${userToDelete.id}/delete`, {
         method: 'DELETE',
       });
 
@@ -236,10 +253,10 @@ export default function AdminUsers() {
       }
 
       // Remove user from local state
-      setUsers(users.filter(u => u.id !== user.id));
-      alert(data.message || 'User deleted successfully');
+      setUsers(users.filter(u => u.id !== userToDelete.id));
+      handleCloseDeleteModal();
     } catch (err) {
-      alert((err as Error).message);
+      setDeleteError((err as Error).message);
     } finally {
       setDeletingUserId(null);
     }
@@ -404,15 +421,10 @@ export default function AdminUsers() {
                         {user.role !== 'admin' && (
                           <button
                             className="btn btn-sm btn-outline-danger"
-                            onClick={() => handleDeleteUser(user)}
-                            disabled={deletingUserId === user.id}
+                            onClick={() => handleOpenDeleteModal(user)}
                             title="Delete user and all data"
                           >
-                            {deletingUserId === user.id ? (
-                              <IconLoader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                            ) : (
-                              <IconTrash size={16} />
-                            )}
+                            <IconTrash size={16} />
                           </button>
                         )}
                       </div>
@@ -512,6 +524,82 @@ export default function AdminUsers() {
                     <>
                       <IconCheck size={16} className="me-1" />
                       Save API Key
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Modal */}
+      {showDeleteModal && userToDelete && (
+        <div className="modal modal-blur show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered modal-sm">
+            <div className="modal-content">
+              <div className="modal-status bg-danger" />
+              <div className="modal-body text-center py-4">
+                <IconTrash size={48} className="text-danger mb-3" />
+                <h3>Delete User</h3>
+                <div className="text-muted mb-3">
+                  Are you sure you want to delete <strong>{userToDelete.email}</strong>?
+                </div>
+                <div className="text-start mb-3">
+                  <div className="alert alert-warning py-2" style={{ fontSize: '13px' }}>
+                    <strong>This will permanently delete:</strong>
+                    <ul className="mb-0 mt-1 ps-3">
+                      <li>User account</li>
+                      <li>All pixels and tracking data</li>
+                      <li>All visitors data</li>
+                      <li>All integrations</li>
+                      <li>All API keys</li>
+                    </ul>
+                  </div>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label text-start d-block">
+                    Type <strong>DELETE</strong> to confirm:
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="DELETE"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value.toUpperCase())}
+                    autoFocus
+                  />
+                </div>
+                {deleteError && (
+                  <div className="alert alert-danger py-2 mb-0">
+                    {deleteError}
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleCloseDeleteModal}
+                  disabled={deletingUserId === userToDelete.id}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleConfirmDelete}
+                  disabled={deleteConfirmText !== 'DELETE' || deletingUserId === userToDelete.id}
+                >
+                  {deletingUserId === userToDelete.id ? (
+                    <>
+                      <IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <IconTrash size={16} className="me-1" />
+                      Delete User
                     </>
                   )}
                 </button>
