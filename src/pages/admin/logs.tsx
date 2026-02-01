@@ -21,7 +21,6 @@ import {
   IconUser,
   IconCode,
   IconAlertTriangle,
-  IconMail,
   IconChevronDown,
   IconChevronUp,
 } from '@tabler/icons-react';
@@ -194,9 +193,17 @@ export default function AdminLogs() {
     });
   };
 
-  const formatEventName = (eventName: string) => {
-    // Make event names more readable
-    return eventName.replace(/\./g, ' > ').replace(/_/g, ' ');
+  // Format message to replace UUID with user name/email if available
+  const formatMessage = (log: LogEntry) => {
+    let message = log.message;
+    if (log.user_id && (log.user_name || log.user_email)) {
+      const displayName = log.user_name || log.user_email || '';
+      // Replace UUID pattern with user name/email
+      message = message.replace(log.user_id, displayName);
+      // Also replace "User UUID" pattern
+      message = message.replace(/User\s+[a-f0-9-]{36}/gi, displayName);
+    }
+    return message;
   };
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -352,7 +359,7 @@ export default function AdminLogs() {
                           {log.status}
                         </span>
                       </div>
-                      <div className="text-muted small text-truncate">{log.message}</div>
+                      <div className="text-muted small text-truncate">{formatMessage(log)}</div>
                     </div>
 
                     {/* User Info */}
