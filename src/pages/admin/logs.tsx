@@ -21,6 +21,9 @@ import {
   IconUser,
   IconCode,
   IconAlertTriangle,
+  IconMail,
+  IconChevronDown,
+  IconChevronUp,
 } from '@tabler/icons-react';
 
 interface LogEntry {
@@ -33,6 +36,8 @@ interface LogEntry {
   response_data: Record<string, unknown> | null;
   error_details: string | null;
   user_id: string | null;
+  user_email: string | null;
+  user_name: string | null;
   ip_address: string | null;
   created_at: string;
 }
@@ -123,49 +128,74 @@ export default function AdminLogs() {
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'stripe':
-        return <IconBrandStripe size={16} />;
+        return <IconBrandStripe size={18} />;
       case 'webhook':
-        return <IconWebhook size={16} />;
+        return <IconWebhook size={18} />;
       case 'api':
-        return <IconApi size={16} />;
+        return <IconApi size={18} />;
       case 'error':
-        return <IconAlertCircle size={16} />;
+        return <IconAlertCircle size={18} />;
       default:
-        return <IconInfoCircle size={16} />;
+        return <IconInfoCircle size={18} />;
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'success':
-        return <span className="badge bg-green-lt"><IconCheck size={12} className="me-1" />Success</span>;
+        return <IconCheck size={16} className="text-success" />;
       case 'error':
-        return <span className="badge bg-red-lt"><IconX size={12} className="me-1" />Error</span>;
+        return <IconX size={16} className="text-danger" />;
       case 'warning':
-        return <span className="badge bg-yellow-lt"><IconAlertTriangle size={12} className="me-1" />Warning</span>;
+        return <IconAlertTriangle size={16} className="text-warning" />;
       default:
-        return <span className="badge bg-blue-lt"><IconInfoCircle size={12} className="me-1" />Info</span>;
+        return <IconInfoCircle size={16} className="text-info" />;
     }
   };
 
-  const getTypeBadge = (type: string) => {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'success':
+        return 'success';
+      case 'error':
+        return 'danger';
+      case 'warning':
+        return 'warning';
+      default:
+        return 'info';
+    }
+  };
+
+  const getTypeColor = (type: string) => {
     switch (type) {
       case 'stripe':
-        return <span className="badge bg-purple-lt">{getTypeIcon(type)} Stripe</span>;
+        return 'purple';
       case 'webhook':
-        return <span className="badge bg-cyan-lt">{getTypeIcon(type)} Webhook</span>;
+        return 'cyan';
       case 'api':
-        return <span className="badge bg-azure-lt">{getTypeIcon(type)} API</span>;
+        return 'azure';
       case 'error':
-        return <span className="badge bg-red-lt">{getTypeIcon(type)} Error</span>;
+        return 'danger';
       default:
-        return <span className="badge bg-secondary-lt">{getTypeIcon(type)} Info</span>;
+        return 'secondary';
     }
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleString();
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
+  const formatEventName = (eventName: string) => {
+    // Make event names more readable
+    return eventName.replace(/\./g, ' > ').replace(/_/g, ' ');
   };
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -173,8 +203,8 @@ export default function AdminLogs() {
   if (authLoading) {
     return (
       <Layout title="System Logs" pageTitle="System Logs">
-        <div className="d-flex justify-content-center py-5">
-          <IconLoader2 size={32} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+        <div className="d-flex justify-content-center align-items-center py-5">
+          <IconLoader2 size={32} className="text-primary spinner" />
         </div>
       </Layout>
     );
@@ -184,24 +214,24 @@ export default function AdminLogs() {
     <Layout title="System Logs" pageTitle="System Logs">
       <div className="card">
         <div className="card-header">
-          <h3 className="card-title">
-            <IconWebhook className="icon me-2" />
+          <h3 className="card-title d-flex align-items-center gap-2">
+            <IconWebhook size={24} className="text-primary" />
             Webhook & API Logs
           </h3>
-          <div className="card-actions">
+          <div className="card-actions d-flex gap-2">
             <button
-              className="btn btn-ghost-danger btn-sm me-2"
+              className="btn btn-outline-danger btn-sm d-flex align-items-center gap-1"
               onClick={() => setShowClearModal(true)}
             >
-              <IconTrash size={16} className="me-1" />
+              <IconTrash size={16} />
               Clear Logs
             </button>
             <button
-              className="btn btn-ghost-primary btn-sm"
+              className="btn btn-primary btn-sm d-flex align-items-center gap-1"
               onClick={fetchLogs}
               disabled={loading}
             >
-              <IconRefresh size={16} className={loading ? 'me-1' : 'me-1'} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
+              <IconRefresh size={16} className={loading ? 'spinner' : ''} />
               Refresh
             </button>
           </div>
@@ -211,9 +241,9 @@ export default function AdminLogs() {
         <div className="card-body border-bottom py-3">
           <div className="row g-3 align-items-center">
             <div className="col-md-4">
-              <div className="input-group">
-                <span className="input-group-text">
-                  <IconSearch size={16} />
+              <div className="input-icon">
+                <span className="input-icon-addon">
+                  <IconSearch size={18} />
                 </span>
                 <input
                   type="text"
@@ -229,11 +259,11 @@ export default function AdminLogs() {
             </div>
             <div className="col-md-3">
               <div className="input-group">
-                <span className="input-group-text">
+                <span className="input-group-text bg-transparent border-end-0">
                   <IconFilter size={16} />
                 </span>
                 <select
-                  className="form-select"
+                  className="form-select border-start-0"
                   value={typeFilter}
                   onChange={(e) => {
                     setTypeFilter(e.target.value);
@@ -266,129 +296,219 @@ export default function AdminLogs() {
               </select>
             </div>
             <div className="col-md-2 text-end">
-              <span className="text-muted">{total} logs</span>
+              <span className="badge bg-primary-lt fs-6">{total} logs</span>
             </div>
           </div>
         </div>
 
-        {/* Logs Table */}
-        <div className="table-responsive">
+        {/* Logs List */}
+        <div className="card-body p-0">
           {error ? (
-            <div className="card-body">
+            <div className="p-4">
               <div className="alert alert-danger mb-0">{error}</div>
             </div>
           ) : loading ? (
-            <div className="card-body text-center py-5">
-              <IconLoader2 size={32} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
-              <p className="text-muted mt-2">Loading logs...</p>
+            <div className="text-center py-5">
+              <IconLoader2 size={40} className="text-primary spinner" />
+              <p className="text-muted mt-3 mb-0">Loading logs...</p>
             </div>
           ) : logs.length === 0 ? (
-            <div className="card-body text-center py-5">
-              <IconWebhook size={48} className="text-muted mb-3" />
-              <h4>No logs found</h4>
-              <p className="text-muted">
+            <div className="text-center py-5">
+              <IconWebhook size={64} className="text-muted mb-3" strokeWidth={1} />
+              <h4 className="text-muted">No logs found</h4>
+              <p className="text-muted mb-0">
                 {searchTerm || typeFilter !== 'all' || statusFilter !== 'all'
                   ? 'Try adjusting your filters'
                   : 'Webhook and API logs will appear here'}
               </p>
             </div>
           ) : (
-            <table className="table table-vcenter card-table table-hover">
-              <thead>
-                <tr>
-                  <th style={{ width: '160px' }}>Time</th>
-                  <th style={{ width: '100px' }}>Type</th>
-                  <th style={{ width: '100px' }}>Status</th>
-                  <th>Event</th>
-                  <th>Message</th>
-                  <th style={{ width: '50px' }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((log) => (
-                  <>
-                    <tr
-                      key={log.id}
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
-                      className={expandedLogId === log.id ? 'bg-light' : ''}
-                    >
-                      <td className="text-muted small">
-                        <IconClock size={12} className="me-1" />
-                        {formatDate(log.created_at)}
-                      </td>
-                      <td>{getTypeBadge(log.type)}</td>
-                      <td>{getStatusBadge(log.status)}</td>
-                      <td>
-                        <code className="small">{log.event_name}</code>
-                      </td>
-                      <td className="text-truncate" style={{ maxWidth: '300px' }}>
-                        {log.message}
-                      </td>
-                      <td>
-                        <IconCode size={16} className="text-muted" />
-                      </td>
-                    </tr>
-                    {expandedLogId === log.id && (
-                      <tr key={`${log.id}-details`}>
-                        <td colSpan={6} className="bg-light p-3">
-                          <div className="row g-3">
-                            {log.user_id && (
-                              <div className="col-md-6">
-                                <strong className="small text-muted">User ID:</strong>
-                                <div className="small font-monospace">{log.user_id}</div>
-                              </div>
-                            )}
-                            {log.ip_address && (
-                              <div className="col-md-6">
-                                <strong className="small text-muted">IP Address:</strong>
-                                <div className="small font-monospace">{log.ip_address}</div>
-                              </div>
-                            )}
-                            {log.request_data && (
-                              <div className="col-12">
-                                <strong className="small text-muted">Request Data:</strong>
-                                <pre className="bg-dark text-light p-2 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
-                                  {JSON.stringify(log.request_data, null, 2)}
-                                </pre>
-                              </div>
-                            )}
-                            {log.response_data && (
-                              <div className="col-12">
-                                <strong className="small text-muted">Response Data:</strong>
-                                <pre className="bg-dark text-light p-2 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
-                                  {JSON.stringify(log.response_data, null, 2)}
-                                </pre>
-                              </div>
-                            )}
-                            {log.error_details && (
-                              <div className="col-12">
-                                <strong className="small text-danger">Error Details:</strong>
-                                <pre className="bg-danger-lt text-danger p-2 rounded small mb-0">
-                                  {log.error_details}
-                                </pre>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+            <div className="list-group list-group-flush">
+              {logs.map((log) => (
+                <div key={log.id} className="list-group-item">
+                  {/* Main Row */}
+                  <div
+                    className="d-flex align-items-center gap-3 cursor-pointer py-2"
+                    onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {/* Status Indicator */}
+                    <div className={`avatar avatar-sm bg-${getStatusColor(log.status)}-lt`}>
+                      {getStatusIcon(log.status)}
+                    </div>
+
+                    {/* Type Badge */}
+                    <span className={`badge bg-${getTypeColor(log.type)}-lt d-flex align-items-center gap-1`}>
+                      {getTypeIcon(log.type)}
+                      <span className="text-capitalize">{log.type}</span>
+                    </span>
+
+                    {/* Event & Message */}
+                    <div className="flex-fill min-w-0">
+                      <div className="d-flex align-items-center gap-2 mb-1">
+                        <code className="text-primary fw-bold small">{log.event_name}</code>
+                        <span className={`badge bg-${getStatusColor(log.status)}-lt text-capitalize`}>
+                          {log.status}
+                        </span>
+                      </div>
+                      <div className="text-muted small text-truncate">{log.message}</div>
+                    </div>
+
+                    {/* User Info */}
+                    {(log.user_email || log.user_name) && (
+                      <div className="d-none d-md-flex align-items-center gap-2 text-end" style={{ minWidth: '200px' }}>
+                        <div className="avatar avatar-sm bg-secondary-lt">
+                          <IconUser size={16} />
+                        </div>
+                        <div className="text-start">
+                          {log.user_name && (
+                            <div className="fw-medium small">{log.user_name}</div>
+                          )}
+                          {log.user_email && (
+                            <div className="text-muted small">{log.user_email}</div>
+                          )}
+                        </div>
+                      </div>
                     )}
-                  </>
-                ))}
-              </tbody>
-            </table>
+
+                    {/* Timestamp */}
+                    <div className="d-none d-lg-flex align-items-center gap-1 text-muted small" style={{ minWidth: '160px' }}>
+                      <IconClock size={14} />
+                      {formatDate(log.created_at)}
+                    </div>
+
+                    {/* Expand Icon */}
+                    <div className="text-muted">
+                      {expandedLogId === log.id ? (
+                        <IconChevronUp size={20} />
+                      ) : (
+                        <IconChevronDown size={20} />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded Details */}
+                  {expandedLogId === log.id && (
+                    <div className="mt-3 pt-3 border-top">
+                      <div className="row g-4">
+                        {/* User Details */}
+                        {(log.user_id || log.user_email) && (
+                          <div className="col-md-6">
+                            <div className="card bg-light border-0">
+                              <div className="card-body">
+                                <h6 className="card-subtitle mb-3 text-muted d-flex align-items-center gap-2">
+                                  <IconUser size={16} />
+                                  Account Details
+                                </h6>
+                                <div className="d-flex flex-column gap-2">
+                                  {log.user_name && (
+                                    <div className="d-flex align-items-center gap-2">
+                                      <span className="text-muted small" style={{ minWidth: '60px' }}>Name:</span>
+                                      <span className="fw-medium">{log.user_name}</span>
+                                    </div>
+                                  )}
+                                  {log.user_email && (
+                                    <div className="d-flex align-items-center gap-2">
+                                      <span className="text-muted small" style={{ minWidth: '60px' }}>Email:</span>
+                                      <span className="font-monospace small">{log.user_email}</span>
+                                    </div>
+                                  )}
+                                  {log.user_id && (
+                                    <div className="d-flex align-items-center gap-2">
+                                      <span className="text-muted small" style={{ minWidth: '60px' }}>User ID:</span>
+                                      <code className="small text-muted">{log.user_id}</code>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Event Info */}
+                        <div className={log.user_id || log.user_email ? 'col-md-6' : 'col-12'}>
+                          <div className="card bg-light border-0">
+                            <div className="card-body">
+                              <h6 className="card-subtitle mb-3 text-muted d-flex align-items-center gap-2">
+                                <IconCode size={16} />
+                                Event Info
+                              </h6>
+                              <div className="d-flex flex-column gap-2">
+                                <div className="d-flex align-items-center gap-2">
+                                  <span className="text-muted small" style={{ minWidth: '70px' }}>Event:</span>
+                                  <code className="text-primary">{log.event_name}</code>
+                                </div>
+                                <div className="d-flex align-items-center gap-2">
+                                  <span className="text-muted small" style={{ minWidth: '70px' }}>Time:</span>
+                                  <span className="small">{formatDate(log.created_at)}</span>
+                                </div>
+                                {log.ip_address && (
+                                  <div className="d-flex align-items-center gap-2">
+                                    <span className="text-muted small" style={{ minWidth: '70px' }}>IP:</span>
+                                    <code className="small">{log.ip_address}</code>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Request Data */}
+                        {log.request_data && Object.keys(log.request_data).length > 0 && (
+                          <div className="col-md-6">
+                            <h6 className="text-muted mb-2 d-flex align-items-center gap-2">
+                              <IconCode size={14} />
+                              Request Data
+                            </h6>
+                            <pre className="bg-dark text-light p-3 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
+                              {JSON.stringify(log.request_data, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+
+                        {/* Response Data */}
+                        {log.response_data && Object.keys(log.response_data).length > 0 && (
+                          <div className="col-md-6">
+                            <h6 className="text-muted mb-2 d-flex align-items-center gap-2">
+                              <IconCheck size={14} className="text-success" />
+                              Response Data
+                            </h6>
+                            <pre className="bg-dark text-light p-3 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
+                              {JSON.stringify(log.response_data, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+
+                        {/* Error Details */}
+                        {log.error_details && (
+                          <div className="col-12">
+                            <h6 className="text-danger mb-2 d-flex align-items-center gap-2">
+                              <IconAlertCircle size={14} />
+                              Error Details
+                            </h6>
+                            <pre className="bg-danger-lt text-danger p-3 rounded small mb-0">
+                              {log.error_details}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="card-footer d-flex align-items-center justify-content-between">
-            <p className="m-0 text-muted">
+            <p className="m-0 text-muted small">
               Showing {page * PAGE_SIZE + 1} to {Math.min((page + 1) * PAGE_SIZE, total)} of {total} logs
             </p>
             <div className="btn-group">
               <button
-                className="btn btn-outline-secondary btn-sm"
+                className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
                 onClick={() => setPage(page - 1)}
                 disabled={page === 0}
               >
@@ -396,7 +516,7 @@ export default function AdminLogs() {
                 Previous
               </button>
               <button
-                className="btn btn-outline-secondary btn-sm"
+                className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
                 onClick={() => setPage(page + 1)}
                 disabled={page >= totalPages - 1}
               >
@@ -422,14 +542,14 @@ export default function AdminLogs() {
                 />
               </div>
               <div className="modal-body">
-                <p>Choose an option to clear logs:</p>
+                <p className="text-muted">Choose an option to clear logs:</p>
                 <div className="d-grid gap-2">
                   <button
                     className="btn btn-outline-warning"
                     onClick={() => handleClearLogs(7)}
                     disabled={clearing}
                   >
-                    {clearing ? <IconLoader2 size={16} className="me-2" style={{ animation: 'spin 1s linear infinite' }} /> : null}
+                    {clearing && <IconLoader2 size={16} className="me-2 spinner" />}
                     Clear logs older than 7 days
                   </button>
                   <button
@@ -437,7 +557,7 @@ export default function AdminLogs() {
                     onClick={() => handleClearLogs(30)}
                     disabled={clearing}
                   >
-                    {clearing ? <IconLoader2 size={16} className="me-2" style={{ animation: 'spin 1s linear infinite' }} /> : null}
+                    {clearing && <IconLoader2 size={16} className="me-2 spinner" />}
                     Clear logs older than 30 days
                   </button>
                   <button
@@ -445,7 +565,7 @@ export default function AdminLogs() {
                     onClick={() => handleClearLogs()}
                     disabled={clearing}
                   >
-                    {clearing ? <IconLoader2 size={16} className="me-2" style={{ animation: 'spin 1s linear infinite' }} /> : null}
+                    {clearing && <IconLoader2 size={16} className="me-2 spinner" />}
                     Clear ALL logs
                   </button>
                 </div>
@@ -465,6 +585,9 @@ export default function AdminLogs() {
       )}
 
       <style jsx>{`
+        .spinner {
+          animation: spin 1s linear infinite;
+        }
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
@@ -480,6 +603,12 @@ export default function AdminLogs() {
         }
         .modal {
           z-index: 1050;
+        }
+        .cursor-pointer {
+          cursor: pointer;
+        }
+        .list-group-item:hover {
+          background-color: rgba(var(--tblr-primary-rgb), 0.02);
         }
       `}</style>
     </Layout>

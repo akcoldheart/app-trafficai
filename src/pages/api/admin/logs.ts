@@ -51,7 +51,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: 'Failed to fetch logs' });
       }
 
-      return res.status(200).json({ logs: data || [], total: count || 0 });
+      // Fetch user details for logs that have user_id
+      const logsWithUsers = await Promise.all(
+        (data || []).map(async (log) => {
+          if (log.user_id) {
+            const { data: userData } = await supabase
+              .from('users')
+              .select('email, name')
+              .eq('id', log.user_id)
+              .single();
+
+            return {
+              ...log,
+              user_email: userData?.email || null,
+              user_name: userData?.name || null,
+            };
+          }
+          return log;
+        })
+      );
+
+      return res.status(200).json({ logs: logsWithUsers, total: count || 0 });
     }
 
     if (req.method === 'DELETE') {
