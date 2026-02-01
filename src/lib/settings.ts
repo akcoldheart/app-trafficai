@@ -91,27 +91,28 @@ export async function getSettingsByCategory(category: string): Promise<Record<st
  * Get Stripe configuration from database
  */
 export async function getStripeConfig() {
-  const settings = await getSettingsByCategory('stripe');
-  const appSettings = await getAllSettings();
+  // Use getAllSettings to get settings regardless of category
+  // This is more robust as it doesn't depend on category being set correctly
+  const allSettings = await getAllSettings();
 
   return {
-    secretKey: settings.stripe_secret_key || process.env.STRIPE_SECRET_KEY || '',
-    webhookSecret: settings.stripe_webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || '',
+    secretKey: allSettings.stripe_secret_key || process.env.STRIPE_SECRET_KEY || '',
+    webhookSecret: allSettings.stripe_webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || '',
     prices: {
       starter: {
-        monthly: settings.stripe_starter_monthly_price_id || process.env.NEXT_PUBLIC_STRIPE_STARTER_MONTHLY || '',
-        yearly: settings.stripe_starter_yearly_price_id || process.env.NEXT_PUBLIC_STRIPE_STARTER_YEARLY || '',
+        monthly: allSettings.stripe_starter_monthly_price_id || process.env.NEXT_PUBLIC_STRIPE_STARTER_MONTHLY || '',
+        yearly: allSettings.stripe_starter_yearly_price_id || process.env.NEXT_PUBLIC_STRIPE_STARTER_YEARLY || '',
       },
       growth: {
-        monthly: settings.stripe_growth_monthly_price_id || process.env.NEXT_PUBLIC_STRIPE_GROWTH_MONTHLY || '',
-        yearly: settings.stripe_growth_yearly_price_id || process.env.NEXT_PUBLIC_STRIPE_GROWTH_YEARLY || '',
+        monthly: allSettings.stripe_growth_monthly_price_id || process.env.NEXT_PUBLIC_STRIPE_GROWTH_MONTHLY || '',
+        yearly: allSettings.stripe_growth_yearly_price_id || process.env.NEXT_PUBLIC_STRIPE_GROWTH_YEARLY || '',
       },
       professional: {
-        monthly: settings.stripe_professional_monthly_price_id || process.env.NEXT_PUBLIC_STRIPE_PROFESSIONAL_MONTHLY || '',
-        yearly: settings.stripe_professional_yearly_price_id || process.env.NEXT_PUBLIC_STRIPE_PROFESSIONAL_YEARLY || '',
+        monthly: allSettings.stripe_professional_monthly_price_id || process.env.NEXT_PUBLIC_STRIPE_PROFESSIONAL_MONTHLY || '',
+        yearly: allSettings.stripe_professional_yearly_price_id || process.env.NEXT_PUBLIC_STRIPE_PROFESSIONAL_YEARLY || '',
       },
     },
-    appUrl: appSettings.app_url || process.env.NEXT_PUBLIC_APP_URL || '',
+    appUrl: allSettings.app_url || process.env.NEXT_PUBLIC_APP_URL || '',
   };
 }
 

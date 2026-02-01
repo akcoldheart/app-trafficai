@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { buffer } from 'micro';
 import { getStripeConfig } from '@/lib/settings';
+import { logStripeWebhook } from '@/lib/webhook-logger';
 
 const getServiceClient = () => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -53,23 +54,80 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabase = getServiceClient();
 
   try {
+    console.log(`Processing webhook event: ${event.type}`);
+
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.user_id;
         const planId = session.metadata?.plan_id;
+        const customerId = session.customer as string;
 
-        if (userId && planId) {
-          await supabase
-            .from('users')
-            .update({
-              plan: planId,
-              stripe_subscription_id: session.subscription as string,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', userId);
+        console.log('checkout.session.completed:', {
+          sessionId: session.id,
+          userId,
+          planId,
+          customerId,
+          subscriptionId: session.subscription,
+          paymentStatus: session.payment_status,
+          metadata: session.metadata,
+        });
 
-          console.log(`User ${userId} subscribed to ${planId}`);
+        if (!userId) {
+          console.error('No user_id in session metadata');
+          await logStripeWebhook('checkout.session.completed', 'error', 'No user_id in session metadata', {
+            eventId: event.id,
+            sessionId: session.id,
+            customerId,
+            requestData: { metadata: session.metadata },
+          });
+          break;
+        }
+
+        if (!planId) {
+          console.error('No plan_id in session metadata');
+          await logStripeWebhook('checkout.session.completed', 'error', 'No plan_id in session metadata', {
+            eventId: event.id,
+            sessionId: session.id,
+            userId,
+            customerId,
+            requestData: { metadata: session.metadata },
+          });
+          break;
+        }
+
+        // Update user's plan and subscription info
+        const { data: updateData, error: updateError } = await supabase
+          .from('users')
+          .update({
+            plan: planId,
+            stripe_customer_id: customerId,
+            stripe_subscription_id: session.subscription as string,
+            stripe_subscription_status: 'active',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId)
+          .select();
+
+        if (updateError) {
+          console.error('Error updating user plan:', updateError);
+          await logStripeWebhook('checkout.session.completed', 'error', `Failed to update user plan: ${updateError.message}`, {
+            eventId: event.id,
+            userId,
+            customerId,
+            sessionId: session.id,
+            error: updateError.message,
+          });
+        } else {
+          console.log(`User ${userId} subscribed to ${planId}. Updated rows:`, updateData);
+          await logStripeWebhook('checkout.session.completed', 'success', `User ${userId} subscribed to ${planId} plan`, {
+            eventId: event.id,
+            userId,
+            customerId,
+            sessionId: session.id,
+            subscriptionId: session.subscription as string,
+            responseData: { plan: planId, updated: updateData?.length || 0 },
+          });
         }
         break;
       }
@@ -78,18 +136,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
 
+        console.log('customer.subscription.updated:', {
+          subscriptionId: subscription.id,
+          customerId,
+          status: subscription.status,
+          metadata: subscription.metadata,
+        });
+
         // Get user by customer ID
-        const { data: userData } = await supabase
+        const { data: userData, error: findError } = await supabase
           .from('users')
-          .select('id')
+          .select('id, plan')
           .eq('stripe_customer_id', customerId)
           .single();
 
+        if (findError) {
+          console.error('Error finding user by customer ID:', findError);
+          break;
+        }
+
         if (userData) {
-          const planId = subscription.metadata?.plan_id || 'starter';
+          const planId = subscription.metadata?.plan_id || userData.plan || 'starter';
           const status = subscription.status;
 
-          await supabase
+          const { error: updateError } = await supabase
             .from('users')
             .update({
               plan: status === 'active' ? planId : 'free',
@@ -98,7 +168,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             })
             .eq('id', userData.id);
 
-          console.log(`Subscription updated for user ${userData.id}: ${status}`);
+          if (updateError) {
+            console.error('Error updating subscription status:', updateError);
+            await logStripeWebhook('customer.subscription.updated', 'error', `Failed to update subscription: ${updateError.message}`, {
+              eventId: event.id,
+              customerId,
+              userId: userData.id,
+              subscriptionId: subscription.id,
+              error: updateError.message,
+            });
+          } else {
+            console.log(`Subscription updated for user ${userData.id}: ${status}, plan: ${planId}`);
+            await logStripeWebhook('customer.subscription.updated', 'success', `Subscription ${status} for user ${userData.id}`, {
+              eventId: event.id,
+              customerId,
+              userId: userData.id,
+              subscriptionId: subscription.id,
+              responseData: { status, plan: planId },
+            });
+          }
+        } else {
+          console.log('No user found for customer:', customerId);
+          await logStripeWebhook('customer.subscription.updated', 'warning', `No user found for customer ${customerId}`, {
+            eventId: event.id,
+            customerId,
+            subscriptionId: subscription.id,
+          });
         }
         break;
       }
@@ -132,7 +227,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice;
-        console.log(`Payment succeeded for invoice ${invoice.id}`);
+        const customerId = invoice.customer as string;
+        const subscriptionId = invoice.subscription as string;
+
+        console.log('invoice.payment_succeeded:', {
+          invoiceId: invoice.id,
+          customerId,
+          subscriptionId,
+          amountPaid: invoice.amount_paid,
+        });
+
+        // For subscription invoices, ensure user plan is active
+        if (subscriptionId) {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('id, plan')
+            .eq('stripe_customer_id', customerId)
+            .single();
+
+          if (userData) {
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({
+                stripe_subscription_status: 'active',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', userData.id);
+
+            if (updateError) {
+              console.error('Error updating subscription status on payment:', updateError);
+            } else {
+              console.log(`Payment confirmed for user ${userData.id}, subscription active`);
+              await logStripeWebhook('invoice.payment_succeeded', 'success', `Payment confirmed for user ${userData.id}`, {
+                eventId: event.id,
+                customerId,
+                userId: userData.id,
+                subscriptionId,
+                responseData: { amountPaid: invoice.amount_paid },
+              });
+            }
+          }
+        }
         break;
       }
 
@@ -150,6 +285,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ received: true });
   } catch (error) {
     console.error('Webhook handler error:', error);
+    await logStripeWebhook(event.type, 'error', `Webhook handler failed: ${(error as Error).message}`, {
+      eventId: event.id,
+      error: (error as Error).message,
+    });
     return res.status(500).json({ error: 'Webhook handler failed' });
   }
 }
