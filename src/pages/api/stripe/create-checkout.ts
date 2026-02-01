@@ -40,6 +40,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    // Validate that priceId looks like a Stripe price ID (starts with 'price_')
+    if (!priceId.startsWith('price_')) {
+      console.error('Checkout error: Invalid price ID format', { priceId, planId, billingPeriod });
+      return res.status(400).json({
+        error: 'Invalid Stripe Price ID format. Price IDs should start with "price_" (e.g., price_1ABC123xyz). Please check Stripe Configuration in admin settings.',
+        details: `Invalid price ID "${priceId}" for plan: ${planId} (${billingPeriod}). Admin needs to enter the actual Stripe Price ID from the Stripe Dashboard, not the dollar amount.`
+      });
+    }
+
     const supabase = getServiceClient();
 
     // Get or create Stripe customer

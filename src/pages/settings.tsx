@@ -401,6 +401,29 @@ export default function Settings() {
   const handleSaveStripeSettings = async () => {
     setSavingStripe(true);
     try {
+      // Validate price IDs before saving
+      const priceIdFields = [
+        'stripe_starter_monthly_price_id',
+        'stripe_starter_yearly_price_id',
+        'stripe_growth_monthly_price_id',
+        'stripe_growth_yearly_price_id',
+        'stripe_professional_monthly_price_id',
+        'stripe_professional_yearly_price_id',
+      ];
+
+      for (const field of priceIdFields) {
+        const value = stripeSettings[field as keyof typeof stripeSettings];
+        if (value && !value.startsWith('••••••••') && !value.startsWith('price_')) {
+          const planName = field.includes('starter') ? 'Starter' : field.includes('growth') ? 'Growth' : 'Professional';
+          const period = field.includes('monthly') ? 'Monthly' : 'Yearly';
+          throw new Error(
+            `Invalid ${planName} ${period} Price ID: "${value}". ` +
+            `Stripe Price IDs must start with "price_" (e.g., price_1ABC123xyz). ` +
+            `You can find Price IDs in your Stripe Dashboard under Products > Prices.`
+          );
+        }
+      }
+
       // Save each setting individually
       const settingsToSave = Object.entries(stripeSettings).filter(([key, value]) => {
         // Skip masked values (unchanged secrets)
@@ -1297,7 +1320,15 @@ export default function Settings() {
                       </div>
 
                       <hr className="my-3" />
-                      <h5 className="mb-3">Price IDs</h5>
+                      <h5 className="mb-2">Price IDs</h5>
+                      <p className="text-muted small mb-3">
+                        Enter the Stripe Price IDs from your{' '}
+                        <a href="https://dashboard.stripe.com/products" target="_blank" rel="noopener noreferrer">
+                          Stripe Dashboard
+                        </a>
+                        . Price IDs start with <code>price_</code> (e.g., <code>price_1ABC123xyz</code>).
+                        Do not enter dollar amounts.
+                      </p>
 
                       {/* Starter Plan */}
                       <div className="mb-3">
@@ -1307,7 +1338,7 @@ export default function Settings() {
                             <input
                               type="text"
                               className="form-control form-control-sm"
-                              placeholder="Monthly Price ID"
+                              placeholder="price_xxxxxxx (Monthly)"
                               value={stripeSettings.stripe_starter_monthly_price_id}
                               onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_starter_monthly_price_id: e.target.value })}
                             />
@@ -1316,7 +1347,7 @@ export default function Settings() {
                             <input
                               type="text"
                               className="form-control form-control-sm"
-                              placeholder="Yearly Price ID"
+                              placeholder="price_xxxxxxx (Yearly)"
                               value={stripeSettings.stripe_starter_yearly_price_id}
                               onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_starter_yearly_price_id: e.target.value })}
                             />
@@ -1332,7 +1363,7 @@ export default function Settings() {
                             <input
                               type="text"
                               className="form-control form-control-sm"
-                              placeholder="Monthly Price ID"
+                              placeholder="price_xxxxxxx (Monthly)"
                               value={stripeSettings.stripe_growth_monthly_price_id}
                               onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_growth_monthly_price_id: e.target.value })}
                             />
@@ -1341,7 +1372,7 @@ export default function Settings() {
                             <input
                               type="text"
                               className="form-control form-control-sm"
-                              placeholder="Yearly Price ID"
+                              placeholder="price_xxxxxxx (Yearly)"
                               value={stripeSettings.stripe_growth_yearly_price_id}
                               onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_growth_yearly_price_id: e.target.value })}
                             />
@@ -1357,7 +1388,7 @@ export default function Settings() {
                             <input
                               type="text"
                               className="form-control form-control-sm"
-                              placeholder="Monthly Price ID"
+                              placeholder="price_xxxxxxx (Monthly)"
                               value={stripeSettings.stripe_professional_monthly_price_id}
                               onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_professional_monthly_price_id: e.target.value })}
                             />
@@ -1366,7 +1397,7 @@ export default function Settings() {
                             <input
                               type="text"
                               className="form-control form-control-sm"
-                              placeholder="Yearly Price ID"
+                              placeholder="price_xxxxxxx (Yearly)"
                               value={stripeSettings.stripe_professional_yearly_price_id}
                               onChange={(e) => setStripeSettings({ ...stripeSettings, stripe_professional_yearly_price_id: e.target.value })}
                             />

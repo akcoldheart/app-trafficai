@@ -220,14 +220,25 @@ export default function Billing() {
       return;
     }
 
+    const priceId = billingPeriod === 'monthly'
+      ? plan.stripePriceIdMonthly
+      : plan.stripePriceIdYearly;
+
+    // Validate price ID before making the request
+    if (!priceId) {
+      alert(`Stripe is not configured for the ${plan.name} plan (${billingPeriod}). Please contact support.`);
+      return;
+    }
+
+    if (!priceId.startsWith('price_')) {
+      alert(`Invalid Stripe configuration for the ${plan.name} plan. The Price ID "${priceId}" is not a valid Stripe Price ID. Please contact support.`);
+      return;
+    }
+
     setSelectedPlan(plan.id);
     setUpgrading(true);
 
     try {
-      const priceId = billingPeriod === 'monthly'
-        ? plan.stripePriceIdMonthly
-        : plan.stripePriceIdYearly;
-
       const response = await fetch('/api/stripe/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -241,7 +252,7 @@ export default function Billing() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create checkout session');
+        throw new Error(data.details || data.error || 'Failed to create checkout session');
       }
 
       // Redirect to Stripe Checkout
