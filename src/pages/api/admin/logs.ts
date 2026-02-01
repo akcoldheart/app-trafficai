@@ -57,14 +57,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (log.user_id) {
             const { data: userData } = await supabase
               .from('users')
-              .select('email, name')
+              .select('email, full_name, company')
               .eq('id', log.user_id)
               .single();
 
             return {
               ...log,
               user_email: userData?.email || null,
-              user_name: userData?.name || null,
+              user_name: userData?.full_name || null,
+              user_company: userData?.company || null,
             };
           }
           return log;

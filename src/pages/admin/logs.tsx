@@ -38,6 +38,7 @@ interface LogEntry {
   user_id: string | null;
   user_email: string | null;
   user_name: string | null;
+  user_company: string | null;
   ip_address: string | null;
   created_at: string;
 }
@@ -355,17 +356,21 @@ export default function AdminLogs() {
                     </div>
 
                     {/* User Info */}
-                    {(log.user_email || log.user_name) && (
-                      <div className="d-none d-md-flex align-items-center gap-2 text-end" style={{ minWidth: '200px' }}>
-                        <div className="avatar avatar-sm bg-secondary-lt">
+                    {(log.user_email || log.user_name || log.user_id) && (
+                      <div className="d-none d-md-flex align-items-center gap-2 text-end" style={{ minWidth: '220px' }}>
+                        <div className="avatar avatar-sm bg-primary-lt">
                           <IconUser size={16} />
                         </div>
                         <div className="text-start">
                           {log.user_name && (
                             <div className="fw-medium small">{log.user_name}</div>
                           )}
-                          {log.user_email && (
-                            <div className="text-muted small">{log.user_email}</div>
+                          {log.user_email ? (
+                            <div className="text-cyan small">{log.user_email}</div>
+                          ) : log.user_id && !log.user_name && (
+                            <div className="text-muted small font-monospace" style={{ fontSize: '0.7rem' }}>
+                              {log.user_id.slice(0, 8)}...
+                            </div>
                           )}
                         </div>
                       </div>
@@ -392,33 +397,37 @@ export default function AdminLogs() {
                     <div className="mt-3 pt-3 border-top">
                       <div className="row g-4">
                         {/* User Details */}
-                        {(log.user_id || log.user_email) && (
+                        {log.user_id && (
                           <div className="col-md-6">
-                            <div className="card bg-light border-0">
+                            <div className="card border">
                               <div className="card-body">
-                                <h6 className="card-subtitle mb-3 text-muted d-flex align-items-center gap-2">
-                                  <IconUser size={16} />
-                                  Account Details
+                                <h6 className="card-subtitle mb-3 d-flex align-items-center gap-2">
+                                  <IconUser size={16} className="text-primary" />
+                                  <span>Account Details</span>
                                 </h6>
                                 <div className="d-flex flex-column gap-2">
                                   {log.user_name && (
                                     <div className="d-flex align-items-center gap-2">
-                                      <span className="text-muted small" style={{ minWidth: '60px' }}>Name:</span>
+                                      <span className="text-muted small" style={{ minWidth: '70px' }}>Name:</span>
                                       <span className="fw-medium">{log.user_name}</span>
                                     </div>
                                   )}
                                   {log.user_email && (
                                     <div className="d-flex align-items-center gap-2">
-                                      <span className="text-muted small" style={{ minWidth: '60px' }}>Email:</span>
-                                      <span className="font-monospace small">{log.user_email}</span>
+                                      <span className="text-muted small" style={{ minWidth: '70px' }}>Email:</span>
+                                      <code className="text-cyan">{log.user_email}</code>
                                     </div>
                                   )}
-                                  {log.user_id && (
+                                  {log.user_company && (
                                     <div className="d-flex align-items-center gap-2">
-                                      <span className="text-muted small" style={{ minWidth: '60px' }}>User ID:</span>
-                                      <code className="small text-muted">{log.user_id}</code>
+                                      <span className="text-muted small" style={{ minWidth: '70px' }}>Company:</span>
+                                      <span>{log.user_company}</span>
                                     </div>
                                   )}
+                                  <div className="d-flex align-items-center gap-2">
+                                    <span className="text-muted small" style={{ minWidth: '70px' }}>User ID:</span>
+                                    <code className="text-yellow small">{log.user_id}</code>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -426,17 +435,17 @@ export default function AdminLogs() {
                         )}
 
                         {/* Event Info */}
-                        <div className={log.user_id || log.user_email ? 'col-md-6' : 'col-12'}>
-                          <div className="card bg-light border-0">
+                        <div className={log.user_id ? 'col-md-6' : 'col-12'}>
+                          <div className="card border">
                             <div className="card-body">
-                              <h6 className="card-subtitle mb-3 text-muted d-flex align-items-center gap-2">
-                                <IconCode size={16} />
-                                Event Info
+                              <h6 className="card-subtitle mb-3 d-flex align-items-center gap-2">
+                                <IconCode size={16} className="text-primary" />
+                                <span>Event Info</span>
                               </h6>
                               <div className="d-flex flex-column gap-2">
                                 <div className="d-flex align-items-center gap-2">
                                   <span className="text-muted small" style={{ minWidth: '70px' }}>Event:</span>
-                                  <code className="text-primary">{log.event_name}</code>
+                                  <code className="text-pink">{log.event_name}</code>
                                 </div>
                                 <div className="d-flex align-items-center gap-2">
                                   <span className="text-muted small" style={{ minWidth: '70px' }}>Time:</span>
@@ -445,7 +454,7 @@ export default function AdminLogs() {
                                 {log.ip_address && (
                                   <div className="d-flex align-items-center gap-2">
                                     <span className="text-muted small" style={{ minWidth: '70px' }}>IP:</span>
-                                    <code className="small">{log.ip_address}</code>
+                                    <code className="text-azure">{log.ip_address}</code>
                                   </div>
                                 )}
                               </div>
@@ -456,11 +465,11 @@ export default function AdminLogs() {
                         {/* Request Data */}
                         {log.request_data && Object.keys(log.request_data).length > 0 && (
                           <div className="col-md-6">
-                            <h6 className="text-muted mb-2 d-flex align-items-center gap-2">
-                              <IconCode size={14} />
-                              Request Data
+                            <h6 className="mb-2 d-flex align-items-center gap-2">
+                              <IconCode size={14} className="text-azure" />
+                              <span>Request Data</span>
                             </h6>
-                            <pre className="bg-dark text-light p-3 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
+                            <pre className="code-block p-3 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
                               {JSON.stringify(log.request_data, null, 2)}
                             </pre>
                           </div>
@@ -469,11 +478,11 @@ export default function AdminLogs() {
                         {/* Response Data */}
                         {log.response_data && Object.keys(log.response_data).length > 0 && (
                           <div className="col-md-6">
-                            <h6 className="text-muted mb-2 d-flex align-items-center gap-2">
+                            <h6 className="mb-2 d-flex align-items-center gap-2">
                               <IconCheck size={14} className="text-success" />
-                              Response Data
+                              <span>Response Data</span>
                             </h6>
-                            <pre className="bg-dark text-light p-3 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
+                            <pre className="code-block p-3 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
                               {JSON.stringify(log.response_data, null, 2)}
                             </pre>
                           </div>
@@ -484,7 +493,7 @@ export default function AdminLogs() {
                           <div className="col-12">
                             <h6 className="text-danger mb-2 d-flex align-items-center gap-2">
                               <IconAlertCircle size={14} />
-                              Error Details
+                              <span>Error Details</span>
                             </h6>
                             <pre className="bg-danger-lt text-danger p-3 rounded small mb-0">
                               {log.error_details}
@@ -609,6 +618,11 @@ export default function AdminLogs() {
         }
         .list-group-item:hover {
           background-color: rgba(var(--tblr-primary-rgb), 0.02);
+        }
+        .code-block {
+          background-color: var(--tblr-bg-surface-secondary);
+          color: var(--tblr-body-color);
+          border: 1px solid var(--tblr-border-color);
         }
       `}</style>
     </Layout>
