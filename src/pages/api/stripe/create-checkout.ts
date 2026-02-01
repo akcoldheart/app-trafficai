@@ -33,7 +33,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { priceId, planId, billingPeriod } = req.body;
 
     if (!priceId) {
-      return res.status(400).json({ error: 'Price ID is required' });
+      console.error('Checkout error: Missing price ID', { planId, billingPeriod });
+      return res.status(400).json({
+        error: 'Stripe Price ID is not configured for this plan. Please contact administrator to configure Stripe settings.',
+        details: `Missing price ID for plan: ${planId} (${billingPeriod})`
+      });
     }
 
     const supabase = getServiceClient();
@@ -95,10 +99,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({ url: session.url });
   } catch (error) {
-    console.error('Stripe checkout error:', error);
+    const errorMessage = (error as Error).message;
+    console.error('Stripe checkout error:', {
+      error: errorMessage,
+      stack: (error as Error).stack,
+      priceId: req.body.priceId,
+      planId: req.body.planId,
+    });
+
+    // Provide more helpful error messages for common Stripe errors
+    let userMessage = 'Failed to create checkout session';
+    if (errorMessage.includes('No such price')) {
+      userMessage = 'Invalid Stripe Price ID. Please verify the price ID is correct in Stripe dashboard.';
+    } else if (errorMessage.includes('api_key')) {
+      userMessage = 'Stripe API key is invalid or missing. Please check Stripe configuration.';
+    }
+
     return res.status(500).json({
-      error: 'Failed to create checkout session',
-      details: (error as Error).message,
+      error: userMessage,
+      details: errorMessage,
     });
   }
 }

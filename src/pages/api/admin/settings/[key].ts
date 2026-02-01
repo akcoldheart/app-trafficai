@@ -2,6 +2,22 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { requireRole, logAuditAction } from '@/lib/api-helpers';
 
+// Determine the category based on the key prefix
+function getCategoryForKey(key: string): string | null {
+  if (key.startsWith('stripe_') || key === 'app_url') {
+    return 'stripe';
+  }
+  if (key.startsWith('plan_')) {
+    return 'pricing';
+  }
+  return null;
+}
+
+// Determine if a key should be marked as secret
+function isSecretKey(key: string): boolean {
+  return key === 'stripe_secret_key' || key === 'stripe_webhook_secret';
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Only admins can access settings
   const authResult = await requireRole(req, res, 'admin');
@@ -39,28 +55,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Value is required' });
       }
 
-      const updateData: { value: string; description?: string; updated_at: string } = {
+      // Build the upsert data with category and is_secret based on key
+      const category = getCategoryForKey(key);
+      const is_secret = isSecretKey(key);
+
+      const upsertData: {
+        key: string;
+        value: string;
+        description?: string;
+        category?: string;
+        is_secret?: boolean;
+        updated_at: string;
+      } = {
+        key,
         value,
         updated_at: new Date().toISOString(),
       };
 
       if (description !== undefined) {
-        updateData.description = description;
+        upsertData.description = description;
       }
 
+      if (category) {
+        upsertData.category = category;
+      }
+
+      if (is_secret) {
+        upsertData.is_secret = true;
+      }
+
+      // Use upsert to create or update the setting
       const { data, error } = await supabase
         .from('app_settings')
-        .update(updateData)
-        .eq('key', key)
+        .upsert(upsertData, { onConflict: 'key' })
         .select()
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          return res.status(404).json({ error: 'Setting not found' });
-        }
-        console.error('Error updating setting:', error);
-        return res.status(500).json({ error: 'Failed to update setting' });
+        console.error('Error upserting setting:', error);
+        return res.status(500).json({ error: 'Failed to save setting' });
       }
 
       await logAuditAction(authResult.user.id, 'update_app_setting', req, res, 'app_setting', data.id, { key });
