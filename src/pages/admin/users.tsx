@@ -49,6 +49,7 @@ export default function AdminUsers() {
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -209,6 +210,41 @@ export default function AdminUsers() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleDeleteUser = async (user: User) => {
+    // Double confirmation for safety
+    const confirmMessage = `Are you sure you want to delete user "${user.email}"?\n\nThis will permanently delete:\n- User account\n- All pixels and tracking data\n- All visitors data\n- All integrations\n- All API keys\n\nThis action cannot be undone!`;
+
+    if (!confirm(confirmMessage)) return;
+
+    // Second confirmation
+    const finalConfirm = prompt(`Type "DELETE" to confirm deletion of ${user.email}:`);
+    if (finalConfirm !== 'DELETE') {
+      alert('Deletion cancelled. You must type DELETE to confirm.');
+      return;
+    }
+
+    setDeletingUserId(user.id);
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}/delete`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete user');
+      }
+
+      // Remove user from local state
+      setUsers(users.filter(u => u.id !== user.id));
+      alert(data.message || 'User deleted successfully');
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
   const filteredUsers = users.filter(user =>
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -357,13 +393,29 @@ export default function AdminUsers() {
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
                     <td>
-                      <button
-                        className="btn btn-sm btn-primary"
-                        onClick={() => handleOpenApiKeyModal(user)}
-                      >
-                        <IconKey size={16} className="me-1" />
-                        API Key
-                      </button>
+                      <div className="btn-list flex-nowrap">
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleOpenApiKeyModal(user)}
+                        >
+                          <IconKey size={16} className="me-1" />
+                          API Key
+                        </button>
+                        {user.role !== 'admin' && (
+                          <button
+                            className="btn btn-sm btn-outline-danger"
+                            onClick={() => handleDeleteUser(user)}
+                            disabled={deletingUserId === user.id}
+                            title="Delete user and all data"
+                          >
+                            {deletingUserId === user.id ? (
+                              <IconLoader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                            ) : (
+                              <IconTrash size={16} />
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
