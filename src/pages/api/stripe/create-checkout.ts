@@ -50,8 +50,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const supabase = getServiceClient();
+    const isTestMode = stripeConfig.secretKey.startsWith('sk_test_');
 
-    // Get or create Stripe customer
+    // Get user data
     const { data: userData } = await supabase
       .from('users')
       .select('stripe_customer_id, email')
@@ -59,13 +60,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single();
 
     let customerId = userData?.stripe_customer_id;
+    let needsNewCustomer = !customerId;
 
-    if (!customerId) {
-      // Create new Stripe customer
+    // Verify the customer exists in current Stripe mode (test vs live)
+    if (customerId) {
+      try {
+        await stripe.customers.retrieve(customerId);
+      } catch (customerError: unknown) {
+        const stripeError = customerError as { code?: string; message?: string };
+        // Customer doesn't exist in current mode (test/live mismatch)
+        if (stripeError.code === 'resource_missing' || stripeError.message?.includes('No such customer')) {
+          console.log(`Customer ${customerId} not found in ${isTestMode ? 'test' : 'live'} mode, creating new customer`);
+          needsNewCustomer = true;
+        } else {
+          throw customerError;
+        }
+      }
+    }
+
+    if (needsNewCustomer) {
+      // Create new Stripe customer for current mode
       const customer = await stripe.customers.create({
         email: user.email || userData?.email,
         metadata: {
           user_id: user.id,
+          mode: isTestMode ? 'test' : 'live',
         },
       });
 
