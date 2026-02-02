@@ -105,18 +105,20 @@ export default function AdminUsers() {
     }
   }, []);
 
+  const userRole = userProfile?.role;
+
   useEffect(() => {
     // Redirect non-admin users
-    if (!authLoading && userProfile && userProfile.role !== 'admin') {
+    if (!authLoading && userRole && userRole !== 'admin') {
       router.push('/');
       return;
     }
 
-    if (!authLoading && userProfile?.role === 'admin') {
+    if (!authLoading && userRole === 'admin') {
       fetchUsers();
       fetchRoles();
     }
-  }, [authLoading, userProfile, router, fetchUsers, fetchRoles]);
+  }, [authLoading, userRole, router, fetchUsers, fetchRoles]);
 
   const handleOpenApiKeyModal = async (user: User) => {
     setSelectedUser(user);
