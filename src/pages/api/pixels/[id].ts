@@ -35,17 +35,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'PUT' || req.method === 'PATCH') {
-      // Update pixel - admin can update any, including custom_installation_code
-      const { name, domain, status, custom_installation_code } = req.body;
+      // Update pixel - admin can update any, including custom_installation_code and pixel_code
+      const { name, domain, status, custom_installation_code, pixel_code } = req.body;
       const updates: Record<string, unknown> = {};
 
       if (name !== undefined) updates.name = name;
       if (domain !== undefined) updates.domain = domain;
       if (status !== undefined) updates.status = status;
 
-      // Only admins can update custom_installation_code
+      // Only admins can update custom_installation_code and pixel_code
       if (isAdmin && custom_installation_code !== undefined) {
         updates.custom_installation_code = custom_installation_code;
+      }
+      if (isAdmin && pixel_code !== undefined) {
+        updates.pixel_code = pixel_code;
       }
 
       if (Object.keys(updates).length === 0) {

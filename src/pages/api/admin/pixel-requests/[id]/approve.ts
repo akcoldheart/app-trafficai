@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Request ID is required' });
   }
 
-  const { admin_notes, custom_installation_code } = req.body;
+  const { admin_notes, custom_installation_code, pixel_code: customPixelCode } = req.body;
   const supabase = createClient(req, res);
 
   try {
@@ -47,8 +47,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Request has already been processed' });
     }
 
-    // Generate pixel code
-    const pixelCode = generatePixelCode();
+    // Use custom pixel code if provided, otherwise generate one
+    const pixelCode = customPixelCode?.trim() || generatePixelCode();
 
     // Create the pixel with optional custom installation code
     const { data: pixel, error: pixelError } = await supabase

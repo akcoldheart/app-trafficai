@@ -60,6 +60,11 @@ export default function Pixels() {
   const [isEditingCode, setIsEditingCode] = useState(false);
   const [savingCode, setSavingCode] = useState(false);
 
+  // Pixel ID editing state (admin only)
+  const [editedPixelId, setEditedPixelId] = useState('');
+  const [isEditingPixelId, setIsEditingPixelId] = useState(false);
+  const [savingPixelId, setSavingPixelId] = useState(false);
+
   // Installation guide modal state
   const [guideModalOpen, setGuideModalOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState('');
@@ -148,12 +153,14 @@ export default function Pixels() {
     fetchPixelRequests();
   }, [router.isReady]); // Run when router is ready
 
-  // Load custom code when pixel is selected (by ID change only)
+  // Load custom code and pixel ID when pixel is selected (by ID change only)
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   useEffect(() => {
     if (selectedPixel && selectedPixel.id !== lastSelectedId) {
       setEditedCode(selectedPixel.custom_installation_code || '');
+      setEditedPixelId(selectedPixel.pixel_code || '');
       setIsEditingCode(false); // Exit edit mode when switching pixels
+      setIsEditingPixelId(false); // Exit pixel ID edit mode when switching pixels
       setSaveMessage(null); // Clear any previous message only when switching pixels
       setLastSelectedId(selectedPixel.id);
     }
@@ -475,6 +482,38 @@ export default function Pixels() {
       setSaveMessage({ type: 'error', text: (err as Error).message });
     } finally {
       setSavingCode(false);
+    }
+  };
+
+  const handleSavePixelId = async () => {
+    if (!selectedPixel || !isAdmin) return;
+
+    setSavingPixelId(true);
+    try {
+      const response = await fetch(`/api/pixels/${selectedPixel.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pixel_code: editedPixelId.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update pixel ID');
+      }
+
+      // Update pixel in state
+      const updatedPixel = { ...selectedPixel, pixel_code: editedPixelId.trim() };
+      setPixels(pixels.map(p => p.id === selectedPixel.id ? updatedPixel : p));
+      setSelectedPixel(updatedPixel);
+      setIsEditingPixelId(false);
+      showToast('success', 'Pixel ID updated successfully!');
+    } catch (err) {
+      showToast('error', (err as Error).message);
+    } finally {
+      setSavingPixelId(false);
     }
   };
 
@@ -820,23 +859,67 @@ export default function Pixels() {
                           <span className="avatar bg-primary-lt me-3"><IconCode size={20} /></span>
                           <div className="flex-fill" style={{ minWidth: 0 }}>
                             <div className="text-muted" style={{ fontSize: '12px' }}>Pixel ID</div>
-                            <div className="d-flex align-items-center gap-2">
-                              <code
-                                className="text-truncate d-block"
-                                style={{ fontSize: '12px', maxWidth: '180px' }}
-                                title={selectedPixel.pixel_code}
-                              >
-                                {selectedPixel.pixel_code}
-                              </code>
-                              <button
-                                className={`btn btn-icon btn-sm flex-shrink-0 ${copiedId === 'pixelId' ? 'btn-success' : 'btn-ghost-secondary'}`}
-                                onClick={() => copyToClipboard(selectedPixel.pixel_code, 'pixelId')}
-                                style={{ padding: '2px 6px' }}
-                                title="Copy Pixel ID"
-                              >
-                                {copiedId === 'pixelId' ? <IconCheck size={12} /> : <IconCopy size={12} />}
-                              </button>
-                            </div>
+                            {isAdmin && isEditingPixelId ? (
+                              <div className="d-flex align-items-center gap-2">
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm font-monospace"
+                                  value={editedPixelId}
+                                  onChange={(e) => setEditedPixelId(e.target.value)}
+                                  style={{ fontSize: '12px' }}
+                                  autoFocus
+                                />
+                                <button
+                                  className="btn btn-icon btn-sm btn-primary flex-shrink-0"
+                                  onClick={handleSavePixelId}
+                                  disabled={savingPixelId || !editedPixelId.trim()}
+                                  style={{ padding: '2px 6px' }}
+                                  title="Save"
+                                >
+                                  {savingPixelId ? <IconLoader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <IconCheck size={12} />}
+                                </button>
+                                <button
+                                  className="btn btn-icon btn-sm btn-ghost-secondary flex-shrink-0"
+                                  onClick={() => {
+                                    setEditedPixelId(selectedPixel.pixel_code);
+                                    setIsEditingPixelId(false);
+                                  }}
+                                  disabled={savingPixelId}
+                                  style={{ padding: '2px 6px' }}
+                                  title="Cancel"
+                                >
+                                  <IconX size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="d-flex align-items-center gap-2">
+                                <code
+                                  className="text-truncate d-block"
+                                  style={{ fontSize: '12px', maxWidth: '180px' }}
+                                  title={selectedPixel.pixel_code}
+                                >
+                                  {selectedPixel.pixel_code}
+                                </code>
+                                <button
+                                  className={`btn btn-icon btn-sm flex-shrink-0 ${copiedId === 'pixelId' ? 'btn-success' : 'btn-ghost-secondary'}`}
+                                  onClick={() => copyToClipboard(selectedPixel.pixel_code, 'pixelId')}
+                                  style={{ padding: '2px 6px' }}
+                                  title="Copy Pixel ID"
+                                >
+                                  {copiedId === 'pixelId' ? <IconCheck size={12} /> : <IconCopy size={12} />}
+                                </button>
+                                {isAdmin && (
+                                  <button
+                                    className="btn btn-icon btn-sm btn-ghost-secondary flex-shrink-0"
+                                    onClick={() => setIsEditingPixelId(true)}
+                                    style={{ padding: '2px 6px' }}
+                                    title="Edit Pixel ID"
+                                  >
+                                    <IconPencil size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1102,6 +1185,40 @@ export default function Pixels() {
                     : 'Choose a pixel from the list to view details'}
                 </p>
               </div>
+
+              {/* Quick Install - Show even without a pixel selected for non-admin users */}
+              {!isAdmin && activeTab === 'pixels' && (
+                <div className="card-body border-top">
+                  <h4 className="mb-3">Installation Guides</h4>
+                  <p className="text-muted mb-3" style={{ fontSize: '13px' }}>
+                    Learn how to install the Traffic AI pixel on your website
+                  </p>
+                  <div className="row g-3">
+                    {[
+                      { name: 'WordPress', platform: 'wordpress', icon: 'wordpress/wordpress-original.svg', desc: 'Plugin or theme editor' },
+                      { name: 'Shopify', platform: 'shopify', icon: 'woocommerce/woocommerce-original.svg', desc: 'Add to theme.liquid' },
+                      { name: 'Manual', platform: 'manual', icon: 'html5/html5-original.svg', desc: 'Paste in HTML head' },
+                    ].map((opt) => (
+                      <div className="col-md-4" key={opt.name}>
+                        <div
+                          className="card card-sm card-link"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => {
+                            setSelectedPlatform(opt.platform);
+                            setGuideModalOpen(true);
+                          }}
+                        >
+                          <div className="card-body text-center py-3">
+                            <img src={`https://cdn.jsdelivr.net/gh/devicons/devicon/icons/${opt.icon}`} alt={opt.name} width="28" height="28" className="mb-2" />
+                            <div className="fw-semibold" style={{ fontSize: '13px' }}>{opt.name}</div>
+                            <div className="text-muted" style={{ fontSize: '11px' }}>{opt.desc}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
