@@ -18,6 +18,8 @@ import {
   IconCopy,
   IconEye,
   IconEyeOff,
+  IconCalendarPlus,
+  IconClock,
 } from '@tabler/icons-react';
 import type { Role } from '@/lib/supabase/types';
 
@@ -28,6 +30,7 @@ interface User {
   role_id: string | null;
   plan: string | null;
   company_website: string | null;
+  trial_ends_at: string | null;
   created_at: string;
   updated_at: string;
   has_api_key?: boolean;
@@ -66,6 +69,9 @@ export default function AdminUsers() {
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Extend trial state
+  const [extendingTrialUserId, setExtendingTrialUserId] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -241,6 +247,46 @@ export default function AdminUsers() {
     }
   };
 
+  const handleExtendTrial = async (userId: string, days: number) => {
+    setExtendingTrialUserId(userId);
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/extend-trial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to extend trial');
+      }
+
+      // Update local state with new trial info
+      setUsers(users.map(u =>
+        u.id === userId
+          ? { ...u, plan: 'trial', trial_ends_at: data.user.trial_ends_at }
+          : u
+      ));
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setExtendingTrialUserId(null);
+    }
+  };
+
+  const getTrialStatus = (user: User) => {
+    if (!user.trial_ends_at || user.plan !== 'trial') return null;
+    const trialEnd = new Date(user.trial_ends_at);
+    const now = new Date();
+    const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return {
+      daysLeft,
+      isExpired: daysLeft <= 0,
+      endsAt: trialEnd.toLocaleDateString(),
+    };
+  };
+
   const copyToClipboard = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -391,6 +437,7 @@ export default function AdminUsers() {
                   <th>User</th>
                   <th>Role</th>
                   <th>Plan</th>
+                  <th>Trial Status</th>
                   <th>API Key</th>
                   <th>Joined</th>
                   <th className="w-1">Actions</th>
@@ -447,6 +494,60 @@ export default function AdminUsers() {
                           ))}
                         </select>
                       )}
+                    </td>
+                    <td>
+                      {user.role === 'admin' || user.role === 'team' ? (
+                        <span className="text-muted">—</span>
+                      ) : user.plan !== 'trial' ? (
+                        <span className="text-muted">—</span>
+                      ) : (() => {
+                        const trialStatus = getTrialStatus(user);
+                        return (
+                          <div className="d-flex align-items-center gap-2">
+                            {trialStatus ? (
+                              <span className={`badge ${trialStatus.isExpired ? 'bg-red-lt text-red' : trialStatus.daysLeft <= 3 ? 'bg-yellow-lt text-yellow' : 'bg-green-lt text-green'}`}>
+                                <IconClock size={12} className="me-1" />
+                                {trialStatus.isExpired ? 'Expired' : `${trialStatus.daysLeft}d left`}
+                              </span>
+                            ) : (
+                              <span className="text-muted small">No end date</span>
+                            )}
+                            <div className="dropdown">
+                              <button
+                                className="btn btn-sm btn-outline-primary dropdown-toggle"
+                                type="button"
+                                data-bs-toggle="dropdown"
+                                disabled={extendingTrialUserId === user.id}
+                                title="Extend Trial"
+                              >
+                                {extendingTrialUserId === user.id ? (
+                                  <IconLoader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                                ) : (
+                                  <IconCalendarPlus size={14} />
+                                )}
+                              </button>
+                              <ul className="dropdown-menu">
+                                <li>
+                                  <button
+                                    className="dropdown-item"
+                                    onClick={() => handleExtendTrial(user.id, 7)}
+                                  >
+                                    +7 days
+                                  </button>
+                                </li>
+                                <li>
+                                  <button
+                                    className="dropdown-item"
+                                    onClick={() => handleExtendTrial(user.id, 15)}
+                                  >
+                                    +15 days
+                                  </button>
+                                </li>
+                              </ul>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td>
                       {user.has_api_key ? (

@@ -20,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // List all users with API key status (include role_id and plan for dropdowns)
       const { data: users, error } = await supabaseAdmin
         .from('users')
-        .select('id, email, role, role_id, plan, company_website, created_at, updated_at')
+        .select('id, email, role, role_id, plan, company_website, trial_ends_at, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
