@@ -52,6 +52,7 @@ interface User {
 export default function Settings() {
   const { userProfile } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
+  const isRegularUser = userProfile?.role === 'user';
 
   const [connectionStatus, setConnectionStatus] = useState<'not_tested' | 'testing' | 'connected' | 'failed'>('not_tested');
   const [connectionMessage, setConnectionMessage] = useState('Click "Test Connection" to verify your access');
@@ -552,8 +553,11 @@ export default function Settings() {
   };
 
   useEffect(() => {
-    loadCredits();
-    testConnection();
+    // Only load credits and test connection for regular users (not admin/team)
+    if (isRegularUser) {
+      loadCredits();
+      testConnection();
+    }
     fetchWebsites();
     if (isAdmin) {
       fetchAdminSettings();
@@ -561,7 +565,7 @@ export default function Settings() {
       fetchAllUsers();
       fetchWebhookKey();
     }
-  }, [fetchWebsites, fetchAdminSettings, fetchApiKeys, fetchAllUsers, fetchWebhookKey, isAdmin]);
+  }, [fetchWebsites, fetchAdminSettings, fetchApiKeys, fetchAllUsers, fetchWebhookKey, isAdmin, isRegularUser]);
 
   const testConnection = async () => {
     setConnectionStatus('testing');
@@ -606,57 +610,61 @@ export default function Settings() {
   return (
     <Layout title="Settings" pageTitle="Settings">
       <div className="row row-cards">
-        <div className="col-lg-8">
-          {/* Connection Test */}
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Connection Status</h3>
-            </div>
-            <div className="card-body">
-              <div className="row align-items-center">
-                <div className="col">
-                  <div>
-                    {connectionStatus === 'not_tested' && <span className="badge bg-secondary">Not tested</span>}
-                    {connectionStatus === 'testing' && <span className="badge bg-blue">Testing...</span>}
-                    {connectionStatus === 'connected' && <span className="badge bg-green">Connected</span>}
-                    {connectionStatus === 'failed' && <span className="badge bg-red">Failed</span>}
+        <div className="col-lg-7">
+          {/* Connection Test - Only shown for regular users who need API access */}
+          {isRegularUser && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">Connection Status</h3>
+              </div>
+              <div className="card-body">
+                <div className="row align-items-center">
+                  <div className="col">
+                    <div>
+                      {connectionStatus === 'not_tested' && <span className="badge bg-secondary">Not tested</span>}
+                      {connectionStatus === 'testing' && <span className="badge bg-blue">Testing...</span>}
+                      {connectionStatus === 'connected' && <span className="badge bg-green">Connected</span>}
+                      {connectionStatus === 'failed' && <span className="badge bg-red">Failed</span>}
+                    </div>
+                    <div className="text-muted small mt-1">{connectionMessage}</div>
                   </div>
-                  <div className="text-muted small mt-1">{connectionMessage}</div>
-                </div>
-                <div className="col-auto">
-                  <button
-                    className="btn btn-outline-primary"
-                    onClick={testConnection}
-                    disabled={connectionStatus === 'testing'}
-                  >
-                    <IconRefresh className="icon" />
-                    Test Connection
-                  </button>
+                  <div className="col-auto">
+                    <button
+                      className="btn btn-outline-primary"
+                      onClick={testConnection}
+                      disabled={connectionStatus === 'testing'}
+                    >
+                      <IconRefresh className="icon" />
+                      Test Connection
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Credits Info */}
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Account Credits</h3>
-            </div>
-            <div className="card-body">
-              <div className="row align-items-center">
-                <div className="col">
-                  <div className="h1 mb-0">{credits !== null ? credits.toLocaleString() : '-'}</div>
-                  <div className="text-muted">Available credits</div>
-                </div>
-                <div className="col-auto">
-                  <button className="btn btn-outline-primary" onClick={loadCredits}>
-                    <IconRefresh className="icon" />
-                    Refresh
-                  </button>
+          {/* Credits Info - Only shown for regular users, not admin/team */}
+          {isRegularUser && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">Account Credits</h3>
+              </div>
+              <div className="card-body">
+                <div className="row align-items-center">
+                  <div className="col">
+                    <div className="h1 mb-0">{credits !== null ? credits.toLocaleString() : '-'}</div>
+                    <div className="text-muted">Available credits</div>
+                  </div>
+                  <div className="col-auto">
+                    <button className="btn btn-outline-primary" onClick={loadCredits}>
+                      <IconRefresh className="icon" />
+                      Refresh
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Websites Management */}
           <div className="card">
@@ -998,15 +1006,15 @@ export default function Settings() {
           )}
         </div>
 
-        <div className="col-lg-4">
-          {/* Admin: API Configuration */}
+        <div className="col-lg-5">
+          {/* Admin: System Configuration */}
           {isAdmin ? (
             <>
               <div className="card">
                 <div className="card-header">
                   <h3 className="card-title">
                     <IconSettings className="icon me-2" />
-                    API Configuration
+                    System Configuration
                   </h3>
                 </div>
                 <div className="card-body">

@@ -26,12 +26,22 @@ interface User {
   email: string;
   role: 'admin' | 'team' | 'user';
   role_id: string | null;
+  plan: string | null;
   company_website: string | null;
   created_at: string;
   updated_at: string;
   has_api_key?: boolean;
   api_key?: string;
 }
+
+// Available subscription plans
+const PLAN_OPTIONS = [
+  { id: 'trial', name: 'Trial', color: 'bg-secondary-lt text-secondary' },
+  { id: 'starter', name: 'Starter', color: 'bg-blue-lt text-blue' },
+  { id: 'growth', name: 'Growth', color: 'bg-cyan-lt text-cyan' },
+  { id: 'professional', name: 'Professional', color: 'bg-purple-lt text-purple' },
+  { id: 'enterprise', name: 'Enterprise', color: 'bg-orange-lt text-orange' },
+];
 
 export default function AdminUsers() {
   const { userProfile, loading: authLoading } = useAuth();
@@ -210,6 +220,27 @@ export default function AdminUsers() {
     }
   };
 
+  const handlePlanChange = async (userId: string, plan: string) => {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/plan`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to update plan');
+      }
+
+      setUsers(users.map(u =>
+        u.id === userId ? { ...u, plan } : u
+      ));
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
   const copyToClipboard = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -273,6 +304,11 @@ export default function AdminUsers() {
       case 'user': return 'bg-green-lt text-green';
       default: return 'bg-secondary-lt';
     }
+  };
+
+  const getPlanBadgeClass = (plan: string | null) => {
+    const planOption = PLAN_OPTIONS.find(p => p.id === plan);
+    return planOption?.color || 'bg-secondary-lt text-secondary';
   };
 
   // Show loading while checking auth
@@ -354,6 +390,7 @@ export default function AdminUsers() {
                 <tr>
                   <th>User</th>
                   <th>Role</th>
+                  <th>Plan</th>
                   <th>API Key</th>
                   <th>Joined</th>
                   <th className="w-1">Actions</th>
@@ -392,6 +429,24 @@ export default function AdminUsers() {
                           ))
                         )}
                       </select>
+                    </td>
+                    <td>
+                      {user.role === 'admin' || user.role === 'team' ? (
+                        <span className="text-muted">—</span>
+                      ) : (
+                        <select
+                          className={`form-select form-select-sm ${getPlanBadgeClass(user.plan)}`}
+                          value={user.plan || 'trial'}
+                          onChange={(e) => handlePlanChange(user.id, e.target.value)}
+                          style={{ width: '130px' }}
+                        >
+                          {PLAN_OPTIONS.map((plan) => (
+                            <option key={plan.id} value={plan.id}>
+                              {plan.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td>
                       {user.has_api_key ? (

@@ -161,20 +161,34 @@ export async function requireRole(
 
 /**
  * Get user's Traffic AI API key
+ * Uses service role to bypass RLS for reliable key retrieval
  */
 export async function getUserApiKey(
   userId: string,
-  req: NextApiRequest,
-  res: NextApiResponse
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _req?: NextApiRequest,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _res?: NextApiResponse
 ): Promise<string | null> {
-  const supabase = createClient(req, res);
-  const { data, error } = await supabase
+  // Use service role client to bypass RLS for reliable API key retrieval
+  const { createClient: createServiceClient } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data, error } = await supabaseAdmin
     .from('user_api_keys')
     .select('api_key')
     .eq('user_id', userId)
     .single();
 
-  if (error || !data) return null;
+  if (error) {
+    console.error('Error fetching API key for user', userId, ':', error.message);
+    return null;
+  }
+
+  if (!data) return null;
   return (data as { api_key: string }).api_key;
 }
 

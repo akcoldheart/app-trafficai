@@ -17,10 +17,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     if (req.method === 'GET') {
-      // List all users with API key status (include role_id for dropdown)
+      // List all users with API key status (include role_id and plan for dropdowns)
       const { data: users, error } = await supabaseAdmin
         .from('users')
-        .select('id, email, role, role_id, company_website, created_at, updated_at')
+        .select('id, email, role, role_id, plan, company_website, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
