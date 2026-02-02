@@ -18,9 +18,9 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
   const trialStatus = useMemo(() => {
     if (!userProfile) return null;
 
-    // Only show for free plan users
-    const currentPlan = userProfile.plan || 'free';
-    if (currentPlan !== 'free') return null;
+    // Only show for trial plan users
+    const currentPlan = userProfile.plan || 'trial';
+    if (currentPlan !== 'trial') return null;
 
     // Check if trial_ends_at exists
     if (!userProfile.trial_ends_at) {

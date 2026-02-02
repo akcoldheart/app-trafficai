@@ -1,10 +1,12 @@
--- Add trial period fields to users table
-ALTER TABLE users
-ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS trial_notified BOOLEAN DEFAULT FALSE;
+-- Rename 'free' plan to 'trial' plan
+-- This migration updates the plan naming to be more accurate
 
--- Set default trial period for new users (7 days)
--- Update the handle_new_user function to set trial_ends_at
+-- Update existing users from 'free' to 'trial'
+UPDATE users
+SET plan = 'trial'
+WHERE plan = 'free';
+
+-- Update the handle_new_user function to use 'trial' plan with correct 'user' role
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -31,16 +33,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Set trial for existing trial users who don't have a trial_ends_at set
--- (Use their created_at + 7 days, or if that's in the past, give them 7 more days)
-UPDATE users
-SET trial_ends_at = GREATEST(created_at + INTERVAL '7 days', NOW() + INTERVAL '7 days')
-WHERE plan = 'trial' OR plan IS NULL
-AND trial_ends_at IS NULL;
+-- Update column default if it exists
+ALTER TABLE users
+ALTER COLUMN plan SET DEFAULT 'trial';
 
--- Create index for trial queries
-CREATE INDEX IF NOT EXISTS idx_users_trial_ends_at ON users(trial_ends_at);
-
--- Comment on columns
-COMMENT ON COLUMN users.trial_ends_at IS 'When the trial period ends';
-COMMENT ON COLUMN users.trial_notified IS 'Whether user has been notified about trial expiration';
+-- Update comment
+COMMENT ON COLUMN users.plan IS 'User subscription plan: trial (7-day, 250 visitors), starter, growth, professional, enterprise';

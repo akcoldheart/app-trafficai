@@ -156,13 +156,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         if (userData) {
-          const planId = subscription.metadata?.plan_id || userData.plan || 'starter';
+          const planId = subscription.metadata?.plan_id || userData.plan || 'trial';
           const status = subscription.status;
 
           const { error: updateError } = await supabase
             .from('users')
             .update({
-              plan: status === 'active' ? planId : 'free',
+              plan: status === 'active' ? planId : 'trial',
               stripe_subscription_status: status,
               updated_at: new Date().toISOString(),
             })
@@ -213,7 +213,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           await supabase
             .from('users')
             .update({
-              plan: 'free',
+              plan: 'trial',
               stripe_subscription_id: null,
               stripe_subscription_status: 'canceled',
               updated_at: new Date().toISOString(),

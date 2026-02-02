@@ -10,7 +10,7 @@ import {
 
 // Plan features configuration
 export const PLAN_FEATURES: Record<string, string[]> = {
-  free: [],
+  trial: [],
   starter: ['visitors_3000', 'intent_data'],
   growth: ['visitors_5000', 'intent_data'],
   professional: ['visitors_10000', 'intent_data', 'enrichment'],
@@ -63,7 +63,7 @@ export function UpgradeProvider({ children }: { children: React.ReactNode }) {
   const [prompt, setPrompt] = useState<UpgradePrompt | null>(null);
   const [isVisible, setIsVisible] = useState(false);
 
-  const currentPlan = userProfile?.plan || 'free';
+  const currentPlan = userProfile?.plan || 'trial';
   const currentFeatures = PLAN_FEATURES[currentPlan] || [];
 
   const showUpgradePrompt = useCallback((newPrompt: UpgradePrompt) => {

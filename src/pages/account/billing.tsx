@@ -116,7 +116,7 @@ const defaultPlans: Plan[] = [
 
 // Plan limits for visitor tracking
 const PLAN_VISITOR_LIMITS: Record<string, number> = {
-  free: 100,
+  trial: 250,
   starter: 3000,
   growth: 5000,
   professional: 10000,
@@ -135,12 +135,12 @@ export default function Billing() {
   const [verifyingSession, setVerifyingSession] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const currentPlan = userProfile?.plan || 'free';
-  const visitorLimit = PLAN_VISITOR_LIMITS[currentPlan] || PLAN_VISITOR_LIMITS.free;
+  const currentPlan = userProfile?.plan || 'trial';
+  const visitorLimit = PLAN_VISITOR_LIMITS[currentPlan] || PLAN_VISITOR_LIMITS.trial;
 
   // Calculate trial status
   const trialStatus = useMemo(() => {
-    if (!userProfile || currentPlan !== 'free') return null;
+    if (!userProfile || currentPlan !== 'trial') return null;
 
     let trialEnd: Date;
     if (userProfile.trial_ends_at) {
@@ -646,7 +646,7 @@ export default function Billing() {
                 <IconCreditCard className="icon me-2" />
                 Billing History
               </h3>
-              {currentPlan !== 'free' && (
+              {currentPlan !== 'trial' && (
                 <div className="card-actions">
                   <button
                     className="btn btn-outline-secondary btn-sm"

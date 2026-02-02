@@ -10,7 +10,7 @@ import {
 
 // Plan limits configuration (identified visitors per month)
 const PLAN_LIMITS: Record<string, { visitors: number; name: string }> = {
-  free: { visitors: 100, name: 'Free' },
+  trial: { visitors: 250, name: 'Trial' },
   starter: { visitors: 3000, name: 'Starter' },
   growth: { visitors: 5000, name: 'Growth' },
   professional: { visitors: 10000, name: 'Professional' },
@@ -31,8 +31,8 @@ export default function UpgradeNotification({ className = '' }: UpgradeNotificat
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const currentPlan = userProfile?.plan || 'free';
-  const planLimit = PLAN_LIMITS[currentPlan] || PLAN_LIMITS.free;
+  const currentPlan = userProfile?.plan || 'trial';
+  const planLimit = PLAN_LIMITS[currentPlan] || PLAN_LIMITS.trial;
 
   const loadUsage = useCallback(async () => {
     try {
@@ -103,7 +103,7 @@ export default function UpgradeNotification({ className = '' }: UpgradeNotificat
 
   // Determine the next plan for upgrade
   const getNextPlan = () => {
-    const planOrder = ['free', 'starter', 'growth', 'professional', 'enterprise'];
+    const planOrder = ['trial', 'starter', 'growth', 'professional', 'enterprise'];
     const currentIndex = planOrder.indexOf(currentPlan);
     if (currentIndex < planOrder.length - 1) {
       return PLAN_LIMITS[planOrder[currentIndex + 1]];
