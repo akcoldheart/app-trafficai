@@ -83,16 +83,19 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       const driverObj = driver({
         showProgress: true,
         animate: true,
-        allowClose: true,
+        allowClose: false,
         overlayColor: 'rgba(0, 0, 0, 0.75)',
         stagePadding: 8,
         stageRadius: 8,
         popoverClass: 'onboarding-popover',
+        doneBtnText: 'Finish',
         steps: TOUR_STEPS,
         onDestroyStarted: () => {
-          driverObj.destroy();
-          setIsOnboarding(false);
-          setShowCompletion(true);
+          if (driverObj.isLastStep()) {
+            driverObj.destroy();
+            setIsOnboarding(false);
+            setShowCompletion(true);
+          }
         },
         onDestroyed: () => {
           setIsOnboarding(false);
@@ -114,9 +117,9 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     await completeOnboarding();
   }, [completeOnboarding]);
 
-  const handleGoToPixels = useCallback(async () => {
+  const handleGoToPixels = useCallback(() => {
     setShowCompletion(false);
-    await completeOnboarding();
+    completeOnboarding();
     router.push('/pixels');
   }, [completeOnboarding, router]);
 
@@ -151,13 +154,10 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       {showWelcome && (
         <div
           className="modal modal-blur show"
-          style={{ display: 'block' }}
+          style={{ display: 'block', background: 'rgba(0,0,0,0.5)' }}
           tabIndex={-1}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) skipTour();
-          }}
         >
-          <div className="modal-dialog modal-sm modal-dialog-centered">
+          <div className="modal-dialog modal-md modal-dialog-centered">
             <div className="modal-content" style={{ overflow: 'hidden' }}>
               <div className="onboarding-welcome-header">
                 <h2>Welcome to TrafficAI!</h2>
@@ -199,7 +199,6 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
               </div>
             </div>
           </div>
-          <div className="modal-backdrop fade show" />
         </div>
       )}
 
@@ -207,13 +206,10 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       {showCompletion && (
         <div
           className="modal modal-blur show"
-          style={{ display: 'block' }}
+          style={{ display: 'block', background: 'rgba(0,0,0,0.5)' }}
           tabIndex={-1}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) finishTour();
-          }}
         >
-          <div className="modal-dialog modal-sm modal-dialog-centered">
+          <div className="modal-dialog modal-md modal-dialog-centered">
             <div className="modal-content" style={{ overflow: 'hidden' }}>
               <div className="onboarding-completion-header">
                 <div className="onboarding-completion-icon">&#10003;</div>
@@ -240,7 +236,6 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
               </div>
             </div>
           </div>
-          <div className="modal-backdrop fade show" />
         </div>
       )}
     </OnboardingContext.Provider>
