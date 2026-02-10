@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
-import { driver, type DriveStep } from 'driver.js';
 
 interface OnboardingContextType {
   isOnboarding: boolean;
@@ -13,14 +12,14 @@ const OnboardingContext = createContext<OnboardingContextType>({
   startTour: () => {},
 });
 
-const TOUR_STEPS: DriveStep[] = [
+const TOUR_STEPS = [
   {
     element: '[data-tour="sidebar-nav"]',
     popover: {
       title: 'Navigation Hub',
       description: 'This is your main navigation. All key features are accessible from this sidebar.',
-      side: 'right',
-      align: 'start',
+      side: 'right' as const,
+      align: 'start' as const,
     },
   },
   {
@@ -28,8 +27,8 @@ const TOUR_STEPS: DriveStep[] = [
     popover: {
       title: 'Install Your Tracking Pixel',
       description: 'Start by installing a tracking pixel on your website to begin identifying visitors.',
-      side: 'right',
-      align: 'start',
+      side: 'right' as const,
+      align: 'start' as const,
     },
   },
   {
@@ -37,8 +36,8 @@ const TOUR_STEPS: DriveStep[] = [
     popover: {
       title: 'View Visitors in Real-Time',
       description: 'Once your pixel is live, see who\'s visiting your website with detailed visitor profiles.',
-      side: 'right',
-      align: 'start',
+      side: 'right' as const,
+      align: 'start' as const,
     },
   },
   {
@@ -46,8 +45,8 @@ const TOUR_STEPS: DriveStep[] = [
     popover: {
       title: 'Create Targeted Audiences',
       description: 'Build custom audiences from your visitors and sync them to your ad platforms.',
-      side: 'right',
-      align: 'start',
+      side: 'right' as const,
+      align: 'start' as const,
     },
   },
 ];
@@ -77,8 +76,10 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     setShowWelcome(false);
     setIsOnboarding(true);
 
-    // Small delay to let modal close
-    setTimeout(() => {
+    // Dynamically import driver.js only on client side
+    setTimeout(async () => {
+      const { driver } = await import('driver.js');
+
       const driverObj = driver({
         showProgress: true,
         animate: true,
