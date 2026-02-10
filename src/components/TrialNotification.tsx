@@ -72,12 +72,12 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
     }
     if (isExpiring) {
       return {
-        bgClass: 'bg-warning',
+        bgClass: 'bg-orange text-white',
         icon: <IconClock size={20} />,
         title: `Trial Ending Soon`,
         message: `Your free trial ends in ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}. Upgrade to keep your data and features.`,
         buttonText: 'Choose a Plan',
-        buttonClass: 'btn-dark',
+        buttonClass: 'btn-light',
       };
     }
     // Normal trial - show friendly reminder
@@ -99,7 +99,7 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
         <span className="me-2">{config.icon}</span>
         <div className="flex-grow-1">
           <h4 className="alert-title mb-1">{config.title}</h4>
-          <div className={isExpired ? '' : 'text-secondary'}>
+          <div className={isExpired || isExpiring ? '' : 'text-secondary'}>
             {config.message}
           </div>
         </div>
@@ -120,7 +120,7 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
           </div>
           <div className="progress progress-sm">
             <div
-              className={`progress-bar ${isExpiring ? 'bg-warning' : 'bg-primary'}`}
+              className={`progress-bar ${isExpiring ? 'bg-orange' : 'bg-primary'}`}
               style={{ width: `${((7 - daysRemaining) / 7) * 100}%` }}
               role="progressbar"
             />
