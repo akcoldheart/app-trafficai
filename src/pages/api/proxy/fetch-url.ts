@@ -172,11 +172,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         console.log(`[Proxy] All pages fetched. Total records: ${allRecords.length}`);
 
-        // Return combined data with all records
+        // Return combined data with all records under a single key
+        // Avoid duplicating the array in both Data and data to reduce payload size
         return res.status(200).json({
-          ...data,
-          Data: allRecords,
-          data: allRecords,
+          contacts: allRecords,
           total_records: allRecords.length,
           fetched_all_pages: true,
           original_total_pages: totalPages,

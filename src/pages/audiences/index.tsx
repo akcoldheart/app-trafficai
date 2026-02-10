@@ -220,12 +220,22 @@ export default function Audiences() {
         return;
       }
 
+      // Extract just the contacts array to avoid sending unnecessary metadata
+      // and reduce payload size (the proxy duplicates data in both Data and data fields)
+      if (audienceData && typeof audienceData === 'object' && !Array.isArray(audienceData)) {
+        const contacts = audienceData.contacts || audienceData.Data || audienceData.data || audienceData.records;
+        if (Array.isArray(contacts)) {
+          audienceData = { contacts };
+        }
+      }
+
       // Use editingRequest if available, otherwise use selectedRequestId from dropdown
       const linkedRequestId = editingRequest?.id || selectedRequestId || null;
 
       const response = await fetch('/api/admin/audiences/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           name: manualAudienceName,
           data: audienceData,
@@ -233,7 +243,14 @@ export default function Audiences() {
         }),
       });
 
-      const result = await response.json();
+      let result;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        const text = await response.text();
+        throw new Error(text || `HTTP error: ${response.status}`);
+      }
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to create audience');
