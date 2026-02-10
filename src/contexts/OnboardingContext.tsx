@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -57,7 +57,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [isOnboarding, setIsOnboarding] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [showCompletion, setShowCompletion] = useState(false);
-  const [hasTriggered, setHasTriggered] = useState(false);
+  const hasTriggered = useRef(false);
 
   const completeOnboarding = useCallback(async () => {
     try {
@@ -128,20 +128,20 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const isDashboard = router.pathname === '/' || router.pathname === '/partner/dashboard';
     if (
-      !hasTriggered &&
+      !hasTriggered.current &&
       isDashboard &&
       userProfile &&
       userProfile.onboarding_completed !== true &&
       userProfile.role !== 'admin'
     ) {
-      setHasTriggered(true);
+      hasTriggered.current = true;
       // Small delay to let dashboard render
       const timer = setTimeout(() => {
         setShowWelcome(true);
       }, 800);
       return () => clearTimeout(timer);
     }
-  }, [router.pathname, userProfile, hasTriggered]);
+  }, [router.pathname, userProfile]);
 
   return (
     <OnboardingContext.Provider value={{ isOnboarding, startTour }}>
