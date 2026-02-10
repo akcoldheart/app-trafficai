@@ -221,39 +221,76 @@ export default function Audiences() {
       }
 
       // Extract just the contacts array to avoid sending unnecessary metadata
-      // and reduce payload size (the proxy duplicates data in both Data and data fields)
-      if (audienceData && typeof audienceData === 'object' && !Array.isArray(audienceData)) {
-        const contacts = audienceData.contacts || audienceData.Data || audienceData.data || audienceData.records;
-        if (Array.isArray(contacts)) {
-          audienceData = { contacts };
-        }
+      let contacts: Record<string, unknown>[] = [];
+      if (Array.isArray(audienceData)) {
+        contacts = audienceData;
+      } else if (audienceData && typeof audienceData === 'object') {
+        contacts = audienceData.contacts || audienceData.Data || audienceData.data || audienceData.records || [];
       }
+
+      if (contacts.length === 0) {
+        showToast('No contacts found in data', 'error');
+        return;
+      }
+
+      // Strip empty/null fields from each contact to reduce payload size
+      contacts = contacts.map((contact: Record<string, unknown>) => {
+        const cleaned: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(contact)) {
+          if (value !== null && value !== undefined && value !== '') {
+            cleaned[key] = value;
+          }
+        }
+        return cleaned;
+      });
 
       // Use editingRequest if available, otherwise use selectedRequestId from dropdown
       const linkedRequestId = editingRequest?.id || selectedRequestId || null;
 
-      const response = await fetch('/api/admin/audiences/manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: manualAudienceName,
-          data: audienceData,
-          request_id: linkedRequestId,
-        }),
-      });
+      // Helper to send a batch to the API
+      const sendBatch = async (batchContacts: Record<string, unknown>[], appendToAudienceId?: string) => {
+        const response = await fetch('/api/admin/audiences/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: manualAudienceName,
+            data: { contacts: batchContacts },
+            request_id: linkedRequestId,
+            ...(appendToAudienceId ? { append_to_audience_id: appendToAudienceId } : {}),
+          }),
+        });
 
+        const ct = response.headers.get('content-type');
+        if (ct && ct.includes('application/json')) {
+          const json = await response.json();
+          if (!response.ok) throw new Error(json.error || 'Failed to create audience');
+          return json;
+        } else {
+          const text = await response.text();
+          throw new Error(text || `HTTP error: ${response.status}`);
+        }
+      };
+
+      // Batch contacts to stay under Vercel's ~4.5MB payload limit
+      // Estimate ~2KB per cleaned contact, target ~3MB per batch = ~1500 contacts
+      const BATCH_SIZE = 500;
       let result;
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        result = await response.json();
-      } else {
-        const text = await response.text();
-        throw new Error(text || `HTTP error: ${response.status}`);
-      }
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create audience');
+      if (contacts.length <= BATCH_SIZE) {
+        // Small enough to send in one request
+        result = await sendBatch(contacts);
+      } else {
+        // Send first batch to create the audience
+        const firstBatch = contacts.slice(0, BATCH_SIZE);
+        result = await sendBatch(firstBatch);
+        const audienceId = result.audience?.id;
+
+        // Send remaining batches to append
+        for (let i = BATCH_SIZE; i < contacts.length; i += BATCH_SIZE) {
+          const batch = contacts.slice(i, i + BATCH_SIZE);
+          await sendBatch(batch, audienceId);
+        }
       }
 
       showToast('Audience created successfully!', 'success');

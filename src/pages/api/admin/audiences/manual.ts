@@ -44,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabase = createClient(req, res);
 
   try {
-    const { name, data, request_id } = req.body;
+    const { name, data, request_id, append_to_audience_id } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Audience name is required' });
@@ -74,12 +74,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // Generate a local audience ID for manual audiences
-    const audienceId = `manual_${crypto.randomUUID()}`;
+    // Use provided audience ID (for appending) or generate a new one
+    const audienceId = append_to_audience_id || `manual_${crypto.randomUUID()}`;
 
     // Log sample of incoming data for debugging
     console.log('Manual audience - Sample contact (first):', JSON.stringify(contacts[0], null, 2));
     console.log('Manual audience - Total contacts received:', contacts.length);
+    if (append_to_audience_id) {
+      console.log('Manual audience - Appending to existing audience:', append_to_audience_id);
+    }
 
     // Normalize contacts - handle various field name formats and nested resolution object
     const normalizedContacts = contacts.map((contact, index) => {
@@ -164,6 +167,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Log summary
     console.log('Manual audience - Normalized contacts count:', normalizedContacts.length);
+
+    // Handle appending to an existing audience (for batched uploads)
+    if (append_to_audience_id) {
+      // Find the existing audience request by audience_id
+      const { data: existingReq, error: findError } = await supabase
+        .from('audience_requests')
+        .select('id, form_data')
+        .eq('audience_id', append_to_audience_id)
+        .single();
+
+      if (findError || !existingReq) {
+        console.error('Error finding audience to append:', findError);
+        return res.status(404).json({ error: 'Audience not found for appending' });
+      }
+
+      const existingFormData = existingReq.form_data as Record<string, unknown> || {};
+      const existingAudience = (existingFormData.manual_audience || {}) as Record<string, unknown>;
+      const existingContacts = (existingAudience.contacts || []) as Json[];
+      const allContacts = [...existingContacts, ...(normalizedContacts as Json[])];
+
+      const { error: updateError } = await supabase
+        .from('audience_requests')
+        .update({
+          admin_notes: `Manual audience uploaded. ${allContacts.length} contacts.`,
+          form_data: {
+            ...existingFormData,
+            manual_audience: {
+              ...existingAudience,
+              total_records: allContacts.length,
+              contacts: allContacts,
+            },
+          } as Json,
+        })
+        .eq('id', existingReq.id);
+
+      if (updateError) {
+        console.error('Error appending to audience:', updateError);
+        return res.status(500).json({ error: 'Failed to append contacts' });
+      }
+
+      return res.status(200).json({
+        success: true,
+        audience: {
+          id: append_to_audience_id,
+          name: name.trim(),
+          total_records: allContacts.length,
+        },
+      });
+    }
 
     // If linked to a request, update it with the audience data
     if (request_id) {

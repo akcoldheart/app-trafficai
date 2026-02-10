@@ -172,11 +172,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         console.log(`[Proxy] All pages fetched. Total records: ${allRecords.length}`);
 
+        // Strip empty/null fields from each contact to reduce payload size
+        // audiencelab.io returns 100+ fields per contact, most of which are empty strings
+        const cleanedRecords = (allRecords as Record<string, unknown>[]).map(record => {
+          const cleaned: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(record)) {
+            if (value !== null && value !== undefined && value !== '') {
+              // Recursively clean nested objects
+              if (typeof value === 'object' && !Array.isArray(value)) {
+                const nested: Record<string, unknown> = {};
+                let hasValues = false;
+                for (const [nk, nv] of Object.entries(value as Record<string, unknown>)) {
+                  if (nv !== null && nv !== undefined && nv !== '') {
+                    nested[nk] = nv;
+                    hasValues = true;
+                  }
+                }
+                if (hasValues) cleaned[key] = nested;
+              } else {
+                cleaned[key] = value;
+              }
+            }
+          }
+          return cleaned;
+        });
+
         // Return combined data with all records under a single key
-        // Avoid duplicating the array in both Data and data to reduce payload size
         return res.status(200).json({
-          contacts: allRecords,
-          total_records: allRecords.length,
+          contacts: cleanedRecords,
+          total_records: cleanedRecords.length,
           fetched_all_pages: true,
           original_total_pages: totalPages,
         });
