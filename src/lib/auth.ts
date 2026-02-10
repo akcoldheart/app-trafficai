@@ -16,6 +16,7 @@ export interface UserProfile {
   plan: string | null;
   trial_ends_at: string | null;
   created_at: string | null;
+  onboarding_completed: boolean;
 }
 
 export interface UserRoleData {

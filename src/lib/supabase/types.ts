@@ -75,6 +75,7 @@ export interface Database {
           company: string | null;
           company_website: string | null;
           plan: string | null;
+          onboarding_completed: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -88,6 +89,7 @@ export interface Database {
           company?: string | null;
           company_website?: string | null;
           plan?: string | null;
+          onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -101,6 +103,7 @@ export interface Database {
           company?: string | null;
           company_website?: string | null;
           plan?: string | null;
+          onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
         };

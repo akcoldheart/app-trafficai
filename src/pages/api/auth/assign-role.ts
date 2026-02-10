@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get user's current data
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, email, role, role_id, full_name, phone, company, plan, trial_ends_at, created_at')
+      .select('id, email, role, role_id, full_name, phone, company, plan, trial_ends_at, created_at, onboarding_completed')
       .eq('id', user.id)
       .single();
 

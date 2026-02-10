@@ -167,10 +167,10 @@ export default function Sidebar() {
 
         {/* Sidebar Menu */}
         <div className="collapse navbar-collapse" id="sidebar-menu">
-          <ul className="navbar-nav pt-lg-3">
+          <ul className="navbar-nav pt-lg-3" data-tour="sidebar-nav">
             {visibleMenuItems.map((item) => (
               <li key={item.id} className={`nav-item ${isActive(item.href) ? 'active' : ''}`}>
-                <Link href={item.href} className={`nav-link ${isActive(item.href) ? 'active' : ''}`}>
+                <Link href={item.href} className={`nav-link ${isActive(item.href) ? 'active' : ''}`} data-tour={`nav-${item.href === '/' ? 'dashboard' : item.href.replace(/^\//, '').replace(/\//g, '-')}`}>
                   <span className="nav-link-icon d-md-none d-lg-inline-block">
                     {getIcon(item.icon)}
                   </span>

@@ -4,11 +4,13 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { UpgradeProvider } from '@/contexts/UpgradeContext';
+import { OnboardingProvider } from '@/contexts/OnboardingContext';
 import ChatBubble from '@/components/ChatBubble';
 
 // Import Bootstrap and Tabler CSS
 import '@tabler/core/dist/css/tabler.min.css';
 import '@tabler/core/dist/css/tabler-themes.min.css';
+import 'driver.js/dist/driver.css';
 import '@/styles/globals.css';
 
 export default function App({ Component, pageProps }: AppProps) {
@@ -32,10 +34,12 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta httpEquiv="X-UA-Compatible" content="ie=edge" />
       </Head>
       <AuthProvider>
-        <UpgradeProvider>
-          <Component {...pageProps} />
-          {!isAuthPage && <ChatBubble />}
-        </UpgradeProvider>
+        <OnboardingProvider>
+          <UpgradeProvider>
+            <Component {...pageProps} />
+            {!isAuthPage && <ChatBubble />}
+          </UpgradeProvider>
+        </OnboardingProvider>
       </AuthProvider>
     </>
   );

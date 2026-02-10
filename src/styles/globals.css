@@ -1013,3 +1013,166 @@ body {
     max-width: 400px;
   }
 }
+
+/* ============================================
+   Onboarding Tour - Driver.js Overrides
+   ============================================ */
+
+.driver-popover.onboarding-popover {
+  background: #1a1625;
+  color: #e2e0e8;
+  border: 1px solid rgba(147, 51, 234, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 320px;
+}
+
+.driver-popover.onboarding-popover .driver-popover-title {
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.driver-popover.onboarding-popover .driver-popover-description {
+  color: #a8a3b5;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.driver-popover.onboarding-popover .driver-popover-progress-text {
+  color: #8b839e;
+  font-size: 0.75rem;
+}
+
+.driver-popover.onboarding-popover .driver-popover-navigation-btns {
+  gap: 0.5rem;
+}
+
+.driver-popover.onboarding-popover .driver-popover-next-btn {
+  background: #d6336c;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.375rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-shadow: none;
+}
+
+.driver-popover.onboarding-popover .driver-popover-next-btn:hover {
+  background: #c2255c;
+}
+
+.driver-popover.onboarding-popover .driver-popover-prev-btn {
+  background: transparent;
+  color: #a8a3b5;
+  border: 1px solid rgba(147, 51, 234, 0.3);
+  border-radius: 6px;
+  padding: 0.375rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-shadow: none;
+}
+
+.driver-popover.onboarding-popover .driver-popover-prev-btn:hover {
+  color: #ffffff;
+  border-color: rgba(147, 51, 234, 0.5);
+}
+
+.driver-popover.onboarding-popover .driver-popover-close-btn {
+  color: #8b839e;
+}
+
+.driver-popover.onboarding-popover .driver-popover-close-btn:hover {
+  color: #ffffff;
+}
+
+.driver-popover.onboarding-popover .driver-popover-arrow-side-left .driver-popover-arrow,
+.driver-popover.onboarding-popover .driver-popover-arrow-side-right .driver-popover-arrow,
+.driver-popover.onboarding-popover .driver-popover-arrow-side-top .driver-popover-arrow,
+.driver-popover.onboarding-popover .driver-popover-arrow-side-bottom .driver-popover-arrow {
+  border-color: #1a1625;
+}
+
+/* Onboarding Welcome Modal */
+.onboarding-welcome-header {
+  background: linear-gradient(135deg, #9333ea 0%, #d6336c 100%);
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: #ffffff;
+}
+
+.onboarding-welcome-header h2 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.onboarding-welcome-header p {
+  margin: 0;
+  opacity: 0.9;
+  font-size: 0.9375rem;
+}
+
+.onboarding-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.onboarding-step-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9375rem;
+  color: #e2e0e8;
+}
+
+.onboarding-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #9333ea, #d6336c);
+  color: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* Onboarding Completion Modal */
+.onboarding-completion-header {
+  background: linear-gradient(135deg, #0ca678 0%, #1098ad 100%);
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: #ffffff;
+}
+
+.onboarding-completion-header h2 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.onboarding-completion-header p {
+  margin: 0;
+  opacity: 0.9;
+  font-size: 0.9375rem;
+}
+
+.onboarding-completion-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 0.75rem auto;
+  font-size: 1.5rem;
+  color: #ffffff;
+}
