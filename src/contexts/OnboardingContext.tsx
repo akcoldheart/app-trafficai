@@ -125,11 +125,12 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   // Auto-trigger on dashboard for new users
   useEffect(() => {
+    const isDashboard = router.pathname === '/' || router.pathname === '/partner/dashboard';
     if (
       !hasTriggered &&
-      router.pathname === '/' &&
+      isDashboard &&
       userProfile &&
-      userProfile.onboarding_completed === false &&
+      userProfile.onboarding_completed !== true &&
       userProfile.role !== 'admin'
     ) {
       setHasTriggered(true);
