@@ -420,12 +420,13 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
 
     console.log(`[visitors-api-fetcher] Done. Upserted ${totalUpserted} visitors.`);
 
-    // Update pixel fetch status
+    // Update pixel fetch status and events count
     await supabaseAdmin
       .from('pixels')
       .update({
         visitors_api_last_fetched_at: new Date().toISOString(),
         visitors_api_last_fetch_status: `success: ${totalUpserted} visitors synced`,
+        events_count: totalFetched,
       })
       .eq('id', pixel.id);
 
