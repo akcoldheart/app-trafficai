@@ -117,10 +117,10 @@ function aggregateContactEvents(contacts: ApiContact[], pixelId: string, userId:
   const now = new Date().toISOString();
   const results: ReturnType<typeof mapGroupToVisitor>[] = [];
 
-  for (const [uuid, events] of grouped) {
+  grouped.forEach((events, uuid) => {
     const row = mapGroupToVisitor(uuid, events, pixelId, userId, now);
     if (row) results.push(row);
-  }
+  });
 
   return results;
 }
