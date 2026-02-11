@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const authResult = await requireRole(req, res, 'admin');
   if (!authResult) return;
 
-  const { name, domain, user_id, pixel_id, custom_installation_code } = req.body;
+  const { name, domain, user_id, pixel_id, custom_installation_code, visitors_api_url } = req.body;
 
   if (!name || typeof name !== 'string') {
     return res.status(400).json({ error: 'Pixel name is required' });
@@ -48,17 +48,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Create the pixel with custom pixel ID and installation code
+    const insertData = {
+      user_id: user_id as string,
+      name: (name as string).trim(),
+      domain: (domain as string).trim().toLowerCase(),
+      pixel_code: (pixel_id as string).trim(),
+      status: 'active' as const,
+      events_count: 0,
+      custom_installation_code: (custom_installation_code as string).trim(),
+      ...(visitors_api_url && typeof visitors_api_url === 'string' && visitors_api_url.trim()
+        ? { visitors_api_url: visitors_api_url.trim() }
+        : {}),
+    };
+
     const { data: pixel, error: pixelError } = await supabase
       .from('pixels')
-      .insert({
-        user_id: user_id,
-        name: name.trim(),
-        domain: domain.trim().toLowerCase(),
-        pixel_code: pixel_id.trim(),
-        status: 'active',
-        events_count: 0,
-        custom_installation_code: custom_installation_code.trim(),
-      })
+      .insert(insertData)
       .select()
       .single();
 

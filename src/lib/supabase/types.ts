@@ -215,6 +215,9 @@ export interface Database {
           created_at: string;
           updated_at: string;
           custom_installation_code: string | null;
+          visitors_api_url: string | null;
+          visitors_api_last_fetched_at: string | null;
+          visitors_api_last_fetch_status: string | null;
         };
         Insert: {
           id?: string;
@@ -228,6 +231,9 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           custom_installation_code?: string | null;
+          visitors_api_url?: string | null;
+          visitors_api_last_fetched_at?: string | null;
+          visitors_api_last_fetch_status?: string | null;
         };
         Update: {
           id?: string;
@@ -241,6 +247,9 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
           custom_installation_code?: string | null;
+          visitors_api_url?: string | null;
+          visitors_api_last_fetched_at?: string | null;
+          visitors_api_last_fetch_status?: string | null;
         };
         Relationships: [];
       };

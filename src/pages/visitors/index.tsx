@@ -106,6 +106,7 @@ export default function Visitors() {
   const [visitorDetails, setVisitorDetails] = useState<VisitorDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -345,6 +346,40 @@ export default function Visitors() {
     }
   };
 
+  const handleRefresh = async () => {
+    // If a pixel is selected, sync visitors from external API in background
+    if (selectedPixel) {
+      setSyncing(true);
+      // Fire off sync in background - don't await it before refreshing DB
+      fetch(`/api/pixels/${selectedPixel}/sync-visitors`, { method: 'POST' })
+        .then(async (response) => {
+          const data = await response.json();
+          if (response.ok) {
+            if (data.totalUpserted > 0) {
+              showToast(`Synced ${data.totalUpserted} visitors from API (${data.totalFetched} fetched)`, 'success');
+            } else if (data.totalFetched > 0) {
+              showToast(`${data.totalFetched} contacts fetched, all already up to date`, 'success');
+            }
+            // Refresh again after sync completes to show new data
+            fetchVisitors();
+          } else {
+            showToast(data.error || 'Failed to sync visitors from API', 'error');
+            console.error('Sync API error:', data);
+          }
+        })
+        .catch((err) => {
+          console.error('Sync error:', err);
+          showToast('Failed to sync visitors from API', 'error');
+        })
+        .finally(() => {
+          setSyncing(false);
+        });
+    }
+
+    // Immediately refresh from local DB (shows existing data right away)
+    fetchVisitors();
+  };
+
   return (
     <Layout title="Visitors" pageTitle="Visitors">
       {/* Filters Card */}
@@ -501,12 +536,21 @@ export default function Visitors() {
                   <button
                     type="button"
                     className="btn btn-sm"
-                    onClick={fetchVisitors}
-                    disabled={loading}
-                    title="Refresh"
+                    onClick={handleRefresh}
+                    disabled={loading || syncing}
+                    title="Sync from API & Refresh"
                   >
-                    <IconRefresh size={16} className="me-1" />
-                    Refresh
+                    {syncing ? (
+                      <>
+                        <IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                        Syncing...
+                      </>
+                    ) : (
+                      <>
+                        <IconRefresh size={16} className="me-1" />
+                        Refresh
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -686,7 +730,7 @@ export default function Visitors() {
                 </div>
 
                 {/* Contact Info */}
-                {(selectedVisitor.email || selectedVisitor.company || selectedVisitor.linkedin_url || selectedVisitor.city) && (
+                {(selectedVisitor.email || selectedVisitor.company || selectedVisitor.linkedin_url || selectedVisitor.city || selectedVisitor.visitor_id) && (
                   <div className="mb-4">
                     <h5 className="text-muted small text-uppercase mb-3">Contact Information</h5>
                     <div className="list-group list-group-flush">
@@ -726,6 +770,14 @@ export default function Visitors() {
                           {[selectedVisitor.city, selectedVisitor.state, selectedVisitor.country]
                             .filter(Boolean)
                             .join(', ')}
+                        </div>
+                      )}
+                      {selectedVisitor.visitor_id && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-secondary-lt me-3">
+                            <IconFileText size={14} />
+                          </span>
+                          <code className="small text-muted">{selectedVisitor.visitor_id}</code>
                         </div>
                       )}
                     </div>

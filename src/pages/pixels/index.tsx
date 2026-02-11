@@ -21,6 +21,7 @@ import {
   IconUser,
   IconDeviceFloppy,
   IconPencil,
+  IconApi,
 } from '@tabler/icons-react';
 import type { Pixel, PixelStatus, PixelRequest, RequestStatus } from '@/lib/supabase/types';
 
@@ -64,6 +65,15 @@ export default function Pixels() {
   const [editedPixelId, setEditedPixelId] = useState('');
   const [isEditingPixelId, setIsEditingPixelId] = useState(false);
   const [savingPixelId, setSavingPixelId] = useState(false);
+
+  // Visitors API URL editing state (admin only)
+  const [editedApiUrl, setEditedApiUrl] = useState('');
+  const [isEditingApiUrl, setIsEditingApiUrl] = useState(false);
+  const [savingApiUrl, setSavingApiUrl] = useState(false);
+  const [apiUrlMessage, setApiUrlMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Visitors API URL for create modal
+  const [visitorsApiUrl, setVisitorsApiUrl] = useState('');
 
   // Installation guide modal state
   const [guideModalOpen, setGuideModalOpen] = useState(false);
@@ -159,9 +169,12 @@ export default function Pixels() {
     if (selectedPixel && selectedPixel.id !== lastSelectedId) {
       setEditedCode(selectedPixel.custom_installation_code || '');
       setEditedPixelId(selectedPixel.pixel_code || '');
+      setEditedApiUrl(selectedPixel.visitors_api_url || '');
       setIsEditingCode(false); // Exit edit mode when switching pixels
       setIsEditingPixelId(false); // Exit pixel ID edit mode when switching pixels
+      setIsEditingApiUrl(false); // Exit API URL edit mode when switching pixels
       setSaveMessage(null); // Clear any previous message only when switching pixels
+      setApiUrlMessage(null);
       setLastSelectedId(selectedPixel.id);
     }
   }, [selectedPixel, lastSelectedId]);
@@ -205,6 +218,7 @@ export default function Pixels() {
     setShowCreateModal(true);
     setCustomInstallationCode('');
     setCustomPixelId('');
+    setVisitorsApiUrl('');
     fetchUsers();
 
     // If called with a prefill request, set the data
@@ -247,6 +261,7 @@ export default function Pixels() {
     setNewPixel({ name: '', domain: '' });
     setCustomInstallationCode('');
     setCustomPixelId('');
+    setVisitorsApiUrl('');
     setFilledFromRequest(null);
   };
 
@@ -269,13 +284,17 @@ export default function Pixels() {
 
     setProcessing(true);
     try {
-      const payload = {
+      const payload: Record<string, string> = {
         name: newPixel.name,
         domain: newPixel.domain,
         user_id: selectedUserId,
         pixel_id: customPixelId.trim(),
         custom_installation_code: customInstallationCode.trim(),
       };
+
+      if (visitorsApiUrl.trim()) {
+        payload.visitors_api_url = visitorsApiUrl.trim();
+      }
 
       console.log('Creating pixel with payload:', payload);
 
@@ -514,6 +533,39 @@ export default function Pixels() {
       showToast('error', (err as Error).message);
     } finally {
       setSavingPixelId(false);
+    }
+  };
+
+  const handleSaveApiUrl = async () => {
+    if (!selectedPixel || !isAdmin) return;
+
+    setSavingApiUrl(true);
+    setApiUrlMessage(null);
+    try {
+      const response = await fetch(`/api/pixels/${selectedPixel.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          visitors_api_url: editedApiUrl.trim() || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update visitors API URL');
+      }
+
+      const updatedPixel = { ...selectedPixel, visitors_api_url: editedApiUrl.trim() || null };
+      setPixels(pixels.map(p => p.id === selectedPixel.id ? updatedPixel : p));
+      setSelectedPixel(updatedPixel);
+      setIsEditingApiUrl(false);
+      setApiUrlMessage({ type: 'success', text: 'API URL saved successfully!' });
+      setTimeout(() => setApiUrlMessage(null), 3000);
+    } catch (err) {
+      setApiUrlMessage({ type: 'error', text: (err as Error).message });
+    } finally {
+      setSavingApiUrl(false);
     }
   };
 
@@ -1140,6 +1192,135 @@ export default function Pixels() {
                   )}
                 </div>
 
+                {/* Visitors API URL - Admin only */}
+                {isAdmin && (
+                  <div className="mb-4">
+                    <h4 className="mb-3">Visitors API URL</h4>
+                    <div className="card" style={{ backgroundColor: '#1e293b', border: 'none' }}>
+                      <div className="card-body p-0">
+                        <div
+                          className="p-3"
+                          style={{
+                            backgroundColor: '#0f172a',
+                            borderRadius: '8px 8px 0 0',
+                            borderBottom: '1px solid #334155'
+                          }}
+                        >
+                          <div className="d-flex align-items-center justify-content-between">
+                            <div className="d-flex align-items-center">
+                              <IconApi size={16} className="me-2" style={{ color: '#94a3b8' }} />
+                              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 500 }}>External API Endpoint</span>
+                              {isEditingApiUrl && (
+                                <span className="badge bg-yellow-lt text-yellow ms-2" style={{ fontSize: '10px' }}>Editing</span>
+                              )}
+                            </div>
+                            <div className="d-flex align-items-center gap-2">
+                              {selectedPixel.visitors_api_last_fetched_at && (
+                                <span style={{ color: '#64748b', fontSize: '11px' }}>
+                                  Last fetched: {new Date(selectedPixel.visitors_api_last_fetched_at).toLocaleString()}
+                                </span>
+                              )}
+                              {selectedPixel.visitors_api_last_fetch_status && (
+                                <span className={`badge ${selectedPixel.visitors_api_last_fetch_status.startsWith('success') ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`} style={{ fontSize: '10px' }}>
+                                  {selectedPixel.visitors_api_last_fetch_status.startsWith('success') ? 'Success' : 'Error'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          {isEditingApiUrl ? (
+                            <input
+                              type="url"
+                              className="form-control font-monospace border-0"
+                              value={editedApiUrl}
+                              onChange={(e) => setEditedApiUrl(e.target.value)}
+                              placeholder="https://api.audiencelab.io/segments/UUID?page=1&page_size=50"
+                              autoFocus
+                              style={{
+                                fontSize: '13px',
+                                backgroundColor: 'transparent',
+                                color: '#e2e8f0',
+                              }}
+                            />
+                          ) : (
+                            <div style={{ minHeight: '38px', display: 'flex', alignItems: 'center' }}>
+                              {selectedPixel.visitors_api_url ? (
+                                <code style={{
+                                  color: '#a5b4fc',
+                                  fontSize: '13px',
+                                  wordBreak: 'break-all',
+                                  fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace'
+                                }}>
+                                  {selectedPixel.visitors_api_url}
+                                </code>
+                              ) : (
+                                <span style={{ color: '#64748b', fontStyle: 'italic', fontSize: '13px' }}>
+                                  No API URL configured
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          className="p-3 d-flex align-items-center justify-content-between"
+                          style={{
+                            backgroundColor: '#0f172a',
+                            borderRadius: '0 0 8px 8px',
+                            borderTop: '1px solid #334155'
+                          }}
+                        >
+                          <div className="d-flex align-items-center gap-2">
+                            {apiUrlMessage && (
+                              <span className={`badge ${apiUrlMessage.type === 'success' ? 'bg-green-lt text-green' : 'bg-red-lt text-red'}`}>
+                                {apiUrlMessage.type === 'success' ? <IconCheck size={12} className="me-1" /> : <IconX size={12} className="me-1" />}
+                                {apiUrlMessage.text}
+                              </span>
+                            )}
+                          </div>
+                          <div className="d-flex gap-2">
+                            {isEditingApiUrl ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost-secondary btn-sm"
+                                  onClick={() => {
+                                    setEditedApiUrl(selectedPixel.visitors_api_url || '');
+                                    setIsEditingApiUrl(false);
+                                  }}
+                                  disabled={savingApiUrl}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  onClick={handleSaveApiUrl}
+                                  disabled={savingApiUrl || editedApiUrl === (selectedPixel.visitors_api_url || '')}
+                                >
+                                  {savingApiUrl ? (
+                                    <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />Saving...</>
+                                  ) : (
+                                    <><IconDeviceFloppy size={14} className="me-1" />Save</>
+                                  )}
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-ghost-secondary btn-sm"
+                                onClick={() => setIsEditingApiUrl(true)}
+                              >
+                                <IconPencil size={14} className="me-1" />Edit
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Quick Install - Only show for non-admin users */}
                 {!isAdmin && (
                   <div>
@@ -1344,6 +1525,23 @@ export default function Pixels() {
                     style={{ fontSize: '12px', backgroundColor: '#1e293b', color: '#e2e8f0' }}
                   />
                   <small className="text-muted">Paste the custom tracking script code</small>
+                </div>
+
+                {/* Step 5: Visitors API URL (Optional) */}
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">
+                    <span className="badge bg-secondary me-2">5</span>
+                    Visitors API URL <span className="text-muted fw-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="url"
+                    className="form-control font-monospace"
+                    placeholder="https://api.audiencelab.io/segments/UUID?page=1&page_size=50"
+                    value={visitorsApiUrl}
+                    onChange={(e) => setVisitorsApiUrl(e.target.value)}
+                    style={{ fontSize: '12px' }}
+                  />
+                  <small className="text-muted">External API URL to pull visitor/contact data (can be added later)</small>
                 </div>
               </div>
               <div className="modal-footer">
