@@ -183,11 +183,11 @@ export default function ChatBubble() {
       const { data: existingConv } = await supabase
         .from('chat_conversations')
         .select('*')
-        .eq('customer_email', customerEmail.toLowerCase().trim())
+        .ilike('customer_email', customerEmail.toLowerCase().trim())
         .eq('status', 'open')
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       let conv = existingConv;
 
@@ -344,11 +344,11 @@ export default function ChatBubble() {
       try {
         const email = user.email!.toLowerCase();
 
-        // Find latest open conversation for this user
+        // Find latest open conversation for this user (case-insensitive email match)
         const { data: conv } = await supabase
           .from('chat_conversations')
           .select('id')
-          .eq('customer_email', email)
+          .ilike('customer_email', email)
           .eq('status', 'open')
           .order('last_message_at', { ascending: false, nullsFirst: false })
           .limit(1)

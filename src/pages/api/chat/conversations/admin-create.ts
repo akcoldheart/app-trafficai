@@ -19,11 +19,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'user_email and message are required' });
     }
 
+    const normalizedEmail = user_email.toLowerCase().trim();
+
     // Check for existing open conversation with this email
     const { data: existing, error: findError } = await supabase
       .from('chat_conversations')
       .select('*')
-      .eq('customer_email', user_email)
+      .ilike('customer_email', normalizedEmail)
       .eq('status', 'open')
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .limit(1)
@@ -54,8 +56,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: conversation, error: createError } = await supabase
       .from('chat_conversations')
       .insert({
-        customer_name: user_name || user_email,
-        customer_email: user_email,
+        customer_name: user_name || normalizedEmail,
+        customer_email: normalizedEmail,
         source: 'admin',
         status: 'open',
       })
