@@ -21,6 +21,7 @@ import {
   IconX,
   IconArrowsSort,
   IconFileText,
+  IconPhone,
   IconLink,
   IconForms,
   IconPlayerPlay,
@@ -730,7 +731,7 @@ export default function Visitors() {
                 </div>
 
                 {/* Contact Info */}
-                {(selectedVisitor.email || selectedVisitor.company || selectedVisitor.linkedin_url || selectedVisitor.city || selectedVisitor.visitor_id) && (
+                {(selectedVisitor.email || (selectedVisitor.metadata as Record<string, string> | null)?.phone || selectedVisitor.company || selectedVisitor.linkedin_url || selectedVisitor.city || selectedVisitor.visitor_id) && (
                   <div className="mb-4">
                     <h5 className="text-muted small text-uppercase mb-3">Contact Information</h5>
                     <div className="list-group list-group-flush">
@@ -741,6 +742,16 @@ export default function Visitors() {
                           </span>
                           <a href={`mailto:${selectedVisitor.email}`} className="text-reset">
                             {selectedVisitor.email}
+                          </a>
+                        </div>
+                      )}
+                      {(selectedVisitor.metadata as Record<string, string> | null)?.phone && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-teal-lt me-3">
+                            <IconPhone size={14} />
+                          </span>
+                          <a href={`tel:${(selectedVisitor.metadata as Record<string, string>).phone}`} className="text-reset">
+                            {(selectedVisitor.metadata as Record<string, string>).phone}
                           </a>
                         </div>
                       )}
@@ -935,7 +946,7 @@ export default function Visitors() {
                       </tr>
                       <tr>
                         <td className="text-muted">Last Seen</td>
-                        <td>{new Date(selectedVisitor.last_seen_at).toLocaleString()}</td>
+                        <td>{formatTimeAgo(selectedVisitor.last_seen_at)}</td>
                       </tr>
                       {selectedVisitor.user_agent && (
                         <tr>

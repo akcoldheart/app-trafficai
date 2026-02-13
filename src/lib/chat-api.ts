@@ -160,6 +160,20 @@ export async function sendMessage(data: SendMessageData): Promise<{ data: ChatMe
 }
 
 /**
+ * Create a new conversation (admin-initiated)
+ */
+export async function createConversation(data: {
+  user_email: string;
+  user_name?: string;
+  message: string;
+}): Promise<{ data: ChatConversation; existing: boolean }> {
+  return request<{ data: ChatConversation; existing: boolean }>('/conversations/admin-create', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+/**
  * Get unread conversation count
  */
 export async function getUnreadCount(): Promise<{ count: number }> {
@@ -174,6 +188,7 @@ export const ChatAPI = {
   closeConversation,
   reopenConversation,
   sendMessage,
+  createConversation,
   getUnreadCount,
 };
 

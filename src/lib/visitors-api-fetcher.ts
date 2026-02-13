@@ -158,8 +158,8 @@ function mapGroupToVisitor(
   let maxScrollDepth = 0;
   let totalTimeOnSite = 0;
   const sessionDates = new Set<string>();
-  let earliestSeen = now;
-  let latestSeen = now;
+  let earliestSeen: string | null = null;
+  let latestSeen: string | null = null;
 
   for (const event of events) {
     const eventType = (event.EVENT_TYPE as string || '').toLowerCase();
@@ -170,8 +170,9 @@ function mapGroupToVisitor(
     if (startDate) {
       const dateKey = startDate.substring(0, 10); // YYYY-MM-DD
       sessionDates.add(dateKey);
-      if (startDate < earliestSeen) earliestSeen = startDate;
-      if (endDate && endDate > latestSeen) latestSeen = endDate;
+      if (!earliestSeen || startDate < earliestSeen) earliestSeen = startDate;
+      if (endDate && (!latestSeen || endDate > latestSeen)) latestSeen = endDate;
+      if (!latestSeen || startDate > latestSeen) latestSeen = startDate;
     }
 
     // Aggregate time on site from activity windows
@@ -228,8 +229,8 @@ function mapGroupToVisitor(
     ip_address: get('IP_ADDRESS'),
     first_page_url: get('URL'),
     first_referrer: get('REFERRER_URL'),
-    first_seen_at: earliestSeen,
-    last_seen_at: latestSeen,
+    first_seen_at: earliestSeen || now,
+    last_seen_at: latestSeen || now,
     total_pageviews: totalPageviews,
     total_sessions: sessionDates.size,
     total_time_on_site: totalTimeOnSite,
@@ -238,7 +239,7 @@ function mapGroupToVisitor(
     form_submissions: formSubmissions,
     lead_score: leadScore,
     is_identified: !!email,
-    identified_at: email ? earliestSeen : null,
+    identified_at: email ? (earliestSeen || now) : null,
     is_enriched: true,
     enriched_at: now,
     enrichment_source: 'visitors_api',

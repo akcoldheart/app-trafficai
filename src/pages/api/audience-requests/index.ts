@@ -47,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'POST') {
       // Submit new audience request
-      const { request_type, name, form_data } = req.body;
+      const { request_type, name, form_data, data_points } = req.body;
 
       if (!request_type || !name || !form_data) {
         return res.status(400).json({ error: 'Request type, name, and form data are required' });
@@ -67,6 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           request_type,
           name,
           form_data,
+          data_points: Array.isArray(data_points) ? data_points : [],
           status: 'pending',
         })
         .select()

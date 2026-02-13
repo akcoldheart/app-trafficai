@@ -787,6 +787,26 @@ export default function AdminRequests() {
                           ? (request as PixelRequest).domain
                           : `${(request as AudienceRequest).request_type} audience`}
                       </div>
+                      {((type === 'pixel' && (request as PixelRequest).data_points?.length > 0) ||
+                        (type === 'audience' && (request as AudienceRequest).data_points?.length > 0)) && (
+                        <div className="d-flex flex-wrap gap-1 mt-1">
+                          {(type === 'pixel'
+                            ? (request as PixelRequest).data_points
+                            : (request as AudienceRequest).data_points
+                          ).map((dp) => (
+                            <span key={dp} className="badge" style={{
+                              fontSize: '9px',
+                              fontWeight: 500,
+                              backgroundColor: 'rgba(32, 107, 196, 0.12)',
+                              color: '#4299e1',
+                              borderRadius: '10px',
+                              padding: '1px 6px',
+                            }}>
+                              {dp}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <div>{request.user?.email || 'Unknown'}</div>
@@ -908,6 +928,26 @@ export default function AdminRequests() {
                           {' • '}
                           {selectedRequest.request.user?.email}
                         </div>
+                        {((selectedRequest.type === 'pixel' && (selectedRequest.request as PixelRequest).data_points?.length > 0) ||
+                          (selectedRequest.type === 'audience' && (selectedRequest.request as AudienceRequest).data_points?.length > 0)) && (
+                          <div className="d-flex flex-wrap gap-1 mt-1">
+                            {(selectedRequest.type === 'pixel'
+                              ? (selectedRequest.request as PixelRequest).data_points
+                              : (selectedRequest.request as AudienceRequest).data_points
+                            ).map((dp) => (
+                              <span key={dp} className="badge" style={{
+                                fontSize: '10px',
+                                fontWeight: 500,
+                                backgroundColor: 'rgba(32, 107, 196, 0.15)',
+                                color: '#4299e1',
+                                borderRadius: '10px',
+                                padding: '2px 8px',
+                              }}>
+                                {dp}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'POST') {
       // Submit new pixel request
-      const { name, domain } = req.body;
+      const { name, domain, data_points } = req.body;
 
       if (!name || !domain) {
         return res.status(400).json({ error: 'Name and domain are required' });
@@ -57,6 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           user_id: user.id,
           name,
           domain,
+          data_points: Array.isArray(data_points) ? data_points : [],
           status: 'pending',
         })
         .select()

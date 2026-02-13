@@ -41,7 +41,8 @@ export default function Pixels() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPixel, setSelectedPixel] = useState<Pixel | null>(null);
-  const [newPixel, setNewPixel] = useState({ name: '', domain: '' });
+  const allDataPoints = ['business', 'financial', 'personal', 'family', 'housing', 'location'];
+  const [newPixel, setNewPixel] = useState({ name: '', domain: '', data_points: [] as string[] });
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -224,11 +225,11 @@ export default function Pixels() {
     // If called with a prefill request, set the data
     if (prefillRequest) {
       setSelectedUserId(prefillRequest.user_id);
-      setNewPixel({ name: prefillRequest.name, domain: prefillRequest.domain });
+      setNewPixel({ name: prefillRequest.name, domain: prefillRequest.domain, data_points: prefillRequest.data_points || [] });
       setFilledFromRequest(prefillRequest);
     } else {
       setSelectedUserId('');
-      setNewPixel({ name: '', domain: '' });
+      setNewPixel({ name: '', domain: '', data_points: [] });
       setFilledFromRequest(null);
     }
   };
@@ -243,13 +244,13 @@ export default function Pixels() {
     );
 
     if (pendingRequest) {
-      setNewPixel({ name: pendingRequest.name, domain: pendingRequest.domain });
+      setNewPixel({ name: pendingRequest.name, domain: pendingRequest.domain, data_points: pendingRequest.data_points || [] });
       setFilledFromRequest(pendingRequest);
     } else {
       // Only clear if we're switching to a user without a request
       // Don't clear if we just switched from a user with a request to avoid losing edits
       if (filledFromRequest && filledFromRequest.user_id !== userId) {
-        setNewPixel({ name: '', domain: '' });
+        setNewPixel({ name: '', domain: '', data_points: [] });
         setFilledFromRequest(null);
       }
     }
@@ -258,7 +259,7 @@ export default function Pixels() {
   const handleCloseCreateModal = () => {
     setShowCreateModal(false);
     setSelectedUserId('');
-    setNewPixel({ name: '', domain: '' });
+    setNewPixel({ name: '', domain: '', data_points: [] });
     setCustomInstallationCode('');
     setCustomPixelId('');
     setVisitorsApiUrl('');
@@ -357,7 +358,7 @@ export default function Pixels() {
         }
 
         setPixels([data.pixel, ...pixels]);
-        setNewPixel({ name: '', domain: '' });
+        setNewPixel({ name: '', domain: '', data_points: [] });
         setShowCreateForm(false);
         setSelectedPixel(data.pixel);
       } else {
@@ -374,7 +375,7 @@ export default function Pixels() {
         }
 
         setPixelRequests([data.request, ...pixelRequests]);
-        setNewPixel({ name: '', domain: '' });
+        setNewPixel({ name: '', domain: '', data_points: [] });
         setShowCreateForm(false);
         setActiveTab('requests');
         showToast('success', 'Your pixel request has been submitted for admin approval.');
@@ -739,6 +740,78 @@ export default function Pixels() {
                       disabled={creating}
                     />
                   </div>
+                  <div className="mb-3">
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <label className="form-label mb-0">Data Points</label>
+                      <span
+                        className="text-muted"
+                        style={{ fontSize: '11px', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '2px' }}
+                        onClick={() => {
+                          const allSelected = newPixel.data_points.length === allDataPoints.length;
+                          setNewPixel({ ...newPixel, data_points: allSelected ? [] : [...allDataPoints] });
+                        }}
+                      >
+                        {newPixel.data_points.length === allDataPoints.length ? 'Deselect all' : 'Select all'}
+                      </span>
+                    </div>
+                    <p className="text-muted mb-2" style={{ fontSize: '11px', lineHeight: 1.4 }}>
+                      Select at least one data category to collect from visitors.
+                    </p>
+                    <div className="d-flex flex-wrap gap-2">
+                      {[
+                        { key: 'business', label: 'Business' },
+                        { key: 'financial', label: 'Financial' },
+                        { key: 'personal', label: 'Personal' },
+                        { key: 'family', label: 'Family' },
+                        { key: 'housing', label: 'Housing' },
+                        { key: 'location', label: 'Location' },
+                      ].map((point) => {
+                        const isSelected = newPixel.data_points.includes(point.key);
+                        return (
+                          <button
+                            key={point.key}
+                            type="button"
+                            className="btn btn-sm"
+                            disabled={creating}
+                            onClick={() => {
+                              setNewPixel({
+                                ...newPixel,
+                                data_points: isSelected
+                                  ? newPixel.data_points.filter((d) => d !== point.key)
+                                  : [...newPixel.data_points, point.key],
+                              });
+                            }}
+                            style={{
+                              backgroundColor: isSelected ? 'rgba(32, 107, 196, 0.15)' : 'transparent',
+                              border: isSelected ? '1px solid rgba(32, 107, 196, 0.5)' : '1px solid var(--tblr-border-color)',
+                              color: isSelected ? '#4299e1' : 'var(--tblr-body-color)',
+                              borderRadius: '20px',
+                              padding: '4px 12px',
+                              fontSize: '12px',
+                              fontWeight: isSelected ? 600 : 400,
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            {isSelected && <IconCheck size={12} className="me-1" />}
+                            {point.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mb-3" style={{
+                    background: 'linear-gradient(135deg, rgba(32, 107, 196, 0.08), rgba(32, 196, 140, 0.08))',
+                    border: '1px solid rgba(32, 196, 140, 0.2)',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                  }}>
+                    <div className="d-flex align-items-center gap-2" style={{ fontSize: '12px', color: 'var(--tblr-body-color)' }}>
+                      <IconCircleCheck size={16} style={{ color: '#20c997', flexShrink: 0 }} />
+                      <span>
+                        All identified visitors will include <strong>Name</strong>, <strong>Email</strong> &amp; <strong>Phone</strong>
+                      </span>
+                    </div>
+                  </div>
                   <div className="alert alert-info py-2 mb-3" style={{ fontSize: '12px' }}>
                     <IconInfoCircle size={14} className="me-1" />
                     Your request will be reviewed by an admin.
@@ -747,13 +820,13 @@ export default function Pixels() {
                     <button
                       className="btn btn-primary btn-sm flex-fill"
                       onClick={handleCreatePixel}
-                      disabled={!newPixel.name || !newPixel.domain || creating}
+                      disabled={!newPixel.name || !newPixel.domain || newPixel.data_points.length === 0 || creating}
                     >
                       {creating ? 'Submitting...' : 'Submit Request'}
                     </button>
                     <button
                       className="btn btn-outline-secondary btn-sm"
-                      onClick={() => { setShowCreateForm(false); setNewPixel({ name: '', domain: '' }); }}
+                      onClick={() => { setShowCreateForm(false); setNewPixel({ name: '', domain: '', data_points: [] }); }}
                       disabled={creating}
                     >
                       Cancel
@@ -831,6 +904,22 @@ export default function Pixels() {
                               </span>
                             </div>
                             <div className="text-muted" style={{ fontSize: '12px' }}>{request.domain}</div>
+                            {request.data_points && request.data_points.length > 0 && (
+                              <div className="d-flex flex-wrap gap-1 mt-1">
+                                {request.data_points.map((dp) => (
+                                  <span key={dp} className="badge" style={{
+                                    fontSize: '10px',
+                                    fontWeight: 500,
+                                    backgroundColor: 'rgba(32, 107, 196, 0.12)',
+                                    color: '#4299e1',
+                                    borderRadius: '10px',
+                                    padding: '2px 8px',
+                                  }}>
+                                    {dp}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             {isAdmin && request.user?.email && (
                               <div className="text-muted" style={{ fontSize: '11px' }}>
                                 <IconUser size={12} className="me-1" />{request.user.email}
@@ -1460,6 +1549,22 @@ export default function Pixels() {
                       <div>
                         <strong>Request auto-filled!</strong>
                         <div className="text-muted small">Name: {filledFromRequest.name} | Domain: {filledFromRequest.domain}</div>
+                        {filledFromRequest.data_points && filledFromRequest.data_points.length > 0 && (
+                          <div className="d-flex flex-wrap gap-1 mt-1">
+                            {filledFromRequest.data_points.map((dp) => (
+                              <span key={dp} className="badge" style={{
+                                fontSize: '10px',
+                                fontWeight: 500,
+                                backgroundColor: 'rgba(32, 107, 196, 0.15)',
+                                color: '#4299e1',
+                                borderRadius: '10px',
+                                padding: '2px 8px',
+                              }}>
+                                {dp}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

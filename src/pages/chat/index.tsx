@@ -1,10 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '@/components/layout/Layout';
 import { ConversationList } from '@/components/chat';
 import { ChatAPI, ChatConversation } from '@/lib/chat-api';
 import { useAuth } from '@/contexts/AuthContext';
-import { IconMessage, IconRefresh, IconInbox, IconArchive, IconGitMerge } from '@tabler/icons-react';
+import { IconMessage, IconRefresh, IconInbox, IconArchive, IconGitMerge, IconPlus, IconSend, IconLoader2, IconSearch, IconUser, IconX } from '@tabler/icons-react';
+
+interface UserOption {
+  id: string;
+  email: string;
+  role: string;
+}
 
 type FilterStatus = 'open' | 'closed' | 'all';
 
@@ -18,6 +24,29 @@ export default function ChatInbox() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('open');
+
+  // New Message modal state
+  const [showNewMessageModal, setShowNewMessageModal] = useState(false);
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [selectedUserEmail, setSelectedUserEmail] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [newMessage, setNewMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowUserDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchConversations = useCallback(async () => {
     setLoading(true);
@@ -75,8 +104,81 @@ export default function ChatInbox() {
     }
   };
 
+  const filteredUsers = users.filter(u =>
+    u.email.toLowerCase().includes(userSearch.toLowerCase())
+  );
+
+  const handleSelectUser = (email: string) => {
+    setSelectedUserEmail(email);
+    setUserSearch(email);
+    setShowUserDropdown(false);
+  };
+
+  const handleClearUser = () => {
+    setSelectedUserEmail('');
+    setUserSearch('');
+    setShowUserDropdown(false);
+  };
+
+  const handleOpenNewMessage = async () => {
+    setShowNewMessageModal(true);
+    setSelectedUserEmail('');
+    setUserSearch('');
+    setShowUserDropdown(false);
+    setNewMessage('');
+    setSendError(null);
+
+    if (users.length === 0) {
+      setUsersLoading(true);
+      try {
+        const response = await fetch('/api/admin/users');
+        const data = await response.json();
+        if (response.ok) {
+          const nonAdmins = (data.users || []).filter((u: UserOption) => u.role !== 'admin');
+          setUsers(nonAdmins);
+        }
+      } catch (err) {
+        console.error('Failed to fetch users:', err);
+      } finally {
+        setUsersLoading(false);
+      }
+    }
+  };
+
+  const handleSendNewMessage = async () => {
+    if (!selectedUserEmail || !newMessage.trim()) return;
+
+    setSending(true);
+    setSendError(null);
+
+    try {
+      const selectedUser = users.find(u => u.email === selectedUserEmail);
+      const result = await ChatAPI.createConversation({
+        user_email: selectedUserEmail,
+        user_name: selectedUser?.email,
+        message: newMessage.trim(),
+      });
+
+      setShowNewMessageModal(false);
+      router.push(`/chat/${result.data.id}`);
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : 'Failed to send message');
+    } finally {
+      setSending(false);
+    }
+  };
+
   const pageActions = (
     <div className="btn-list">
+      {isAdmin && (
+        <button
+          className="btn btn-primary"
+          onClick={handleOpenNewMessage}
+        >
+          <IconPlus size={16} className="me-1" />
+          New Message
+        </button>
+      )}
       {isAdmin && (
         <button
           className="btn btn-outline-warning"
@@ -167,6 +269,160 @@ export default function ChatInbox() {
           </div>
         </div>
       </div>
+
+      {/* New Message Modal */}
+      {showNewMessageModal && (
+        <div className="modal modal-blur show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <IconMessage size={20} className="me-2" />
+                  New Message
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowNewMessageModal(false)}
+                />
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label">To</label>
+                  {usersLoading ? (
+                    <div className="d-flex align-items-center text-muted py-2">
+                      <IconLoader2 size={16} className="me-2 spin" />
+                      Loading users...
+                    </div>
+                  ) : (
+                    <div className="position-relative" ref={dropdownRef}>
+                      <div className="input-group">
+                        <span className="input-group-text">
+                          <IconSearch size={16} />
+                        </span>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Search by email or type a new one..."
+                          value={userSearch}
+                          onChange={(e) => {
+                            setUserSearch(e.target.value);
+                            setSelectedUserEmail('');
+                            setShowUserDropdown(true);
+                          }}
+                          onFocus={() => setShowUserDropdown(true)}
+                          autoComplete="off"
+                        />
+                        {userSearch && (
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary"
+                            onClick={handleClearUser}
+                            title="Clear"
+                          >
+                            <IconX size={16} />
+                          </button>
+                        )}
+                      </div>
+                      {showUserDropdown && userSearch && (
+                        <div
+                          className="dropdown-menu show w-100"
+                          style={{ maxHeight: '200px', overflowY: 'auto', position: 'absolute', zIndex: 1050 }}
+                        >
+                          {filteredUsers.length > 0 ? (
+                            filteredUsers.slice(0, 8).map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                className="dropdown-item d-flex align-items-center"
+                                onClick={() => handleSelectUser(u.email)}
+                              >
+                                <span className="avatar avatar-xs me-2 bg-blue-lt">
+                                  <IconUser size={14} />
+                                </span>
+                                <span>{u.email}</span>
+                                <span className="badge bg-muted-lt ms-auto">{u.role}</span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="dropdown-item disabled text-muted">
+                              No users match &quot;{userSearch}&quot;
+                            </div>
+                          )}
+                          {/* Allow using the typed email directly if it looks like an email */}
+                          {userSearch.includes('@') && !filteredUsers.some(u => u.email === userSearch) && (
+                            <>
+                              <div className="dropdown-divider" />
+                              <button
+                                type="button"
+                                className="dropdown-item d-flex align-items-center text-primary"
+                                onClick={() => handleSelectUser(userSearch)}
+                              >
+                                <IconSend size={14} className="me-2" />
+                                Send to &quot;{userSearch}&quot;
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {selectedUserEmail && (
+                        <div className="mt-2">
+                          <span className="badge bg-primary-lt">
+                            <IconUser size={12} className="me-1" />
+                            {selectedUserEmail}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Message</label>
+                  <textarea
+                    className="form-control"
+                    rows={4}
+                    placeholder="Type your message..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                  />
+                </div>
+                {sendError && (
+                  <div className="alert alert-danger py-2 mb-0">
+                    {sendError}
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowNewMessageModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSendNewMessage}
+                  disabled={!selectedUserEmail || !newMessage.trim() || sending}
+                >
+                  {sending ? (
+                    <>
+                      <IconLoader2 size={16} className="me-1 spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <IconSend size={16} className="me-1" />
+                      Send
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         @keyframes spin {

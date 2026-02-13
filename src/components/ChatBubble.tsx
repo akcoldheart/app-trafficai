@@ -43,8 +43,15 @@ export default function ChatBubble() {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isOpenRef = useRef(isOpen);
   const supabase = createClient();
+
+  // Keep ref in sync so realtime callback sees latest value
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -90,6 +97,10 @@ export default function ChatBubble() {
                 if (prev.some(m => m.id === newMsg.id)) return prev;
                 return [...prev, newMsg];
               });
+              // Increment unread if chat window is not open
+              if (!isOpenRef.current) {
+                setUnreadCount((prev) => prev + 1);
+              }
             }
           }
         }
@@ -139,7 +150,19 @@ export default function ChatBubble() {
         console.error('Error loading messages:', msgsError);
       }
 
-      setMessages(msgs || []);
+      const allMsgs = msgs || [];
+      setMessages(allMsgs);
+
+      // Check for unread agent/bot messages since last seen
+      if (!isOpenRef.current) {
+        const lastSeen = localStorage.getItem(`chat_last_seen_${convId}`);
+        const unseenCount = allMsgs.filter(
+          (m) => m.sender_type !== 'customer' && (!lastSeen || m.created_at > lastSeen)
+        ).length;
+        if (unseenCount > 0) {
+          setUnreadCount(unseenCount);
+        }
+      }
     } catch (err) {
       console.error('Error loading conversation:', err);
       localStorage.removeItem('chat_conversation_id');
@@ -308,14 +331,100 @@ export default function ChatBubble() {
     }
   }, [user]);
 
+  // Poll for new conversations/messages for logged-in users
+  // Handles: admin-created conversations, messages arriving while page was closed, etc.
+  useEffect(() => {
+    if (!user?.email) return;
+
+    let active = true;
+
+    const checkForNewMessages = async () => {
+      if (!active || isOpenRef.current) return;
+
+      try {
+        const email = user.email!.toLowerCase();
+
+        // Find latest open conversation for this user
+        const { data: conv } = await supabase
+          .from('chat_conversations')
+          .select('id')
+          .eq('customer_email', email)
+          .eq('status', 'open')
+          .order('last_message_at', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!conv || !active) return;
+
+        // Ensure conversation is in localStorage (enables realtime subscription)
+        const savedId = localStorage.getItem('chat_conversation_id');
+        if (savedId !== conv.id) {
+          localStorage.setItem('chat_conversation_id', conv.id);
+        }
+
+        // If no conversation loaded in state yet, load it
+        if (!conversation) {
+          loadConversation(conv.id);
+          return;
+        }
+
+        // Count unread agent/bot messages since last seen
+        const lastSeen = localStorage.getItem(`chat_last_seen_${conv.id}`);
+        let query = supabase
+          .from('chat_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('conversation_id', conv.id)
+          .eq('is_private', false)
+          .neq('sender_type', 'customer');
+
+        if (lastSeen) {
+          query = query.gt('created_at', lastSeen);
+        }
+
+        const { count } = await query;
+        if (active && count !== null && count > 0) {
+          setUnreadCount(count);
+        }
+      } catch {
+        // Silent fail - don't break UX
+      }
+    };
+
+    // Check immediately, then every 15 seconds
+    checkForNewMessages();
+    const interval = setInterval(checkForNewMessages, 15000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email, conversation?.id]);
+
+  const handleOpenChat = () => {
+    setIsOpen(true);
+    setIsMinimized(false);
+    setUnreadCount(0);
+    if (conversation?.id) {
+      localStorage.setItem(`chat_last_seen_${conversation.id}`, new Date().toISOString());
+    }
+  };
+
+  const notificationBadge = unreadCount > 0 ? (
+    <span className="chat-unread-badge">
+      {unreadCount > 9 ? '9+' : unreadCount}
+    </span>
+  ) : null;
+
   if (isMinimized) {
     return (
       <button
         className="chat-bubble-btn minimized"
-        onClick={() => setIsMinimized(false)}
+        onClick={handleOpenChat}
         style={{ backgroundColor: CHAT_CONFIG.primaryColor }}
       >
         <IconMessage size={24} />
+        {notificationBadge}
         <style jsx>{styles}</style>
       </button>
     );
@@ -327,10 +436,11 @@ export default function ChatBubble() {
       {!isOpen && (
         <button
           className="chat-bubble-btn"
-          onClick={() => setIsOpen(true)}
+          onClick={handleOpenChat}
           style={{ backgroundColor: CHAT_CONFIG.primaryColor }}
         >
           <IconMessage size={24} />
+          {notificationBadge}
         </button>
       )}
 
@@ -344,10 +454,16 @@ export default function ChatBubble() {
               <p>{CHAT_CONFIG.subtitle}</p>
             </div>
             <div className="chat-header-actions">
-              <button onClick={() => setIsMinimized(true)} className="header-btn">
+              <button onClick={() => {
+                setIsMinimized(true);
+                if (conversation?.id) localStorage.setItem(`chat_last_seen_${conversation.id}`, new Date().toISOString());
+              }} className="header-btn">
                 <IconMinus size={18} />
               </button>
-              <button onClick={() => setIsOpen(false)} className="header-btn">
+              <button onClick={() => {
+                setIsOpen(false);
+                if (conversation?.id) localStorage.setItem(`chat_last_seen_${conversation.id}`, new Date().toISOString());
+              }} className="header-btn">
                 <IconX size={18} />
               </button>
             </div>
@@ -482,6 +598,29 @@ const styles = `
   .chat-bubble-btn.minimized {
     width: 48px;
     height: 48px;
+  }
+
+  .chat-unread-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: #e03131;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(224, 49, 49, 0.4);
+    animation: badge-pop 0.3s ease;
+  }
+  @keyframes badge-pop {
+    0% { transform: scale(0); }
+    60% { transform: scale(1.2); }
+    100% { transform: scale(1); }
   }
 
   .chat-window {

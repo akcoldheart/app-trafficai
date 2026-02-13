@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { TrafficAPI } from '@/lib/api';
-import { IconPlus, IconInfoCircle } from '@tabler/icons-react';
+import { IconPlus, IconInfoCircle, IconCheck, IconCircleCheck } from '@tabler/icons-react';
 
 export default function CustomAudience() {
   const router = useRouter();
@@ -15,6 +15,8 @@ export default function CustomAudience() {
   const [topic, setTopic] = useState('');
   const [description, setDescription] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const allDataPoints = ['business', 'financial', 'personal', 'family', 'housing', 'location'];
+  const [dataPoints, setDataPoints] = useState<string[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -45,6 +47,7 @@ export default function CustomAudience() {
               topic,
               description,
             },
+            data_points: dataPoints,
           }),
         });
 
@@ -117,12 +120,66 @@ export default function CustomAudience() {
                   </small>
                 </div>
               </div>
+              {!isAdmin && (
+                <div className="card-body border-top">
+                  <label className="form-label">Data Points</label>
+                  <p className="text-muted small mb-2">
+                    Select at least one data category to collect from visitors.
+                  </p>
+                  <div className="d-flex flex-wrap gap-2 mb-3">
+                    {allDataPoints.map((point) => {
+                      const isSelected = dataPoints.includes(point);
+                      return (
+                        <button
+                          key={point}
+                          type="button"
+                          className="btn btn-sm"
+                          disabled={loading}
+                          onClick={() => {
+                            setDataPoints(isSelected
+                              ? dataPoints.filter((d) => d !== point)
+                              : [...dataPoints, point]
+                            );
+                          }}
+                          style={{
+                            backgroundColor: isSelected ? 'rgba(32, 107, 196, 0.15)' : 'transparent',
+                            border: isSelected ? '1px solid rgba(32, 107, 196, 0.5)' : '1px solid var(--tblr-border-color)',
+                            color: isSelected ? '#4299e1' : 'var(--tblr-body-color)',
+                            borderRadius: '20px',
+                            padding: '4px 12px',
+                            fontSize: '12px',
+                            fontWeight: isSelected ? 600 : 400,
+                            transition: 'all 0.15s ease',
+                            textTransform: 'capitalize',
+                          }}
+                        >
+                          {isSelected && <IconCheck size={12} className="me-1" />}
+                          {point}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(32, 107, 196, 0.08), rgba(32, 196, 140, 0.08))',
+                    border: '1px solid rgba(32, 196, 140, 0.2)',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                  }}>
+                    <div className="d-flex align-items-center gap-2" style={{ fontSize: '12px', color: 'var(--tblr-body-color)' }}>
+                      <IconCircleCheck size={16} style={{ color: '#20c997', flexShrink: 0 }} />
+                      <span>
+                        All identified visitors will include <strong>Name</strong>, <strong>Email</strong> &amp; <strong>Phone</strong>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="card-footer">
                 <div className="d-flex justify-content-between">
                   <Link href="/audiences" className="btn btn-outline-secondary">
                     Cancel
                   </Link>
-                  <button type="submit" className="btn btn-primary" disabled={loading}>
+                  <button type="submit" className="btn btn-primary" disabled={loading || (!isAdmin && dataPoints.length === 0)}>
                     {loading ? (
                       <>
                         <span className="spinner-border spinner-border-sm me-2" role="status"></span>

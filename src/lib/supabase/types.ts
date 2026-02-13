@@ -679,6 +679,7 @@ export interface Database {
           user_id: string;
           name: string;
           domain: string;
+          data_points: string[];
           status: RequestStatus;
           admin_notes: string | null;
           reviewed_by: string | null;
@@ -692,6 +693,7 @@ export interface Database {
           user_id: string;
           name: string;
           domain: string;
+          data_points?: string[];
           status?: RequestStatus;
           admin_notes?: string | null;
           reviewed_by?: string | null;
@@ -705,6 +707,7 @@ export interface Database {
           user_id?: string;
           name?: string;
           domain?: string;
+          data_points?: string[];
           status?: RequestStatus;
           admin_notes?: string | null;
           reviewed_by?: string | null;
@@ -722,6 +725,7 @@ export interface Database {
           request_type: 'standard' | 'custom';
           name: string;
           form_data: Json;
+          data_points: string[];
           status: RequestStatus;
           admin_notes: string | null;
           reviewed_by: string | null;
@@ -736,6 +740,7 @@ export interface Database {
           request_type: 'standard' | 'custom';
           name: string;
           form_data: Json;
+          data_points?: string[];
           status?: RequestStatus;
           admin_notes?: string | null;
           reviewed_by?: string | null;
@@ -750,6 +755,7 @@ export interface Database {
           request_type?: 'standard' | 'custom';
           name?: string;
           form_data?: Json;
+          data_points?: string[];
           status?: RequestStatus;
           admin_notes?: string | null;
           reviewed_by?: string | null;
@@ -893,6 +899,7 @@ export interface PixelRequest {
   user_id: string;
   name: string;
   domain: string;
+  data_points: string[];
   status: RequestStatus;
   admin_notes: string | null;
   reviewed_by: string | null;
@@ -909,6 +916,7 @@ export interface AudienceRequest {
   request_type: 'standard' | 'custom';
   name: string;
   form_data: Record<string, unknown>;
+  data_points: string[];
   status: RequestStatus;
   admin_notes: string | null;
   reviewed_by: string | null;
