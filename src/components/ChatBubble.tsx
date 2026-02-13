@@ -31,7 +31,11 @@ const CHAT_CONFIG = {
 };
 
 export default function ChatBubble() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
+
+  // Admins use the Messages menu in sidebar — no need for chat bubble
+  if (userProfile?.role === 'admin') return null;
+
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
