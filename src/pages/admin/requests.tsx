@@ -28,6 +28,7 @@ interface PixelRequest {
   reviewed_by: string | null;
   reviewed_at: string | null;
   pixel_id: string | null;
+  data_points: string[];
   created_at: string;
   user?: { email: string; full_name: string | null };
 }
@@ -43,6 +44,7 @@ interface AudienceRequest {
   reviewed_by: string | null;
   reviewed_at: string | null;
   audience_id: string | null;
+  data_points: string[];
   created_at: string;
   user?: { email: string; full_name: string | null };
 }
