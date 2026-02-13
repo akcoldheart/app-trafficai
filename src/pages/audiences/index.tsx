@@ -1071,6 +1071,24 @@ export default function Audiences() {
                   <span className="ms-3"><strong>Type:</strong> {editingRequest.request_type}</span>
                 </div>
 
+                {editingRequest.data_points?.length > 0 && (
+                  <div className="mb-3">
+                    <label className="form-label">Requested Data Points</label>
+                    <div className="d-flex flex-wrap gap-2">
+                      {editingRequest.data_points.map((dp) => (
+                        <span key={dp} className="badge bg-purple-lt text-purple" style={{
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          padding: '6px 12px',
+                          textTransform: 'capitalize',
+                        }}>
+                          {dp}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {editFormData.request_type === 'custom' ? (
                   // Custom Audience Form
                   <>
