@@ -129,7 +129,12 @@ export default function Visitors() {
       const response = await fetch('/api/pixels');
       const data = await response.json();
       if (response.ok) {
-        setPixels(data.pixels || []);
+        const fetched = data.pixels || [];
+        setPixels(fetched);
+        // Default to the latest pixel (first in list, sorted by created_at desc)
+        if (fetched.length > 0 && !selectedPixel) {
+          setSelectedPixel(fetched[0].id);
+        }
       }
     } catch (err) {
       console.error('Error fetching pixels:', err);
@@ -413,7 +418,6 @@ export default function Visitors() {
                     setPagination(prev => ({ ...prev, page: 1 }));
                   }}
                 >
-                  <option value="">All Pixels</option>
                   {pixels.map((pixel) => (
                     <option key={pixel.id} value={pixel.id}>
                       {pixel.name}

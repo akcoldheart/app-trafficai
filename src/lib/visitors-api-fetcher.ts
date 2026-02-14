@@ -6,27 +6,39 @@ const supabaseAdmin = createClient(
 );
 
 interface ApiContact {
+  // Identity fields (old format: UUID, new format: EDID)
   UUID?: string;
+  EDID?: string;
   FIRST_NAME?: string;
   LAST_NAME?: string;
   PERSONAL_VERIFIED_EMAILS?: string;
   PERSONAL_EMAILS?: string;
   BUSINESS_EMAIL?: string;
+  BUSINESS_VERIFIED_EMAILS?: string;
   COMPANY_NAME?: string;
   JOB_TITLE?: string;
+  HEADLINE?: string;
   COMPANY_LINKEDIN_URL?: string;
   LINKEDIN_URL?: string;
+  INDIVIDUAL_LINKEDIN_URL?: string;
+  INDIVIDUAL_FACEBOOK_URL?: string;
+  INDIVIDUAL_TWITTER_URL?: string;
   PERSONAL_CITY?: string;
   PERSONAL_STATE?: string;
+  PERSONAL_ADDRESS?: string;
+  PERSONAL_ZIP?: string;
   CITY?: string;
   STATE?: string;
   COUNTRY?: string;
   IP_ADDRESS?: string;
   URL?: string;
+  FULL_URL?: string;
   REFERRER_URL?: string;
   MOBILE_PHONE?: string;
   DIRECT_NUMBER?: string;
   PERSONAL_PHONE?: string;
+  ALL_MOBILES?: string;
+  ALL_LANDLINES?: string;
   GENDER?: string;
   AGE_RANGE?: string;
   INCOME_RANGE?: string;
@@ -45,11 +57,15 @@ interface ApiContact {
   MARRIED?: string;
   CHILDREN?: string;
   NET_WORTH?: string;
+  // Old format event fields
   EVENT_TYPE?: string;
   EVENT_DATA?: string;
   EVENT_TIMESTAMP?: string;
   ACTIVITY_START_DATE?: string;
   ACTIVITY_END_DATE?: string;
+  // New format event fields
+  EVENT_DATE?: string;
+  PIXEL_ID?: string;
   resolution?: Record<string, string | null | undefined>;
   [key: string]: unknown;
 }
@@ -74,8 +90,10 @@ function getEmail(contact: ApiContact): string | null {
 
 function getPhone(contact: ApiContact): string | null {
   return getFirstValue(contact.MOBILE_PHONE as string)
+    || getFirstValue(contact.ALL_MOBILES as string)
     || getFirstValue(contact.DIRECT_NUMBER as string)
-    || getFirstValue(contact.PERSONAL_PHONE as string);
+    || getFirstValue(contact.PERSONAL_PHONE as string)
+    || getFirstValue(contact.ALL_LANDLINES as string);
 }
 
 async function getApiKey(): Promise<string | null> {
@@ -102,12 +120,21 @@ function extractContacts(data: Record<string, unknown>): ApiContact[] {
   return (Array.isArray(raw) ? raw : []) as ApiContact[];
 }
 
+function getContactUuid(contact: ApiContact): string | null {
+  // Try multiple possible ID field names (old format: UUID, new format: EDID)
+  const raw = contact.UUID || contact.EDID || contact.uuid || contact.edid
+    || contact.Id || contact.id || contact.ID
+    || (contact.resolution as Record<string, string | null | undefined> | undefined)?.uuid;
+  if (!raw || typeof raw !== 'string') return null;
+  return raw.trim() || null;
+}
+
 // Group contacts by UUID and aggregate events into a single visitor row
 function aggregateContactEvents(contacts: ApiContact[], pixelId: string, userId: string) {
   // Group all event records by UUID
   const grouped = new Map<string, ApiContact[]>();
   for (const contact of contacts) {
-    const uuid = contact.UUID?.trim();
+    const uuid = getContactUuid(contact);
     if (!uuid) continue;
     const existing = grouped.get(uuid) || [];
     existing.push(contact);
@@ -143,7 +170,7 @@ function mapGroupToVisitor(
   const firstName = get('FIRST_NAME');
   const lastName = get('LAST_NAME');
   const fullName = [firstName, lastName].filter(Boolean).join(' ') || null;
-  const linkedinRaw = get('LINKEDIN_URL') || get('COMPANY_LINKEDIN_URL');
+  const linkedinRaw = get('INDIVIDUAL_LINKEDIN_URL') || get('LINKEDIN_URL') || get('COMPANY_LINKEDIN_URL');
   const linkedinUrl = linkedinRaw
     ? (linkedinRaw.startsWith('http') ? linkedinRaw : `https://${linkedinRaw}`)
     : null;
@@ -163,7 +190,8 @@ function mapGroupToVisitor(
 
   for (const event of events) {
     const eventType = (event.EVENT_TYPE as string || '').toLowerCase();
-    const startDate = event.ACTIVITY_START_DATE as string;
+    // Support both old format (ACTIVITY_START_DATE/END_DATE) and new format (EVENT_DATE)
+    const startDate = event.ACTIVITY_START_DATE as string || event.EVENT_DATE as string;
     const endDate = event.ACTIVITY_END_DATE as string;
 
     // Track unique sessions by date
@@ -181,25 +209,30 @@ function mapGroupToVisitor(
       if (duration > 0) totalTimeOnSite += Math.round(duration / 1000);
     }
 
-    // Count events by type
-    switch (eventType) {
-      case 'page_view':
-        totalPageviews++;
-        break;
-      case 'click':
-        totalClicks++;
-        break;
-      case 'form_submission':
-        formSubmissions++;
-        break;
-      case 'scroll_depth': {
-        try {
-          const data = JSON.parse(event.EVENT_DATA as string || '{}');
-          const pct = Number(data.percentage || 0);
-          if (pct > maxScrollDepth) maxScrollDepth = pct;
-        } catch { /* ignore parse errors */ }
-        break;
+    // Count events by type (old format has EVENT_TYPE, new format counts each record as a page view)
+    if (eventType) {
+      switch (eventType) {
+        case 'page_view':
+          totalPageviews++;
+          break;
+        case 'click':
+          totalClicks++;
+          break;
+        case 'form_submission':
+          formSubmissions++;
+          break;
+        case 'scroll_depth': {
+          try {
+            const data = JSON.parse(event.EVENT_DATA as string || '{}');
+            const pct = Number(data.percentage || 0);
+            if (pct > maxScrollDepth) maxScrollDepth = pct;
+          } catch { /* ignore parse errors */ }
+          break;
+        }
       }
+    } else {
+      // New format: each record represents a page visit
+      totalPageviews++;
     }
   }
 
@@ -221,13 +254,13 @@ function mapGroupToVisitor(
     last_name: lastName,
     full_name: fullName,
     company: get('COMPANY_NAME'),
-    job_title: get('JOB_TITLE'),
+    job_title: get('JOB_TITLE') || get('HEADLINE'),
     linkedin_url: linkedinUrl,
     city,
     state,
     country,
     ip_address: get('IP_ADDRESS'),
-    first_page_url: get('URL'),
+    first_page_url: get('URL') || get('FULL_URL'),
     first_referrer: get('REFERRER_URL'),
     first_seen_at: earliestSeen || now,
     last_seen_at: latestSeen || now,
@@ -324,6 +357,14 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
 
     totalFetched = allContacts.length;
     console.log(`[visitors-api-fetcher] Total contacts fetched: ${totalFetched}`);
+
+    // Debug: log first contact's keys to help diagnose UUID field issues
+    if (allContacts.length > 0) {
+      const sample = allContacts[0];
+      const sampleKeys = Object.keys(sample).slice(0, 20);
+      console.log(`[visitors-api-fetcher] Sample contact keys: ${sampleKeys.join(', ')}`);
+      console.log(`[visitors-api-fetcher] Sample UUID value: ${getContactUuid(sample)}`);
+    }
 
     // Group contacts by UUID and aggregate event data (pageviews, clicks, scroll, etc.)
     // The API returns multiple event records per person, so we aggregate them
