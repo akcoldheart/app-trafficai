@@ -54,6 +54,7 @@ async function fetchAdminStats() {
     // DB aggregate functions — replace fetching raw rows
     visitorCountsByUserResult,
     avgLeadScoreResult,
+    pixelPerformanceResult,
   ] = await Promise.all([
     // Pixels
     supabase.from('pixels').select('id, name, domain, status, events_count, user_id'),
@@ -71,6 +72,8 @@ async function fetchAdminStats() {
     supabase.rpc('get_visitor_counts_by_user'),
     // RPC: average lead score (replaces fetching 1000 rows)
     supabase.rpc('get_avg_lead_score'),
+    // RPC: pixel-level performance stats
+    supabase.rpc('get_pixel_performance'),
   ]);
 
   const allPixels = pixelsResult.data || [];
@@ -97,6 +100,25 @@ async function fetchAdminStats() {
   const avgLeadScore = typeof avgLeadScoreResult.data === 'number'
     ? avgLeadScoreResult.data
     : 0;
+
+  // Build top pixels from RPC + pixel/user lookups
+  const pixelLookup = new Map(allPixels.map(p => [p.id, p]));
+  const userLookup = new Map(allUsers.map(u => [u.id, u]));
+  const topPixels = (pixelPerformanceResult.data || []).map((row: { pixel_id: string; visitor_count: number; identified_count: number; avg_lead_score: number }) => {
+    const pixel = pixelLookup.get(row.pixel_id);
+    const owner = pixel ? userLookup.get(pixel.user_id) : null;
+    return {
+      pixelId: row.pixel_id,
+      name: pixel?.name || 'Unknown',
+      domain: pixel?.domain || '',
+      status: pixel?.status || 'unknown',
+      eventsCount: pixel?.events_count || 0,
+      ownerEmail: owner?.email || 'Unknown',
+      visitorCount: Number(row.visitor_count),
+      identifiedCount: Number(row.identified_count),
+      avgLeadScore: Number(row.avg_lead_score),
+    };
+  });
 
   // Run event aggregate RPCs (depend on pixel IDs)
   const [
@@ -215,6 +237,7 @@ async function fetchAdminStats() {
     topPages,
     recentVisitors,
     pixels: allPixels,
+    topPixels,
     partnerPerformance,
   };
 }

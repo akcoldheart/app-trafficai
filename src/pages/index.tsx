@@ -22,7 +22,6 @@ import {
   IconUsersGroup,
   IconShieldCheck,
   IconTrophy,
-  IconBuildingSkyscraper,
 } from '@tabler/icons-react';
 
 interface DashboardStats {
@@ -40,7 +39,7 @@ interface DashboardStats {
     totalUsers?: number;
     adminCount?: number;
     teamCount?: number;
-    partnerCount?: number;
+    userCount?: number;
   };
   charts: {
     eventsByDay: { date: string; day: string; events: number }[];
@@ -60,6 +59,18 @@ interface DashboardStats {
     user_id?: string;
   }[];
   pixels: { id: string; name: string; domain: string; status: string; events_count: number; user_id?: string }[];
+  // Admin-only: top performing pixels
+  topPixels?: {
+    pixelId: string;
+    name: string;
+    domain: string;
+    status: string;
+    eventsCount: number;
+    ownerEmail: string;
+    visitorCount: number;
+    identifiedCount: number;
+    avgLeadScore: number;
+  }[];
   // Admin-only: partner performance breakdown
   partnerPerformance?: {
     id: string;
@@ -299,11 +310,11 @@ export default function Dashboard() {
               <div className="card-body">
                 <div className="d-flex align-items-center">
                   <span className="avatar bg-green-lt me-3">
-                    <IconBuildingSkyscraper size={24} />
+                    <IconUser size={24} />
                   </span>
                   <div>
-                    <div className="subheader text-muted">Partners</div>
-                    <div className="h2 mb-0">{stats?.overview.partnerCount || 0}</div>
+                    <div className="subheader text-muted">Users</div>
+                    <div className="h2 mb-0">{stats?.overview.userCount || 0}</div>
                   </div>
                 </div>
               </div>
@@ -448,88 +459,188 @@ export default function Dashboard() {
 
       {/* Main Content Row */}
       <div className="row row-deck row-cards">
-        {/* Events Chart */}
-        <div className="col-lg-8">
-          <div className="card">
-            <div className="card-header border-0">
-              <h3 className="card-title">Events (Last 7 Days)</h3>
+        {/* Admin: Top Performing Pixels (replaces Events chart for admins) */}
+        {isAdmin && stats?.topPixels && stats.topPixels.length > 0 && (
+          <div className="col-12">
+            <div className="card">
+              <div className="card-header border-0">
+                <h3 className="card-title">
+                  <IconCode size={20} className="me-2 text-primary" />
+                  Top Performing Pixels
+                </h3>
+                {stats.topPixels.length > 10 && (
+                  <div className="card-actions">
+                    <Link href="/pixels" className="btn btn-sm btn-outline-primary">
+                      View all
+                    </Link>
+                  </div>
+                )}
+              </div>
+              <div className="table-responsive">
+                <table className="table table-vcenter card-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>#</th>
+                      <th>Pixel</th>
+                      <th>Owner</th>
+                      <th className="text-center">Visitors</th>
+                      <th className="text-center">Identified</th>
+                      <th className="text-center">Avg Score</th>
+                      <th className="text-center">Events</th>
+                      <th className="text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.topPixels.slice(0, 10).map((pixel, index) => {
+                      const maxVisitors = stats.topPixels?.[0]?.visitorCount || 1;
+                      const visitorPercent = (pixel.visitorCount / maxVisitors) * 100;
+                      const identifiedPercent = pixel.visitorCount > 0
+                        ? Math.round((pixel.identifiedCount / pixel.visitorCount) * 100)
+                        : 0;
+                      return (
+                        <tr key={pixel.pixelId}>
+                          <td className="text-muted">{index + 1}</td>
+                          <td>
+                            <div className="d-flex align-items-center">
+                              <span className={`avatar avatar-sm me-2 ${pixel.status === 'active' ? 'bg-green-lt' : 'bg-yellow-lt'}`}>
+                                <IconCode size={16} />
+                              </span>
+                              <div>
+                                <div className="fw-semibold">{pixel.name}</div>
+                                <div className="text-muted small">{pixel.domain}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="text-muted">{pixel.ownerEmail}</td>
+                          <td>
+                            <div className="d-flex align-items-center justify-content-center">
+                              <span className="fw-semibold me-2">{pixel.visitorCount.toLocaleString()}</span>
+                              <div className="progress" style={{ width: '60px', height: '6px' }}>
+                                <div
+                                  className="progress-bar bg-primary"
+                                  style={{ width: `${visitorPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="text-center">
+                            <span className="fw-semibold">{pixel.identifiedCount.toLocaleString()}</span>
+                            <span className="text-muted small ms-1">({identifiedPercent}%)</span>
+                          </td>
+                          <td className="text-center">
+                            <span className={`badge ${getScoreBadgeClass(pixel.avgLeadScore)}`}>
+                              {pixel.avgLeadScore}
+                            </span>
+                          </td>
+                          <td className="text-center fw-semibold">{pixel.eventsCount.toLocaleString()}</td>
+                          <td className="text-center">
+                            <span className={`badge ${pixel.status === 'active' ? 'bg-green-lt text-green' : 'bg-yellow-lt text-yellow'}`}>
+                              {pixel.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {stats.topPixels.length > 10 && (
+                <div className="card-footer text-center">
+                  <Link href="/pixels" className="text-primary">
+                    View all {stats.topPixels.length} pixels
+                  </Link>
+                </div>
+              )}
             </div>
-            <div className="card-body pt-0">
-              {!stats ? (
-                <div className="text-center py-4">
-                  <IconLoader2 size={32} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
-                </div>
-              ) : stats.charts.eventsByDay.every(d => d.events === 0) ? (
-                <div className="text-center py-4 text-muted">
-                  <IconChartBar size={48} className="mb-2 opacity-50" />
-                  <p>No events recorded yet. Events will appear here once your pixel starts tracking.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="row mb-3">
-                    <div className="col-auto">
-                      <div className="d-flex align-items-center">
-                        <span className="bg-primary rounded me-2" style={{ width: '12px', height: '12px' }}></span>
-                        <span className="text-muted">Events</span>
+          </div>
+        )}
+
+        {/* Non-admin: Events Chart */}
+        {!isAdmin && (
+          <div className="col-lg-8">
+            <div className="card">
+              <div className="card-header border-0">
+                <h3 className="card-title">Events (Last 7 Days)</h3>
+              </div>
+              <div className="card-body pt-0">
+                {!stats ? (
+                  <div className="text-center py-4">
+                    <IconLoader2 size={32} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+                  </div>
+                ) : stats.charts.eventsByDay.every(d => d.events === 0) ? (
+                  <div className="text-center py-4 text-muted">
+                    <IconChartBar size={48} className="mb-2 opacity-50" />
+                    <p>No events recorded yet. Events will appear here once your pixel starts tracking.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="row mb-3">
+                      <div className="col-auto">
+                        <div className="d-flex align-items-center">
+                          <span className="bg-primary rounded me-2" style={{ width: '12px', height: '12px' }}></span>
+                          <span className="text-muted">Events</span>
+                        </div>
                       </div>
                     </div>
+                    <div className="d-flex align-items-end justify-content-between" style={{ height: '200px' }}>
+                      {stats.charts.eventsByDay.map((day) => (
+                        <div key={day.date} className="d-flex flex-column align-items-center" style={{ flex: 1 }}>
+                          <div className="d-flex gap-1 mb-2" style={{ height: '150px', alignItems: 'flex-end' }}>
+                            <div
+                              className="bg-primary rounded"
+                              style={{
+                                width: '24px',
+                                height: `${Math.max((day.events / maxEvents) * 150, 4)}px`
+                              }}
+                              title={`${day.events} events`}
+                            />
+                          </div>
+                          <span className="text-muted small">{day.day}</span>
+                          <span className="text-muted small fw-semibold">{day.events}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Non-admin: Event Types */}
+        {!isAdmin && (
+          <div className="col-lg-4">
+            <div className="card">
+              <div className="card-header border-0">
+                <h3 className="card-title">Event Types</h3>
+              </div>
+              <div className="card-body pt-0">
+                {!stats || stats.charts.eventTypes.length === 0 ? (
+                  <div className="text-center py-4 text-muted">
+                    <p>No events yet</p>
                   </div>
-                  <div className="d-flex align-items-end justify-content-between" style={{ height: '200px' }}>
-                    {stats.charts.eventsByDay.map((day) => (
-                      <div key={day.date} className="d-flex flex-column align-items-center" style={{ flex: 1 }}>
-                        <div className="d-flex gap-1 mb-2" style={{ height: '150px', alignItems: 'flex-end' }}>
+                ) : (
+                  <div className="mb-4">
+                    {stats.charts.eventTypes.map((eventType, i) => (
+                      <div key={eventType.type} className={i > 0 ? 'mt-3' : ''}>
+                        <div className="d-flex justify-content-between mb-1">
+                          <span className="text-muted text-capitalize">{eventType.type.replace('_', ' ')}</span>
+                          <span className="fw-semibold">{eventType.count.toLocaleString()}</span>
+                        </div>
+                        <div className="progress" style={{ height: '6px' }}>
                           <div
-                            className="bg-primary rounded"
-                            style={{
-                              width: '24px',
-                              height: `${Math.max((day.events / maxEvents) * 150, 4)}px`
-                            }}
-                            title={`${day.events} events`}
+                            className={`progress-bar ${eventTypeColors[eventType.type] || 'bg-secondary'}`}
+                            style={{ width: `${eventType.percentage}%` }}
                           />
                         </div>
-                        <span className="text-muted small">{day.day}</span>
-                        <span className="text-muted small fw-semibold">{day.events}</span>
                       </div>
                     ))}
                   </div>
-                </>
-              )}
+                )}
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* Event Types */}
-        <div className="col-lg-4">
-          <div className="card">
-            <div className="card-header border-0">
-              <h3 className="card-title">Event Types</h3>
-            </div>
-            <div className="card-body pt-0">
-              {!stats || stats.charts.eventTypes.length === 0 ? (
-                <div className="text-center py-4 text-muted">
-                  <p>No events yet</p>
-                </div>
-              ) : (
-                <div className="mb-4">
-                  {stats.charts.eventTypes.map((eventType, i) => (
-                    <div key={eventType.type} className={i > 0 ? 'mt-3' : ''}>
-                      <div className="d-flex justify-content-between mb-1">
-                        <span className="text-muted text-capitalize">{eventType.type.replace('_', ' ')}</span>
-                        <span className="fw-semibold">{eventType.count.toLocaleString()}</span>
-                      </div>
-                      <div className="progress" style={{ height: '6px' }}>
-                        <div
-                          className={`progress-bar ${eventTypeColors[eventType.type] || 'bg-secondary'}`}
-                          style={{ width: `${eventType.percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Recent Visitors */}
         <div className="col-lg-8">
