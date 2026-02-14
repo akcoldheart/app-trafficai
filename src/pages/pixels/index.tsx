@@ -68,7 +68,7 @@ export default function Pixels() {
   const [isEditingCode, setIsEditingCode] = useState(false);
   const [savingCode, setSavingCode] = useState(false);
 
-  // Pixel ID editing state (admin only)
+  // Pixel Code editing state (admin only)
   const [editedPixelId, setEditedPixelId] = useState('');
   const [isEditingPixelId, setIsEditingPixelId] = useState(false);
   const [savingPixelId, setSavingPixelId] = useState(false);
@@ -280,7 +280,7 @@ export default function Pixels() {
     }
 
     if (!customPixelId.trim()) {
-      showToast('error', 'Please enter a Pixel ID');
+      showToast('error', 'Please enter a Pixel Code');
       return;
     }
 
@@ -535,7 +535,7 @@ export default function Pixels() {
       setPixels(pixels.map(p => p.id === selectedPixel.id ? updatedPixel : p));
       setSelectedPixel(updatedPixel);
       setIsEditingPixelId(false);
-      showToast('success', 'Pixel ID updated successfully!');
+      showToast('success', 'Pixel Code updated successfully!');
     } catch (err) {
       showToast('error', (err as Error).message);
     } finally {
@@ -1024,7 +1024,7 @@ export default function Pixels() {
                         <div className="d-flex align-items-center">
                           <span className="avatar bg-primary-lt me-3"><IconCode size={20} /></span>
                           <div className="flex-fill" style={{ minWidth: 0 }}>
-                            <div className="text-muted" style={{ fontSize: '12px' }}>Pixel ID</div>
+                            <div className="text-muted" style={{ fontSize: '12px' }}>Pixel Code</div>
                             {isAdmin && isEditingPixelId ? (
                               <div className="d-flex align-items-center gap-2">
                                 <input
@@ -1070,7 +1070,7 @@ export default function Pixels() {
                                   className={`btn btn-icon btn-sm flex-shrink-0 ${copiedId === 'pixelId' ? 'btn-success' : 'btn-ghost-secondary'}`}
                                   onClick={() => copyToClipboard(selectedPixel.pixel_code, 'pixelId')}
                                   style={{ padding: '2px 6px' }}
-                                  title="Copy Pixel ID"
+                                  title="Copy Pixel Code"
                                 >
                                   {copiedId === 'pixelId' ? <IconCheck size={12} /> : <IconCopy size={12} />}
                                 </button>
@@ -1079,7 +1079,7 @@ export default function Pixels() {
                                     className="btn btn-icon btn-sm btn-ghost-secondary flex-shrink-0"
                                     onClick={() => setIsEditingPixelId(true)}
                                     style={{ padding: '2px 6px' }}
-                                    title="Edit Pixel ID"
+                                    title="Edit Pixel Code"
                                   >
                                     <IconPencil size={12} />
                                   </button>
@@ -1623,11 +1623,11 @@ export default function Pixels() {
                   </div>
                 </div>
 
-                {/* Step 3: Pixel ID */}
+                {/* Step 3: Pixel Code */}
                 <div className="mb-4">
                   <label className="form-label fw-semibold">
                     <span className="badge bg-primary me-2">3</span>
-                    Pixel ID
+                    Pixel Code
                   </label>
                   <input
                     type="text"
