@@ -458,7 +458,7 @@ export default function Dashboard() {
       </div>
 
       {/* Main Content Row */}
-      <div className="row row-deck row-cards">
+      <div className="row row-deck row-cards mb-4">
         {/* Admin: Top Performing Pixels (replaces Events chart for admins) */}
         {isAdmin && stats?.topPixels && stats.topPixels.length > 0 && (
           <div className="col-12">
@@ -763,6 +763,10 @@ export default function Dashboard() {
           </div>
         </div>
 
+      </div>
+
+      {/* Top Pages & Quick Actions */}
+      <div className="row row-deck row-cards mb-4">
         {/* Top Pages */}
         <div className="col-lg-6">
           <div className="card">
