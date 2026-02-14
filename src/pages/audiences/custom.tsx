@@ -124,7 +124,7 @@ export default function CustomAudience() {
                 <div className="card-body border-top">
                   <label className="form-label">Data Points</label>
                   <p className="text-muted small mb-2">
-                    Select at least one data category to collect from visitors.
+                    Optionally select data categories to collect from visitors.
                   </p>
                   <div className="d-flex flex-wrap gap-2 mb-3">
                     {allDataPoints.map((point) => {
@@ -179,7 +179,7 @@ export default function CustomAudience() {
                   <Link href="/audiences" className="btn btn-outline-secondary">
                     Cancel
                   </Link>
-                  <button type="submit" className="btn btn-primary" disabled={loading || (!isAdmin && dataPoints.length === 0)}>
+                  <button type="submit" className="btn btn-primary" disabled={loading}>
                     {loading ? (
                       <>
                         <span className="spinner-border spinner-border-sm me-2" role="status"></span>

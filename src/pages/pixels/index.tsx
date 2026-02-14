@@ -755,7 +755,7 @@ export default function Pixels() {
                       </span>
                     </div>
                     <p className="text-muted mb-2" style={{ fontSize: '11px', lineHeight: 1.4 }}>
-                      Select at least one data category to collect from visitors.
+                      Optionally select data categories to collect from visitors.
                     </p>
                     <div className="d-flex flex-wrap gap-2">
                       {[
@@ -820,7 +820,7 @@ export default function Pixels() {
                     <button
                       className="btn btn-primary btn-sm flex-fill"
                       onClick={handleCreatePixel}
-                      disabled={!newPixel.name || !newPixel.domain || newPixel.data_points.length === 0 || creating}
+                      disabled={!newPixel.name || !newPixel.domain || creating}
                     >
                       {creating ? 'Submitting...' : 'Submit Request'}
                     </button>
