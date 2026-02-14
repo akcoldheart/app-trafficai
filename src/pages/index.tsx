@@ -42,9 +42,9 @@ interface DashboardStats {
     userCount?: number;
   };
   charts: {
-    eventsByDay: { date: string; day: string; events: number }[];
+    visitorsByDay: { date: string; day: string; visitors: number }[];
     pageviewsByDay: { date: string; day: string; pageviews: number }[];
-    eventTypes: { type: string; count: number; percentage: number }[];
+    activityTypes: { type: string; count: number; percentage: number }[];
   };
   topPages: { page: string; views: number }[];
   recentVisitors: {
@@ -167,17 +167,15 @@ export default function Dashboard() {
     return 'bg-red-lt text-red';
   };
 
-  const maxEvents = stats?.charts.eventsByDay
-    ? Math.max(...stats.charts.eventsByDay.map(d => d.events), 1)
+  const maxVisitors = stats?.charts.visitorsByDay
+    ? Math.max(...stats.charts.visitorsByDay.map(d => d.visitors), 1)
     : 1;
 
-  const eventTypeColors: Record<string, string> = {
-    pageview: 'bg-primary',
-    click: 'bg-green',
-    scroll: 'bg-azure',
-    heartbeat: 'bg-yellow',
-    exit: 'bg-red',
-    form_submit: 'bg-purple',
+  const activityTypeColors: Record<string, string> = {
+    pageviews: 'bg-primary',
+    clicks: 'bg-green',
+    sessions: 'bg-azure',
+    'form submissions': 'bg-purple',
   };
 
   return (
@@ -357,16 +355,16 @@ export default function Dashboard() {
               </div>
               <div className="mt-3">
                 <div className="d-flex gap-1">
-                  {stats?.charts.eventsByDay.map((day, i) => (
+                  {stats?.charts.visitorsByDay.map((day, i) => (
                     <div
                       key={day.date}
                       className="bg-primary rounded"
                       style={{
                         width: '14%',
-                        height: `${Math.max((day.events / maxEvents) * 40, 4)}px`,
+                        height: `${Math.max((day.visitors / maxVisitors) * 40, 4)}px`,
                         opacity: 0.3 + (i / 7) * 0.7
                       }}
-                      title={`${day.day}: ${day.events} events`}
+                      title={`${day.day}: ${day.visitors} new visitors`}
                     />
                   ))}
                 </div>
@@ -555,22 +553,22 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Non-admin: Events Chart */}
+        {/* Non-admin: New Visitors Chart */}
         {!isAdmin && (
           <div className="col-lg-8">
             <div className="card">
               <div className="card-header border-0">
-                <h3 className="card-title">Events (Last 7 Days)</h3>
+                <h3 className="card-title">New Visitors (Last 7 Days)</h3>
               </div>
               <div className="card-body pt-0">
                 {!stats ? (
                   <div className="text-center py-4">
                     <IconLoader2 size={32} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
                   </div>
-                ) : stats.charts.eventsByDay.every(d => d.events === 0) ? (
+                ) : stats.charts.visitorsByDay.every(d => d.visitors === 0) ? (
                   <div className="text-center py-4 text-muted">
                     <IconChartBar size={48} className="mb-2 opacity-50" />
-                    <p>No events recorded yet. Events will appear here once your pixel starts tracking.</p>
+                    <p>No visitors recorded yet. Visitors will appear here once your pixel starts tracking.</p>
                   </div>
                 ) : (
                   <>
@@ -578,25 +576,25 @@ export default function Dashboard() {
                       <div className="col-auto">
                         <div className="d-flex align-items-center">
                           <span className="bg-primary rounded me-2" style={{ width: '12px', height: '12px' }}></span>
-                          <span className="text-muted">Events</span>
+                          <span className="text-muted">New Visitors</span>
                         </div>
                       </div>
                     </div>
                     <div className="d-flex align-items-end justify-content-between" style={{ height: '200px' }}>
-                      {stats.charts.eventsByDay.map((day) => (
+                      {stats.charts.visitorsByDay.map((day) => (
                         <div key={day.date} className="d-flex flex-column align-items-center" style={{ flex: 1 }}>
                           <div className="d-flex gap-1 mb-2" style={{ height: '150px', alignItems: 'flex-end' }}>
                             <div
                               className="bg-primary rounded"
                               style={{
                                 width: '24px',
-                                height: `${Math.max((day.events / maxEvents) * 150, 4)}px`
+                                height: `${Math.max((day.visitors / maxVisitors) * 150, 4)}px`
                               }}
-                              title={`${day.events} events`}
+                              title={`${day.visitors} new visitors`}
                             />
                           </div>
                           <span className="text-muted small">{day.day}</span>
-                          <span className="text-muted small fw-semibold">{day.events}</span>
+                          <span className="text-muted small fw-semibold">{day.visitors}</span>
                         </div>
                       ))}
                     </div>
@@ -607,30 +605,30 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Non-admin: Event Types */}
+        {/* Non-admin: Visitor Activity */}
         {!isAdmin && (
           <div className="col-lg-4">
             <div className="card">
               <div className="card-header border-0">
-                <h3 className="card-title">Event Types</h3>
+                <h3 className="card-title">Visitor Activity</h3>
               </div>
               <div className="card-body pt-0">
-                {!stats || stats.charts.eventTypes.length === 0 ? (
+                {!stats || stats.charts.activityTypes.length === 0 ? (
                   <div className="text-center py-4 text-muted">
-                    <p>No events yet</p>
+                    <p>No visitor activity yet</p>
                   </div>
                 ) : (
                   <div className="mb-4">
-                    {stats.charts.eventTypes.map((eventType, i) => (
-                      <div key={eventType.type} className={i > 0 ? 'mt-3' : ''}>
+                    {stats.charts.activityTypes.map((activity, i) => (
+                      <div key={activity.type} className={i > 0 ? 'mt-3' : ''}>
                         <div className="d-flex justify-content-between mb-1">
-                          <span className="text-muted text-capitalize">{eventType.type.replace('_', ' ')}</span>
-                          <span className="fw-semibold">{eventType.count.toLocaleString()}</span>
+                          <span className="text-muted text-capitalize">{activity.type}</span>
+                          <span className="fw-semibold">{activity.count.toLocaleString()}</span>
                         </div>
                         <div className="progress" style={{ height: '6px' }}>
                           <div
-                            className={`progress-bar ${eventTypeColors[eventType.type] || 'bg-secondary'}`}
-                            style={{ width: `${eventType.percentage}%` }}
+                            className={`progress-bar ${activityTypeColors[activity.type] || 'bg-secondary'}`}
+                            style={{ width: `${activity.percentage}%` }}
                           />
                         </div>
                       </div>
@@ -771,14 +769,14 @@ export default function Dashboard() {
         <div className="col-lg-6">
           <div className="card">
             <div className="card-header border-0">
-              <h3 className="card-title">Top Pages (Last 7 Days)</h3>
+              <h3 className="card-title">Top Entry Pages (Last 7 Days)</h3>
             </div>
             <div className="table-responsive">
               <table className="table table-vcenter card-table">
                 <thead>
                   <tr>
                     <th>Page</th>
-                    <th>Views</th>
+                    <th>Visitors</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -786,7 +784,7 @@ export default function Dashboard() {
                   {!stats || stats.topPages.length === 0 ? (
                     <tr>
                       <td colSpan={3} className="text-center text-muted py-4">
-                        No page views recorded yet
+                        No entry pages recorded yet
                       </td>
                     </tr>
                   ) : (

@@ -120,56 +120,61 @@ async function fetchAdminStats() {
     };
   });
 
-  // Run event aggregate RPCs (depend on pixel IDs)
+  // Run visitor aggregate RPCs (depend on pixel IDs)
   const [
-    eventsTodayResult,
-    eventStatsByDayResult,
-    eventTypeCountsResult,
-    topPagesResult,
+    newVisitorsTodayResult,
+    visitorStatsByDayResult,
+    activityCountsResult,
+    topEntryPagesResult,
   ] = await Promise.all([
-    supabase.from('pixel_events').select('*', { count: 'exact', head: true })
-      .in('pixel_id', allPixelIds.length > 0 ? allPixelIds : ['00000000-0000-0000-0000-000000000000'])
+    // Visitors created today
+    supabase.from('visitors').select('*', { count: 'exact', head: true })
       .gte('created_at', today.toISOString()),
-    // RPC: daily event stats (replaces fetching 10,000 raw rows)
-    supabase.rpc('get_event_stats_by_day', { p_pixel_ids: allPixelIds, p_days: 7 }),
-    // RPC: event type breakdown
-    supabase.rpc('get_event_type_counts', { p_pixel_ids: allPixelIds, p_days: 7 }),
-    // RPC: top pages
-    supabase.rpc('get_top_pages', { p_pixel_ids: allPixelIds, p_days: 7, p_limit: 5 }),
+    // RPC: daily visitor stats
+    supabase.rpc('get_visitor_stats_by_day', { p_pixel_ids: allPixelIds, p_days: 7 }),
+    // RPC: visitor activity breakdown
+    supabase.rpc('get_visitor_activity_counts', { p_pixel_ids: allPixelIds, p_days: 7 }),
+    // RPC: top entry pages
+    supabase.rpc('get_top_entry_pages', { p_pixel_ids: allPixelIds, p_days: 7, p_limit: 5 }),
   ]);
 
-  const eventsToday = eventsTodayResult.count || 0;
+  const eventsToday = newVisitorsTodayResult.count || 0;
 
   // Build chart data from RPC results
-  const eventsByDayMap: Record<string, { events: number; pageviews: number }> = {};
+  const visitorsByDayMap: Record<string, { visitors: number; pageviews: number }> = {};
   for (let i = 6; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
-    eventsByDayMap[dateStr] = { events: 0, pageviews: 0 };
+    visitorsByDayMap[dateStr] = { visitors: 0, pageviews: 0 };
   }
 
-  if (eventStatsByDayResult.data) {
-    for (const row of eventStatsByDayResult.data) {
-      const dateStr = String(row.event_date);
-      if (eventsByDayMap[dateStr]) {
-        eventsByDayMap[dateStr].events = Number(row.total_events);
-        eventsByDayMap[dateStr].pageviews = Number(row.pageview_count);
+  if (visitorStatsByDayResult.error) {
+    console.error('get_visitor_stats_by_day RPC error:', visitorStatsByDayResult.error);
+  }
+  if (visitorStatsByDayResult.data) {
+    for (const row of visitorStatsByDayResult.data) {
+      const dateStr = String(row.visit_date);
+      if (visitorsByDayMap[dateStr]) {
+        visitorsByDayMap[dateStr].visitors = Number(row.new_visitors);
+        visitorsByDayMap[dateStr].pageviews = Number(row.day_pageviews);
       }
     }
   }
 
-  const totalEventsLastWeek = Object.values(eventsByDayMap).reduce((sum, d) => sum + d.events, 0) || 1;
+  const totalActivityLastWeek = (activityCountsResult.data || []).reduce(
+    (sum: number, r: { activity_count: number }) => sum + Number(r.activity_count), 0
+  ) || 1;
 
-  const eventTypes = (eventTypeCountsResult.data || []).map((row: { event_type: string; event_count: number }) => ({
-    type: row.event_type,
-    count: Number(row.event_count),
-    percentage: Math.round(Number(row.event_count) / totalEventsLastWeek * 100),
+  const activityTypes = (activityCountsResult.data || []).map((row: { activity_type: string; activity_count: number }) => ({
+    type: row.activity_type,
+    count: Number(row.activity_count),
+    percentage: Math.round(Number(row.activity_count) / totalActivityLastWeek * 100),
   }));
 
-  const topPages = (topPagesResult.data || []).map((row: { page_path: string; view_count: number }) => ({
+  const topPages = (topEntryPagesResult.data || []).map((row: { page_path: string; visitor_count: number }) => ({
     page: row.page_path || '/',
-    views: Number(row.view_count),
+    views: Number(row.visitor_count),
   }));
 
   // Calculate visitor change percentage
@@ -222,17 +227,17 @@ async function fetchAdminStats() {
       userCount,
     },
     charts: {
-      eventsByDay: Object.entries(eventsByDayMap).map(([date, data]) => ({
+      visitorsByDay: Object.entries(visitorsByDayMap).map(([date, data]) => ({
         date,
         day: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
-        events: data.events,
+        visitors: data.visitors,
       })),
-      pageviewsByDay: Object.entries(eventsByDayMap).map(([date, data]) => ({
+      pageviewsByDay: Object.entries(visitorsByDayMap).map(([date, data]) => ({
         date,
         day: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
         pageviews: data.pageviews,
       })),
-      eventTypes,
+      activityTypes,
     },
     topPages,
     recentVisitors,

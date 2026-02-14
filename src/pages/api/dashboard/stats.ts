@@ -53,13 +53,13 @@ async function fetchUserStats(supabase: any, userId: string) {
     enrichedVisitorsResult,
     visitorsTodayResult,
     visitorsYesterdayResult,
-    eventsTodayResult,
+    newVisitorsTodayResult,
     recentVisitorsResult,
     // DB aggregate functions
     avgLeadScoreResult,
-    eventStatsByDayResult,
-    eventTypeCountsResult,
-    topPagesResult,
+    visitorStatsByDayResult,
+    activityCountsResult,
+    topEntryPagesResult,
   ] = await Promise.all([
     // Visitor counts (head-only — no row data transferred)
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId),
@@ -67,18 +67,18 @@ async function fetchUserStats(supabase: any, userId: string) {
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_enriched', true),
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId).gte('last_seen_at', today.toISOString()),
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId).gte('last_seen_at', yesterday.toISOString()).lt('last_seen_at', today.toISOString()),
-    // Events today count
-    supabase.from('pixel_events').select('*', { count: 'exact', head: true }).in('pixel_id', pixelFilter).gte('created_at', today.toISOString()),
+    // Visitors today (created today) — replaces pixel_events count
+    supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', today.toISOString()),
     // Recent visitors (just 5 rows)
     supabase.from('visitors').select('id, full_name, email, company, lead_score, last_seen_at, is_identified, is_enriched').eq('user_id', userId).order('last_seen_at', { ascending: false }).limit(5),
     // RPC: average lead score for this user (replaces fetching 1000 rows)
     supabase.rpc('get_avg_lead_score', { p_user_id: userId }),
-    // RPC: daily event stats (replaces fetching 10,000 raw rows)
-    supabase.rpc('get_event_stats_by_day', { p_pixel_ids: pixelIds, p_days: 7 }),
-    // RPC: event type breakdown
-    supabase.rpc('get_event_type_counts', { p_pixel_ids: pixelIds, p_days: 7 }),
-    // RPC: top pages
-    supabase.rpc('get_top_pages', { p_pixel_ids: pixelIds, p_days: 7, p_limit: 5 }),
+    // RPC: daily visitor stats
+    supabase.rpc('get_visitor_stats_by_day', { p_pixel_ids: pixelIds, p_days: 7 }),
+    // RPC: visitor activity breakdown
+    supabase.rpc('get_visitor_activity_counts', { p_pixel_ids: pixelIds, p_days: 7 }),
+    // RPC: top entry pages
+    supabase.rpc('get_top_entry_pages', { p_pixel_ids: pixelIds, p_days: 7, p_limit: 5 }),
   ]);
 
   const totalVisitors = totalVisitorsResult.count || 0;
@@ -86,7 +86,7 @@ async function fetchUserStats(supabase: any, userId: string) {
   const enrichedVisitors = enrichedVisitorsResult.count || 0;
   const visitorsToday = visitorsTodayResult.count || 0;
   const visitorsYesterday = visitorsYesterdayResult.count || 0;
-  const eventsToday = eventsTodayResult.count || 0;
+  const eventsToday = newVisitorsTodayResult.count || 0;
   const recentVisitors = recentVisitorsResult.data || [];
 
   const avgLeadScore = typeof avgLeadScoreResult.data === 'number'
@@ -94,35 +94,40 @@ async function fetchUserStats(supabase: any, userId: string) {
     : 0;
 
   // Build chart data from RPC results
-  const eventsByDayMap: Record<string, { events: number; pageviews: number }> = {};
+  const visitorsByDayMap: Record<string, { visitors: number; pageviews: number }> = {};
   for (let i = 6; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
-    eventsByDayMap[dateStr] = { events: 0, pageviews: 0 };
+    visitorsByDayMap[dateStr] = { visitors: 0, pageviews: 0 };
   }
 
-  if (eventStatsByDayResult.data) {
-    for (const row of eventStatsByDayResult.data) {
-      const dateStr = String(row.event_date);
-      if (eventsByDayMap[dateStr]) {
-        eventsByDayMap[dateStr].events = Number(row.total_events);
-        eventsByDayMap[dateStr].pageviews = Number(row.pageview_count);
+  if (visitorStatsByDayResult.error) {
+    console.error('get_visitor_stats_by_day RPC error:', visitorStatsByDayResult.error);
+  }
+  if (visitorStatsByDayResult.data) {
+    for (const row of visitorStatsByDayResult.data) {
+      const dateStr = String(row.visit_date);
+      if (visitorsByDayMap[dateStr]) {
+        visitorsByDayMap[dateStr].visitors = Number(row.new_visitors);
+        visitorsByDayMap[dateStr].pageviews = Number(row.day_pageviews);
       }
     }
   }
 
-  const totalEventsLastWeek = Object.values(eventsByDayMap).reduce((sum, d) => sum + d.events, 0) || 1;
+  const totalActivityLastWeek = (activityCountsResult.data || []).reduce(
+    (sum: number, r: { activity_count: number }) => sum + Number(r.activity_count), 0
+  ) || 1;
 
-  const eventTypes = (eventTypeCountsResult.data || []).map((row: { event_type: string; event_count: number }) => ({
-    type: row.event_type,
-    count: Number(row.event_count),
-    percentage: Math.round(Number(row.event_count) / totalEventsLastWeek * 100),
+  const activityTypes = (activityCountsResult.data || []).map((row: { activity_type: string; activity_count: number }) => ({
+    type: row.activity_type,
+    count: Number(row.activity_count),
+    percentage: Math.round(Number(row.activity_count) / totalActivityLastWeek * 100),
   }));
 
-  const topPages = (topPagesResult.data || []).map((row: { page_path: string; view_count: number }) => ({
+  const topPages = (topEntryPagesResult.data || []).map((row: { page_path: string; visitor_count: number }) => ({
     page: row.page_path || '/',
-    views: Number(row.view_count),
+    views: Number(row.visitor_count),
   }));
 
   // Calculate visitor change percentage
@@ -143,17 +148,17 @@ async function fetchUserStats(supabase: any, userId: string) {
       avgLeadScore,
     },
     charts: {
-      eventsByDay: Object.entries(eventsByDayMap).map(([date, data]) => ({
+      visitorsByDay: Object.entries(visitorsByDayMap).map(([date, data]) => ({
         date,
         day: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
-        events: data.events,
+        visitors: data.visitors,
       })),
-      pageviewsByDay: Object.entries(eventsByDayMap).map(([date, data]) => ({
+      pageviewsByDay: Object.entries(visitorsByDayMap).map(([date, data]) => ({
         date,
         day: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
         pageviews: data.pageviews,
       })),
-      eventTypes,
+      activityTypes,
     },
     topPages,
     recentVisitors,
