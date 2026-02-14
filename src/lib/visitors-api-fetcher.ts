@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { logEvent } from '@/lib/webhook-logger';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -472,10 +473,49 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       })
       .eq('id', pixel.id);
 
+    // Log success to system_logs
+    await logEvent({
+      type: 'api',
+      event_name: 'visitors_api_sync',
+      status: totalUpserted > 0 ? 'success' : 'info',
+      message: `Visitors sync completed for pixel ${pixel.id}: ${totalFetched} fetched, ${toInsert.length} new, ${toUpdate.length} updated`,
+      request_data: {
+        pixel_id: pixel.id,
+        api_url: pixel.visitors_api_url,
+        total_pages: totalPages,
+      },
+      response_data: {
+        total_fetched: totalFetched,
+        unique_visitors: uniqueRows.length,
+        new_inserted: toInsert.length,
+        existing_updated: toUpdate.length,
+        total_upserted: totalUpserted,
+      },
+      user_id: pixel.user_id,
+    });
+
     return { totalFetched, totalUpserted };
   } catch (err) {
     const errorMessage = (err as Error).message;
     console.error(`[visitors-api-fetcher] Error for pixel ${pixel.id}:`, errorMessage);
+
+    // Log error to system_logs
+    await logEvent({
+      type: 'api',
+      event_name: 'visitors_api_sync',
+      status: 'error',
+      message: `Visitors sync failed for pixel ${pixel.id}`,
+      request_data: {
+        pixel_id: pixel.id,
+        api_url: pixel.visitors_api_url,
+      },
+      response_data: {
+        total_fetched: totalFetched,
+        total_upserted: totalUpserted,
+      },
+      error_details: errorMessage,
+      user_id: pixel.user_id,
+    });
 
     await supabaseAdmin
       .from('pixels')
