@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { TrafficAPI } from '@/lib/api';
-import { IconPlus, IconInfoCircle, IconCheck, IconCircleCheck } from '@tabler/icons-react';
+import { IconPlus, IconInfoCircle, IconCheck, IconCircleCheck, IconBriefcase, IconCoin, IconUserCircle, IconUsers, IconHome, IconMapPin } from '@tabler/icons-react';
 
 export default function CustomAudience() {
   const router = useRouter();
@@ -122,54 +122,80 @@ export default function CustomAudience() {
               </div>
               {!isAdmin && (
                 <div className="card-body border-top">
-                  <label className="form-label">Data Points</label>
-                  <p className="text-muted small mb-2">
-                    Optionally select data categories to collect from visitors.
-                  </p>
-                  <div className="d-flex flex-wrap gap-2 mb-3">
-                    {allDataPoints.map((point) => {
-                      const isSelected = dataPoints.includes(point);
+                  <div className="d-flex align-items-center justify-content-between mb-2">
+                    <label className="form-label mb-0">Data Points <span className="text-muted fw-normal" style={{ fontSize: '11px' }}>(optional)</span></label>
+                    <span
+                      className="text-primary"
+                      style={{ fontSize: '11px', cursor: 'pointer', fontWeight: 500 }}
+                      onClick={() => {
+                        const allSelected = dataPoints.length === allDataPoints.length;
+                        setDataPoints(allSelected ? [] : [...allDataPoints]);
+                      }}
+                    >
+                      {dataPoints.length === allDataPoints.length ? 'Deselect all' : 'Select all'}
+                    </span>
+                  </div>
+                  <div className="row g-2 mb-3">
+                    {[
+                      { key: 'business', label: 'Business', icon: IconBriefcase, desc: 'Company & job info' },
+                      { key: 'financial', label: 'Financial', icon: IconCoin, desc: 'Income & net worth' },
+                      { key: 'personal', label: 'Personal', icon: IconUserCircle, desc: 'Age, gender & email' },
+                      { key: 'family', label: 'Family', icon: IconUsers, desc: 'Marital & children' },
+                      { key: 'housing', label: 'Housing', icon: IconHome, desc: 'Homeowner status' },
+                      { key: 'location', label: 'Location', icon: IconMapPin, desc: 'City, state & zip' },
+                    ].map((point) => {
+                      const isSelected = dataPoints.includes(point.key);
+                      const PointIcon = point.icon;
                       return (
-                        <button
-                          key={point}
-                          type="button"
-                          className="btn btn-sm"
-                          disabled={loading}
-                          onClick={() => {
-                            setDataPoints(isSelected
-                              ? dataPoints.filter((d) => d !== point)
-                              : [...dataPoints, point]
-                            );
-                          }}
-                          style={{
-                            backgroundColor: isSelected ? 'rgba(32, 107, 196, 0.15)' : 'transparent',
-                            border: isSelected ? '1px solid rgba(32, 107, 196, 0.5)' : '1px solid var(--tblr-border-color)',
-                            color: isSelected ? '#4299e1' : 'var(--tblr-body-color)',
-                            borderRadius: '20px',
-                            padding: '4px 12px',
-                            fontSize: '12px',
-                            fontWeight: isSelected ? 600 : 400,
-                            transition: 'all 0.15s ease',
-                            textTransform: 'capitalize',
-                          }}
-                        >
-                          {isSelected && <IconCheck size={12} className="me-1" />}
-                          {point}
-                        </button>
+                        <div key={point.key} className="col-6">
+                          <div
+                            onClick={() => {
+                              if (loading) return;
+                              setDataPoints(isSelected
+                                ? dataPoints.filter((d) => d !== point.key)
+                                : [...dataPoints, point.key]
+                              );
+                            }}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              border: isSelected ? '1.5px solid rgba(32, 107, 196, 0.6)' : '1.5px solid var(--tblr-border-color)',
+                              backgroundColor: isSelected ? 'rgba(32, 107, 196, 0.08)' : 'transparent',
+                              cursor: loading ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.15s ease',
+                              opacity: loading ? 0.6 : 1,
+                            }}
+                          >
+                            <div className="d-flex align-items-center gap-2">
+                              <div style={{
+                                width: '28px', height: '28px', borderRadius: '6px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                backgroundColor: isSelected ? 'rgba(32, 107, 196, 0.15)' : 'var(--tblr-bg-surface-secondary)',
+                                color: isSelected ? '#4299e1' : 'var(--tblr-secondary)',
+                                flexShrink: 0, transition: 'all 0.15s ease',
+                              }}>
+                                <PointIcon size={14} />
+                              </div>
+                              <div className="flex-fill" style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: '12px', fontWeight: isSelected ? 600 : 500, color: isSelected ? '#4299e1' : 'var(--tblr-body-color)' }}>{point.label}</div>
+                                <div className="text-muted" style={{ fontSize: '10px', lineHeight: 1.2 }}>{point.desc}</div>
+                              </div>
+                              {isSelected && <IconCheck size={14} style={{ color: '#4299e1', flexShrink: 0 }} />}
+                            </div>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
                   <div style={{
-                    background: 'linear-gradient(135deg, rgba(32, 107, 196, 0.08), rgba(32, 196, 140, 0.08))',
-                    border: '1px solid rgba(32, 196, 140, 0.2)',
+                    background: 'linear-gradient(135deg, rgba(32, 107, 196, 0.06), rgba(32, 196, 140, 0.06))',
+                    border: '1px solid rgba(32, 196, 140, 0.15)',
                     borderRadius: '8px',
-                    padding: '10px 14px',
+                    padding: '8px 12px',
                   }}>
-                    <div className="d-flex align-items-center gap-2" style={{ fontSize: '12px', color: 'var(--tblr-body-color)' }}>
-                      <IconCircleCheck size={16} style={{ color: '#20c997', flexShrink: 0 }} />
-                      <span>
-                        All identified visitors will include <strong>Name</strong>, <strong>Email</strong> &amp; <strong>Phone</strong>
-                      </span>
+                    <div className="d-flex align-items-center gap-2" style={{ fontSize: '11px', color: 'var(--tblr-body-color)' }}>
+                      <IconCircleCheck size={14} style={{ color: '#20c997', flexShrink: 0 }} />
+                      <span>All visitors include <strong>Name</strong>, <strong>Email</strong> &amp; <strong>Phone</strong> by default</span>
                     </div>
                   </div>
                 </div>

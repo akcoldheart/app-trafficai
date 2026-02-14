@@ -331,187 +331,172 @@ export default function AdminLogs() {
               </p>
             </div>
           ) : (
-            <div className="list-group list-group-flush">
-              {logs.map((log) => (
-                <div key={log.id} className="list-group-item">
-                  {/* Main Row */}
-                  <div
-                    className="d-flex align-items-center gap-3 cursor-pointer py-2"
-                    onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    {/* Status Indicator */}
-                    <div className={`avatar avatar-sm bg-${getStatusColor(log.status)}-lt`}>
-                      {getStatusIcon(log.status)}
-                    </div>
-
-                    {/* Type Badge */}
-                    <span className={`badge bg-${getTypeColor(log.type)}-lt d-flex align-items-center gap-1`}>
-                      {getTypeIcon(log.type)}
-                      <span className="text-capitalize">{log.type}</span>
-                    </span>
-
-                    {/* Event & Message */}
-                    <div className="flex-fill min-w-0">
-                      <div className="d-flex align-items-center gap-2 mb-1">
-                        <code className="text-primary fw-bold small">{log.event_name}</code>
-                        <span className={`badge bg-${getStatusColor(log.status)}-lt text-capitalize`}>
-                          {log.status}
-                        </span>
-                      </div>
-                      <div className="text-muted small text-truncate">{formatMessage(log)}</div>
-                    </div>
-
-                    {/* User Info */}
-                    {(log.user_email || log.user_name || log.user_id) && (
-                      <div className="d-none d-md-flex align-items-center gap-2 text-end" style={{ minWidth: '220px' }}>
-                        <div className="avatar avatar-sm bg-primary-lt">
-                          <IconUser size={16} />
-                        </div>
-                        <div className="text-start">
-                          {log.user_name && (
-                            <div className="fw-medium small">{log.user_name}</div>
-                          )}
-                          {log.user_email ? (
-                            <div className="text-cyan small">{log.user_email}</div>
-                          ) : log.user_id && !log.user_name && (
-                            <div className="text-muted small font-monospace" style={{ fontSize: '0.7rem' }}>
-                              {log.user_id.slice(0, 8)}...
+            <div className="table-responsive">
+              <table className="table table-vcenter card-table table-hover">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px' }}></th>
+                    <th>Type</th>
+                    <th>Event</th>
+                    <th>Status</th>
+                    <th>Message</th>
+                    <th>User</th>
+                    <th>Timestamp</th>
+                    <th style={{ width: '40px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map((log) => (
+                    <>
+                      <tr
+                        key={log.id}
+                        onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td>
+                          <div className={`avatar avatar-sm bg-${getStatusColor(log.status)}-lt`}>
+                            {getStatusIcon(log.status)}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`badge bg-${getTypeColor(log.type)}-lt d-inline-flex align-items-center gap-1`}>
+                            {getTypeIcon(log.type)}
+                            <span className="text-capitalize">{log.type}</span>
+                          </span>
+                        </td>
+                        <td>
+                          <code className="text-primary fw-bold small">{log.event_name}</code>
+                        </td>
+                        <td>
+                          <span className={`badge bg-${getStatusColor(log.status)}-lt text-capitalize`}>
+                            {log.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="text-muted small text-truncate" style={{ maxWidth: '300px' }}>
+                            {formatMessage(log)}
+                          </div>
+                        </td>
+                        <td>
+                          {(log.user_email || log.user_name) ? (
+                            <div>
+                              {log.user_name && <div className="fw-medium small">{log.user_name}</div>}
+                              {log.user_email && <div className="text-cyan small">{log.user_email}</div>}
                             </div>
+                          ) : log.user_id ? (
+                            <code className="text-muted small">{log.user_id.slice(0, 8)}...</code>
+                          ) : (
+                            <span className="text-muted small">-</span>
                           )}
-                        </div>
-                      </div>
-                    )}
+                        </td>
+                        <td>
+                          <div className="text-muted small text-nowrap">
+                            {formatDate(log.created_at)}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="text-muted">
+                            {expandedLogId === log.id ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+                          </span>
+                        </td>
+                      </tr>
 
-                    {/* Timestamp */}
-                    <div className="d-none d-lg-flex align-items-center gap-1 text-muted small" style={{ minWidth: '160px' }}>
-                      <IconClock size={14} />
-                      {formatDate(log.created_at)}
-                    </div>
+                      {/* Expanded Details Row */}
+                      {expandedLogId === log.id && (
+                        <tr key={`${log.id}-details`}>
+                          <td colSpan={8} className="bg-surface-secondary" style={{ padding: '16px 24px' }}>
+                            <div className="row g-3">
+                              {/* User Details */}
+                              {log.user_id && (
+                                <div className="col-md-6">
+                                  <div className="card border mb-0">
+                                    <div className="card-body py-3">
+                                      <h6 className="card-subtitle mb-2 d-flex align-items-center gap-2">
+                                        <IconUser size={14} className="text-primary" />
+                                        <span>Account Details</span>
+                                      </h6>
+                                      <div className="d-flex flex-column gap-1">
+                                        {log.user_name && (
+                                          <div className="small"><span className="text-muted" style={{ display: 'inline-block', width: '60px' }}>Name:</span> <strong>{log.user_name}</strong></div>
+                                        )}
+                                        {log.user_email && (
+                                          <div className="small"><span className="text-muted" style={{ display: 'inline-block', width: '60px' }}>Email:</span> <code className="text-cyan">{log.user_email}</code></div>
+                                        )}
+                                        {log.user_company && (
+                                          <div className="small"><span className="text-muted" style={{ display: 'inline-block', width: '60px' }}>Company:</span> {log.user_company}</div>
+                                        )}
+                                        <div className="small"><span className="text-muted" style={{ display: 'inline-block', width: '60px' }}>User ID:</span> <code className="text-yellow small">{log.user_id}</code></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
 
-                    {/* Expand Icon */}
-                    <div className="text-muted">
-                      {expandedLogId === log.id ? (
-                        <IconChevronUp size={20} />
-                      ) : (
-                        <IconChevronDown size={20} />
+                              {/* Event Info */}
+                              <div className={log.user_id ? 'col-md-6' : 'col-12'}>
+                                <div className="card border mb-0">
+                                  <div className="card-body py-3">
+                                    <h6 className="card-subtitle mb-2 d-flex align-items-center gap-2">
+                                      <IconCode size={14} className="text-primary" />
+                                      <span>Event Info</span>
+                                    </h6>
+                                    <div className="d-flex flex-column gap-1">
+                                      <div className="small"><span className="text-muted" style={{ display: 'inline-block', width: '60px' }}>Event:</span> <code className="text-pink">{log.event_name}</code></div>
+                                      <div className="small"><span className="text-muted" style={{ display: 'inline-block', width: '60px' }}>Time:</span> {formatDate(log.created_at)}</div>
+                                      {log.ip_address && (
+                                        <div className="small"><span className="text-muted" style={{ display: 'inline-block', width: '60px' }}>IP:</span> <code className="text-azure">{log.ip_address}</code></div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Request Data */}
+                              {log.request_data && Object.keys(log.request_data).length > 0 && (
+                                <div className="col-md-6">
+                                  <h6 className="mb-2 d-flex align-items-center gap-2 small">
+                                    <IconCode size={14} className="text-azure" />
+                                    <span>Request Data</span>
+                                  </h6>
+                                  <pre className="code-block p-3 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
+                                    {JSON.stringify(log.request_data, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+
+                              {/* Response Data */}
+                              {log.response_data && Object.keys(log.response_data).length > 0 && (
+                                <div className="col-md-6">
+                                  <h6 className="mb-2 d-flex align-items-center gap-2 small">
+                                    <IconCheck size={14} className="text-success" />
+                                    <span>Response Data</span>
+                                  </h6>
+                                  <pre className="code-block p-3 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
+                                    {JSON.stringify(log.response_data, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+
+                              {/* Error Details */}
+                              {log.error_details && (
+                                <div className="col-12">
+                                  <h6 className="text-danger mb-2 d-flex align-items-center gap-2 small">
+                                    <IconAlertCircle size={14} />
+                                    <span>Error Details</span>
+                                  </h6>
+                                  <pre className="bg-danger-lt text-danger p-3 rounded small mb-0">
+                                    {log.error_details}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </div>
-                  </div>
-
-                  {/* Expanded Details */}
-                  {expandedLogId === log.id && (
-                    <div className="mt-3 pt-3 border-top">
-                      <div className="row g-4">
-                        {/* User Details */}
-                        {log.user_id && (
-                          <div className="col-md-6">
-                            <div className="card border">
-                              <div className="card-body">
-                                <h6 className="card-subtitle mb-3 d-flex align-items-center gap-2">
-                                  <IconUser size={16} className="text-primary" />
-                                  <span>Account Details</span>
-                                </h6>
-                                <div className="d-flex flex-column gap-2">
-                                  {log.user_name && (
-                                    <div className="d-flex align-items-center gap-2">
-                                      <span className="text-muted small" style={{ minWidth: '70px' }}>Name:</span>
-                                      <span className="fw-medium">{log.user_name}</span>
-                                    </div>
-                                  )}
-                                  {log.user_email && (
-                                    <div className="d-flex align-items-center gap-2">
-                                      <span className="text-muted small" style={{ minWidth: '70px' }}>Email:</span>
-                                      <code className="text-cyan">{log.user_email}</code>
-                                    </div>
-                                  )}
-                                  {log.user_company && (
-                                    <div className="d-flex align-items-center gap-2">
-                                      <span className="text-muted small" style={{ minWidth: '70px' }}>Company:</span>
-                                      <span>{log.user_company}</span>
-                                    </div>
-                                  )}
-                                  <div className="d-flex align-items-center gap-2">
-                                    <span className="text-muted small" style={{ minWidth: '70px' }}>User ID:</span>
-                                    <code className="text-yellow small">{log.user_id}</code>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Event Info */}
-                        <div className={log.user_id ? 'col-md-6' : 'col-12'}>
-                          <div className="card border">
-                            <div className="card-body">
-                              <h6 className="card-subtitle mb-3 d-flex align-items-center gap-2">
-                                <IconCode size={16} className="text-primary" />
-                                <span>Event Info</span>
-                              </h6>
-                              <div className="d-flex flex-column gap-2">
-                                <div className="d-flex align-items-center gap-2">
-                                  <span className="text-muted small" style={{ minWidth: '70px' }}>Event:</span>
-                                  <code className="text-pink">{log.event_name}</code>
-                                </div>
-                                <div className="d-flex align-items-center gap-2">
-                                  <span className="text-muted small" style={{ minWidth: '70px' }}>Time:</span>
-                                  <span className="small">{formatDate(log.created_at)}</span>
-                                </div>
-                                {log.ip_address && (
-                                  <div className="d-flex align-items-center gap-2">
-                                    <span className="text-muted small" style={{ minWidth: '70px' }}>IP:</span>
-                                    <code className="text-azure">{log.ip_address}</code>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Request Data */}
-                        {log.request_data && Object.keys(log.request_data).length > 0 && (
-                          <div className="col-md-6">
-                            <h6 className="mb-2 d-flex align-items-center gap-2">
-                              <IconCode size={14} className="text-azure" />
-                              <span>Request Data</span>
-                            </h6>
-                            <pre className="code-block p-3 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
-                              {JSON.stringify(log.request_data, null, 2)}
-                            </pre>
-                          </div>
-                        )}
-
-                        {/* Response Data */}
-                        {log.response_data && Object.keys(log.response_data).length > 0 && (
-                          <div className="col-md-6">
-                            <h6 className="mb-2 d-flex align-items-center gap-2">
-                              <IconCheck size={14} className="text-success" />
-                              <span>Response Data</span>
-                            </h6>
-                            <pre className="code-block p-3 rounded small mb-0" style={{ maxHeight: '200px', overflow: 'auto' }}>
-                              {JSON.stringify(log.response_data, null, 2)}
-                            </pre>
-                          </div>
-                        )}
-
-                        {/* Error Details */}
-                        {log.error_details && (
-                          <div className="col-12">
-                            <h6 className="text-danger mb-2 d-flex align-items-center gap-2">
-                              <IconAlertCircle size={14} />
-                              <span>Error Details</span>
-                            </h6>
-                            <pre className="bg-danger-lt text-danger p-3 rounded small mb-0">
-                              {log.error_details}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    </>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -619,12 +604,6 @@ export default function AdminLogs() {
         }
         .modal {
           z-index: 1050;
-        }
-        .cursor-pointer {
-          cursor: pointer;
-        }
-        .list-group-item:hover {
-          background-color: rgba(var(--tblr-primary-rgb), 0.02);
         }
         .code-block {
           background-color: var(--tblr-bg-surface-secondary);
