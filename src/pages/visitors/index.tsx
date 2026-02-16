@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/layout/Layout';
 import {
   IconUser,
@@ -93,6 +94,9 @@ interface VisitorDetails {
 }
 
 export default function Visitors() {
+  const { userProfile } = useAuth();
+  const isAdmin = userProfile?.role === 'admin';
+
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [pixels, setPixels] = useState<Pixel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,17 +135,25 @@ export default function Visitors() {
       if (response.ok) {
         const fetched = data.pixels || [];
         setPixels(fetched);
-        // Default to the latest pixel (first in list, sorted by created_at desc)
-        if (fetched.length > 0 && !selectedPixel) {
+        // Non-admin users default to their first pixel; admins default to "All Pixels"
+        if (!isAdmin && fetched.length > 0 && !selectedPixel) {
           setSelectedPixel(fetched[0].id);
         }
       }
     } catch (err) {
       console.error('Error fetching pixels:', err);
     }
-  }, []);
+  }, [isAdmin]);
 
   const fetchVisitors = useCallback(async () => {
+    // Admin must select a pixel before loading visitors
+    if (isAdmin && !selectedPixel) {
+      setVisitors([]);
+      setPagination(prev => ({ ...prev, total: 0, totalPages: 0 }));
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -172,7 +184,7 @@ export default function Visitors() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, selectedPixel, identifiedOnly, enrichedOnly, minScore, sortBy, sortOrder]);
+  }, [isAdmin, pagination.page, pagination.limit, search, selectedPixel, identifiedOnly, enrichedOnly, minScore, sortBy, sortOrder]);
 
   const fetchVisitorDetails = useCallback(async (visitorId: string) => {
     try {
@@ -418,6 +430,7 @@ export default function Visitors() {
                     setPagination(prev => ({ ...prev, page: 1 }));
                   }}
                 >
+                  {isAdmin && <option value="">Select Pixel...</option>}
                   {pixels.map((pixel) => (
                     <option key={pixel.id} value={pixel.id}>
                       {pixel.name}
@@ -514,7 +527,14 @@ export default function Visitors() {
                 {loading ? (
                   <span className="text-muted">Loading...</span>
                 ) : (
-                  <>{pagination.total.toLocaleString()} Visitor{pagination.total !== 1 ? 's' : ''}</>
+                  <>
+                    {pagination.total.toLocaleString()} Visitor{pagination.total !== 1 ? 's' : ''}
+                    {selectedPixel && pixels.find(p => p.id === selectedPixel) && (
+                      <span className="badge bg-primary-lt text-primary ms-2" style={{ fontSize: '12px', fontWeight: 500 }}>
+                        {pixels.find(p => p.id === selectedPixel)!.name}
+                      </span>
+                    )}
+                  </>
                 )}
               </h3>
               <div className="card-actions">
@@ -568,6 +588,16 @@ export default function Visitors() {
             ) : error ? (
               <div className="card-body">
                 <div className="alert alert-danger mb-0">{error}</div>
+              </div>
+            ) : isAdmin && !selectedPixel ? (
+              <div className="card-body text-center py-5">
+                <div className="mb-3">
+                  <span className="avatar avatar-xl bg-primary-lt">
+                    <IconSearch size={32} />
+                  </span>
+                </div>
+                <h4>Select a Pixel</h4>
+                <p className="text-muted mb-0">Choose a pixel from the dropdown above to view its visitors.</p>
               </div>
             ) : visitors.length === 0 ? (
               <div className="card-body text-center py-5">
