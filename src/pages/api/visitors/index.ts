@@ -1,12 +1,23 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { getAuthenticatedUser, getUserProfile } from '@/lib/api-helpers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
-  const supabase = createClient(req, res);
+  // Check if user is admin
+  const profile = await getUserProfile(user.id, req, res);
+  const isAdmin = profile.role === 'admin';
+
+  // Admins use service role client to bypass RLS
+  const supabase = isAdmin
+    ? createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+    : createClient(req, res);
 
   try {
     if (req.method === 'GET') {
@@ -26,11 +37,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const limitNum = Math.min(parseInt(Array.isArray(limit) ? limit[0] : limit, 10), 100);
       const offset = (pageNum - 1) * limitNum;
 
-      // Build query
+      // Build query - admins see all visitors, users see only their own
       let query = supabase
         .from('visitors')
-        .select('*', { count: 'exact' })
-        .eq('user_id', user.id);
+        .select('*', { count: 'exact' });
+
+      if (!isAdmin) {
+        query = query.eq('user_id', user.id);
+      }
 
       // Filter by pixel
       if (pixel_id) {
