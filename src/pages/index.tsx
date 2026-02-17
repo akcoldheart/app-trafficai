@@ -1,20 +1,15 @@
 // Traffic AI Dashboard
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
-import { TrafficAPI, Audience } from '@/lib/api';
 import {
   IconPlus,
   IconSearch,
-  IconUsers,
   IconEye,
-  IconClick,
   IconArrowUpRight,
   IconArrowDownRight,
   IconCode,
-  IconWorld,
   IconLoader2,
   IconStarFilled,
   IconUser,
@@ -88,26 +83,14 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
-  const router = useRouter();
   const { userProfile, loading: authLoading } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
-  const [audiences, setAudiences] = useState<Audience[]>([]);
-  const [totalAudiences, setTotalAudiences] = useState<number | null>(null);
-  const [credits, setCredits] = useState<number | null>(null);
-  const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
-  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
     // Wait for auth to finish loading before fetching data
     if (authLoading) return;
 
-    // Only admins have API keys for AudienceLab - skip for regular users
-    if (isAdmin) {
-      loadDashboardData();
-    } else {
-      setLoading(false);
-    }
     loadDashboardStats();
   }, [authLoading, isAdmin]);
 
@@ -123,32 +106,6 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
     }
-  };
-
-  const loadDashboardData = async () => {
-    try {
-      const audiencesData = await TrafficAPI.getAudiences(1, 5);
-      setAudiences(audiencesData.Data || []);
-      setTotalAudiences(audiencesData.total_records || 0);
-    } catch (error) {
-      console.error('Error loading audiences:', error);
-    }
-
-    try {
-      const creditsData = await TrafficAPI.getCredits();
-      setCredits(creditsData.credits || creditsData.available || 0);
-    } catch (error) {
-      console.error('Error loading credits:', error);
-    }
-
-    try {
-      const testResult = await TrafficAPI.testConnection();
-      setApiStatus(testResult.success ? 'connected' : 'error');
-    } catch {
-      setApiStatus('error');
-    }
-
-    setLoading(false);
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -436,46 +393,30 @@ export default function Dashboard() {
         <div className="col-sm-6 col-lg-3">
           <div className="card">
             <div className="card-body">
-              {isAdmin ? (
-                <>
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="subheader text-muted">Available Credits</div>
-                  </div>
-                  <div className="d-flex align-items-baseline mt-2">
-                    <div className="h1 mb-0 me-2">
-                      {loading ? <div className="placeholder col-4"></div> : (credits?.toLocaleString() ?? '-')}
-                    </div>
-                  </div>
-                  <div className="progress mt-3" style={{ height: '8px' }}>
-                    <div
-                      className="progress-bar bg-primary"
-                      style={{ width: credits ? `${Math.min((credits / 10000) * 100, 100)}%` : '0%' }}
-                    />
-                  </div>
-                  <div className="mt-2 text-muted small">
-                    {apiStatus === 'connected' && <span className="status status-green">API Connected</span>}
-                    {apiStatus === 'error' && <span className="status status-red">API Error</span>}
-                    {apiStatus === 'checking' && <span className="status">Checking...</span>}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="subheader text-muted">Active Pixels</div>
-                  </div>
-                  <div className="d-flex align-items-baseline mt-2">
-                    <div className="h1 mb-0 me-2">{stats?.overview.activePixels || 0}</div>
-                  </div>
-                  <div className="mt-3 d-flex gap-2">
-                    <Link href="/pixels" className="btn btn-sm btn-outline-primary flex-fill">
-                      Manage Pixels
-                    </Link>
-                  </div>
-                  <div className="mt-2 text-muted small">
-                    Tracking your website visitors
-                  </div>
-                </>
-              )}
+              <div className="d-flex align-items-center justify-content-between">
+                <div className="subheader text-muted">Enriched Visitors</div>
+              </div>
+              <div className="d-flex align-items-baseline mt-2">
+                <div className="h1 mb-0 me-2">{stats?.overview.enrichedVisitors?.toLocaleString() || 0}</div>
+              </div>
+              <div className="mt-3">
+                <div className="progress" style={{ height: '8px' }}>
+                  <div
+                    className="progress-bar bg-purple"
+                    style={{
+                      width: stats?.overview.totalVisitors
+                        ? `${(stats.overview.enrichedVisitors / stats.overview.totalVisitors) * 100}%`
+                        : '0%'
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="mt-2 text-muted small">
+                {stats?.overview.totalVisitors
+                  ? `${Math.round(((stats?.overview.enrichedVisitors || 0) / stats.overview.totalVisitors) * 100)}% enrichment rate`
+                  : 'No visitors yet'
+                }
+              </div>
             </div>
           </div>
         </div>
@@ -688,7 +629,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loading || !stats ? (
+                  {!stats ? (
                     <tr>
                       <td colSpan={4} className="text-center text-muted py-4">
                         <div className="spinner-border spinner-border-sm me-2" role="status"></div>
