@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (authError || !user) {
     console.error('Proxy auth error:', authError);
-    return res.status(401).json({ error: 'Unauthorized', details: authError?.message });
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   // Check if user is admin by looking up their role

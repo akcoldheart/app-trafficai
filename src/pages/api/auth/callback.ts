@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.redirect(finalRedirect);
       }
 
-      return res.redirect(`/auth/login?error=${encodeURIComponent(error.message)}`);
+      return res.redirect('/auth/login?error=Authentication+failed');
     }
 
     if (!data.session) {

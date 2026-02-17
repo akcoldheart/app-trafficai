@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (findError) {
       console.error('Error finding conversation:', findError);
-      return res.status(500).json({ error: findError.message });
+      return res.status(500).json({ error: 'Internal server error' });
     }
 
     if (existing) {
@@ -66,7 +66,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (createError) {
       console.error('Error creating conversation:', createError);
-      return res.status(500).json({ error: createError.message });
+      return res.status(500).json({ error: 'Internal server error' });
     }
 
     // Insert first agent message

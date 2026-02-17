@@ -133,7 +133,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (error) {
         console.error('Error creating message:', error);
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: 'Internal server error' });
       }
 
       // Log audit if agent
@@ -217,7 +217,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .order('created_at', { ascending: true });
 
       if (error) {
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: 'Internal server error' });
       }
 
       return res.status(200).json({ data: data || [] });

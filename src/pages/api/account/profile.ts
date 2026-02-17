@@ -67,11 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (error) {
         console.error('Error updating profile:', error);
-        // Return more detailed error for debugging
-        return res.status(500).json({
-          error: 'Failed to update profile',
-          details: error.message
-        });
+        return res.status(500).json({ error: 'Failed to update profile' });
       }
 
       // Also update Supabase auth metadata if full_name changed

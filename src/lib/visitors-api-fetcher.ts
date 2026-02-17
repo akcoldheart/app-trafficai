@@ -315,7 +315,6 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     const headers = buildHeaders(pixel.visitors_api_url, apiKey);
 
     // Fetch first page
-    console.log(`[visitors-api-fetcher] Fetching page 1 from: ${pixel.visitors_api_url}`);
     const firstResponse = await fetch(pixel.visitors_api_url, { method: 'GET', headers });
 
     if (!firstResponse.ok) {
@@ -326,8 +325,6 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     const firstData = await firstResponse.json();
     const totalPages = Number(firstData.total_pages || firstData.TotalPages || firstData.totalPages || 1);
     const currentPage = Number(firstData.page || firstData.Page || firstData.current_page || 1);
-
-    console.log(`[visitors-api-fetcher] Page ${currentPage}/${totalPages}`);
 
     let allContacts: ApiContact[] = extractContacts(firstData);
 
@@ -352,25 +349,14 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
         for (const records of batchResults) {
           allContacts = allContacts.concat(records);
         }
-        console.log(`[visitors-api-fetcher] Fetched pages ${batchStart}-${batchEnd}, total contacts: ${allContacts.length}`);
       }
     }
 
     totalFetched = allContacts.length;
-    console.log(`[visitors-api-fetcher] Total contacts fetched: ${totalFetched}`);
-
-    // Debug: log first contact's keys to help diagnose UUID field issues
-    if (allContacts.length > 0) {
-      const sample = allContacts[0];
-      const sampleKeys = Object.keys(sample).slice(0, 20);
-      console.log(`[visitors-api-fetcher] Sample contact keys: ${sampleKeys.join(', ')}`);
-      console.log(`[visitors-api-fetcher] Sample UUID value: ${getContactUuid(sample)}`);
-    }
 
     // Group contacts by UUID and aggregate event data (pageviews, clicks, scroll, etc.)
     // The API returns multiple event records per person, so we aggregate them
     const uniqueRows = aggregateContactEvents(allContacts, pixel.id, pixel.user_id);
-    console.log(`[visitors-api-fetcher] ${totalFetched} event records → ${uniqueRows.length} unique visitors (with aggregated activity stats)`);
 
     // Fetch ALL existing visitor_ids for this pixel to split into insert vs update
     // Paginate to avoid Supabase default 1000-row limit
@@ -397,8 +383,6 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     const toInsert = uniqueRows.filter(r => !existingMap.has(r.visitor_id));
     const toUpdate = uniqueRows.filter(r => existingMap.has(r.visitor_id));
 
-    console.log(`[visitors-api-fetcher] ${toInsert.length} new visitors to insert, ${toUpdate.length} existing to update`);
-
     // Batch insert new records
     const BATCH_SIZE = 200;
     for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
@@ -413,9 +397,6 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
         totalUpserted += batch.length;
       }
 
-      if (i % 1000 === 0 && i > 0) {
-        console.log(`[visitors-api-fetcher] Inserted ${totalUpserted}/${toInsert.length}...`);
-      }
     }
 
     // Update existing records in parallel batches of 50
@@ -460,8 +441,6 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       );
       totalUpserted += results.filter(Boolean).length;
     }
-
-    console.log(`[visitors-api-fetcher] Done. Upserted ${totalUpserted} visitors.`);
 
     // Update pixel fetch status and events count
     await supabaseAdmin

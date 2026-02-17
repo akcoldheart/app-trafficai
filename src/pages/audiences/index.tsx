@@ -414,9 +414,7 @@ export default function Audiences() {
   }, [router.query.tab, router]);
 
   const handleDelete = async () => {
-    console.log('handleDelete called, deleteId:', deleteId, 'deleting:', deleting);
     if (!deleteId || deleting) {
-      console.log('Early return - deleteId empty or already deleting');
       return;
     }
 
@@ -424,28 +422,23 @@ export default function Audiences() {
     try {
       // Check if it's a manual audience
       const isManualAudience = deleteId.startsWith('manual_');
-      console.log('Is manual audience:', isManualAudience);
 
       if (isManualAudience) {
         // Delete manual audience from local database
-        console.log('Deleting manual audience:', deleteId);
         const response = await fetch(`/api/audiences/manual/${deleteId}`, {
           method: 'DELETE',
         });
 
         const data = await response.json();
-        console.log('Delete response:', response.status, data);
 
         if (!response.ok) {
           throw new Error(data.error || 'Failed to delete audience');
         }
       } else {
         // Delete from external API
-        console.log('Deleting from external API:', deleteId);
         await TrafficAPI.deleteAudience(deleteId);
       }
 
-      console.log('Delete successful');
       setShowDeleteModal(false);
       setDeleteId(null);
       showToast('Audience deleted successfully', 'success');

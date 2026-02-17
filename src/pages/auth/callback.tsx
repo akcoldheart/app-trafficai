@@ -25,7 +25,6 @@ export default function AuthCallback() {
           const hashParams = new URLSearchParams(window.location.hash.substring(1));
           const accessToken = hashParams.get('access_token');
           if (accessToken) {
-            console.log('Found access token in hash, waiting for session...');
             // Give Supabase a moment to process the hash
             await new Promise(resolve => setTimeout(resolve, 500));
           }
@@ -34,7 +33,6 @@ export default function AuthCallback() {
         // First check if we already have a valid session
         const { data: { session: existingSession } } = await supabase.auth.getSession();
         if (existingSession) {
-          console.log('Session already exists, redirecting...');
           // Small delay to ensure cookies are synced
           await new Promise(resolve => setTimeout(resolve, 100));
           window.location.href = redirectTo;
@@ -42,8 +40,6 @@ export default function AuthCallback() {
         }
 
         if (code) {
-          console.log('Processing OAuth callback with code...');
-
           // Exchange the code for a session (client-side has access to code_verifier)
           const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
@@ -53,7 +49,6 @@ export default function AuthCallback() {
             // If exchange fails, check again for session (might have been set by another process)
             const { data: { session: retrySession } } = await supabase.auth.getSession();
             if (retrySession) {
-              console.log('Session found after exchange error, redirecting...');
               await new Promise(resolve => setTimeout(resolve, 100));
               window.location.href = redirectTo;
               return;
@@ -70,7 +65,6 @@ export default function AuthCallback() {
 
           // Successfully exchanged code
           if (data?.session) {
-            console.log('Session obtained from code exchange, redirecting...');
             // Small delay to ensure cookies are fully set before redirect
             await new Promise(resolve => setTimeout(resolve, 100));
             window.location.href = redirectTo;

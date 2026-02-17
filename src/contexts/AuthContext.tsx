@@ -134,32 +134,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserMenuItems([]);
     setSession(null);
 
-    try {
-      // Clear Supabase cookies
-      document.cookie.split(';').forEach((c) => {
-        const name = c.trim().split('=')[0];
-        if (name.startsWith('sb-') || name.includes('supabase')) {
-          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
-          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${window.location.hostname}`;
-        }
-      });
+    if (typeof window !== 'undefined') {
+      try {
+        // Clear Supabase cookies
+        document.cookie.split(';').forEach((c) => {
+          const name = c.trim().split('=')[0];
+          if (name.startsWith('sb-') || name.includes('supabase')) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${window.location.hostname}`;
+          }
+        });
 
-      // Clear localStorage items related to supabase session (but not auth settings)
-      Object.keys(localStorage).forEach((key) => {
-        // Only clear session-related items, not PKCE verifiers or other auth config
-        if (key.startsWith('sb-') && (key.includes('-auth-token') || key.includes('session'))) {
-          localStorage.removeItem(key);
-        }
-      });
+        // Clear localStorage items related to supabase session (but not auth settings)
+        Object.keys(localStorage).forEach((key) => {
+          // Only clear session-related items, not PKCE verifiers or other auth config
+          if (key.startsWith('sb-') && (key.includes('-auth-token') || key.includes('session'))) {
+            localStorage.removeItem(key);
+          }
+        });
 
-      // Clear auth-related sessionStorage
-      sessionStorage.removeItem('authRedirect');
-    } catch (err) {
-      console.error('Error during signOut cleanup:', err);
+        // Clear auth-related sessionStorage
+        sessionStorage.removeItem('authRedirect');
+      } catch (err) {
+        console.error('Error during signOut cleanup:', err);
+      }
+
+      // Redirect to login page with a full navigation (clears any stale React state)
+      window.location.href = '/auth/login';
     }
-
-    // Redirect to login page with a full navigation (clears any stale React state)
-    window.location.href = '/auth/login';
   };
 
   const refreshUser = async () => {

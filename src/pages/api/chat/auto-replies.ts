@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .order('created_at', { ascending: false });
 
       if (error) {
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: 'Internal server error' });
       }
 
       return res.status(200).json({ data: data || [] });
@@ -57,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .single();
 
       if (error) {
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: 'Internal server error' });
       }
 
       return res.status(201).json({ data });
@@ -86,7 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .single();
 
       if (error) {
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: 'Internal server error' });
       }
 
       return res.status(200).json({ data });
@@ -107,7 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .eq('id', idString);
 
       if (error) {
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: 'Internal server error' });
       }
 
       return res.status(200).json({ success: true });

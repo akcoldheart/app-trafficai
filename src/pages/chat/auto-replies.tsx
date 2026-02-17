@@ -98,8 +98,6 @@ export default function AutoRepliesPage() {
         ...(editingReply && { id: editingReply.id }),
       };
 
-      console.log('Submitting auto-reply:', payload);
-
       const response = await fetch('/api/chat/auto-replies', {
         method: editingReply ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -107,7 +105,6 @@ export default function AutoRepliesPage() {
       });
 
       const result = await response.json();
-      console.log('API response:', response.status, result);
 
       if (!response.ok) throw new Error(result.error || 'Failed to save');
 
