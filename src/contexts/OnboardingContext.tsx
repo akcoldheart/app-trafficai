@@ -129,7 +129,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   // Auto-trigger on dashboard for new users
   useEffect(() => {
-    const isDashboard = router.pathname === '/' || router.pathname === '/partner/dashboard';
+    const isDashboard = router.pathname === '/';
     if (
       !hasTriggered.current &&
       isDashboard &&
