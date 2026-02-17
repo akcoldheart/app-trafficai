@@ -77,8 +77,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ error: 'Failed to update plan' });
     }
 
-    console.log(`Plan updated for user ${user.id}: ${planId} (via session verification)`);
-
     return res.status(200).json({
       success: true,
       plan: planId,

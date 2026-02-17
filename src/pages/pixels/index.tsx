@@ -303,8 +303,6 @@ export default function Pixels() {
         payload.visitors_api_url = visitorsApiUrl.trim();
       }
 
-      console.log('Creating pixel with payload:', payload);
-
       const response = await fetch('/api/admin/pixels/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -312,7 +310,6 @@ export default function Pixels() {
       });
 
       const data = await response.json();
-      console.log('Pixel created response:', data);
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create pixel');

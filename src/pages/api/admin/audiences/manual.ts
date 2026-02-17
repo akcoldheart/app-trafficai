@@ -77,13 +77,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Use provided audience ID (for appending) or generate a new one
     const audienceId = append_to_audience_id || `manual_${crypto.randomUUID()}`;
 
-    // Log sample of incoming data for debugging
-    console.log('Manual audience - Sample contact (first):', JSON.stringify(contacts[0], null, 2));
-    console.log('Manual audience - Total contacts received:', contacts.length);
-    if (append_to_audience_id) {
-      console.log('Manual audience - Appending to existing audience:', append_to_audience_id);
-    }
-
     // Normalize contacts - handle various field name formats and nested resolution object
     const normalizedContacts = contacts.map((contact, index) => {
       // Audiencelab.io may return data nested in 'resolution' object
@@ -157,16 +150,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      // Log first normalized contact for debugging
-      if (index === 0) {
-        console.log('Manual audience - Normalized contact (first):', JSON.stringify(normalized, null, 2));
-      }
-
       return normalized;
     });
-
-    // Log summary
-    console.log('Manual audience - Normalized contacts count:', normalizedContacts.length);
 
     // Handle appending to an existing audience (for batched uploads)
     if (append_to_audience_id) {
@@ -285,7 +270,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (createError) {
         console.error('Error creating audience request:', createError);
-        return res.status(500).json({ error: 'Failed to create audience: ' + createError.message });
+        return res.status(500).json({ error: 'Failed to create audience' });
       }
     }
 

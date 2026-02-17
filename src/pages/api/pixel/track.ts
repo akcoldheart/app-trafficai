@@ -248,8 +248,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             identifyData.full_name = payload.eventData.name as string;
           }
 
-          console.log('Updating visitor with identify data:', existingVisitor.id, identifyData);
-
           const { error: identifyError } = await supabaseAdmin
             .from('visitors')
             .update(identifyData)
@@ -257,8 +255,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
           if (identifyError) {
             console.error('Error updating visitor with identify data:', identifyError);
-          } else {
-            console.log('Successfully identified visitor:', existingVisitor.id);
           }
         }
 
@@ -328,7 +324,6 @@ async function enrichVisitor(visitorId: string, userId: string, ip: string, user
       .single();
 
     if (!apiKeyData?.api_key) {
-      console.log('No API key for user:', userId);
       return;
     }
 
@@ -346,7 +341,6 @@ async function enrichVisitor(visitorId: string, userId: string, ip: string, user
     });
 
     if (!enrichResponse.ok) {
-      console.log('Enrichment failed:', enrichResponse.status);
       return;
     }
 
@@ -375,8 +369,6 @@ async function enrichVisitor(visitorId: string, userId: string, ip: string, user
           enrichment_data: enrichData,
         })
         .eq('id', visitorId);
-
-      console.log('Visitor enriched:', visitorId);
     }
   } catch (error) {
     console.error('Enrichment error:', error);

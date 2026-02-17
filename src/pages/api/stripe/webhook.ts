@@ -54,24 +54,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabase = getServiceClient();
 
   try {
-    console.log(`Processing webhook event: ${event.type}`);
-
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.user_id;
         const planId = session.metadata?.plan_id;
         const customerId = session.customer as string;
-
-        console.log('checkout.session.completed:', {
-          sessionId: session.id,
-          userId,
-          planId,
-          customerId,
-          subscriptionId: session.subscription,
-          paymentStatus: session.payment_status,
-          metadata: session.metadata,
-        });
 
         if (!userId) {
           console.error('No user_id in session metadata');
@@ -119,7 +107,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             error: updateError.message,
           });
         } else {
-          console.log(`User ${userId} subscribed to ${planId}. Updated rows:`, updateData);
           await logStripeWebhook('checkout.session.completed', 'success', `User ${userId} subscribed to ${planId} plan`, {
             eventId: event.id,
             userId,
@@ -135,13 +122,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
-
-        console.log('customer.subscription.updated:', {
-          subscriptionId: subscription.id,
-          customerId,
-          status: subscription.status,
-          metadata: subscription.metadata,
-        });
 
         // Get user by customer ID
         const { data: userData, error: findError } = await supabase
@@ -178,7 +158,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               error: updateError.message,
             });
           } else {
-            console.log(`Subscription updated for user ${userData.id}: ${status}, plan: ${planId}`);
             await logStripeWebhook('customer.subscription.updated', 'success', `Subscription ${status} for user ${userData.id}`, {
               eventId: event.id,
               customerId,
@@ -188,7 +167,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             });
           }
         } else {
-          console.log('No user found for customer:', customerId);
           await logStripeWebhook('customer.subscription.updated', 'warning', `No user found for customer ${customerId}`, {
             eventId: event.id,
             customerId,
@@ -220,7 +198,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             })
             .eq('id', userData.id);
 
-          console.log(`Subscription canceled for user ${userData.id}`);
         }
         break;
       }
@@ -233,13 +210,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const subscriptionId = typeof invoiceAny.subscription === 'string'
           ? invoiceAny.subscription
           : invoiceAny.subscription?.id || null;
-
-        console.log('invoice.payment_succeeded:', {
-          invoiceId: invoice.id,
-          customerId,
-          subscriptionId,
-          amountPaid: invoice.amount_paid,
-        });
 
         // For subscription invoices, ensure user plan is active
         if (subscriptionId) {
@@ -261,7 +231,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (updateError) {
               console.error('Error updating subscription status on payment:', updateError);
             } else {
-              console.log(`Payment confirmed for user ${userData.id}, subscription active`);
               await logStripeWebhook('invoice.payment_succeeded', 'success', `Payment confirmed for user ${userData.id}`, {
                 eventId: event.id,
                 customerId,
@@ -276,14 +245,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice;
-        console.log(`Payment failed for invoice ${invoice.id}`);
         // You might want to send an email notification here
         break;
       }
 
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        break;
     }
 
     return res.status(200).json({ received: true });

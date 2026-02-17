@@ -32,9 +32,7 @@ const CHAT_CONFIG = {
 
 export default function ChatBubble() {
   const { user, userProfile } = useAuth();
-
-  // Admins use the Messages menu in sidebar — no need for chat bubble
-  if (userProfile?.role === 'admin') return null;
+  const isAdmin = userProfile?.role === 'admin';
 
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -51,6 +49,7 @@ export default function ChatBubble() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isOpenRef = useRef(isOpen);
   const supabase = createClient();
+  const processedMessageIds = useRef<Set<string>>(new Set());
 
   // Keep ref in sync so realtime callback sees latest value
   useEffect(() => {
@@ -64,18 +63,16 @@ export default function ChatBubble() {
 
   // Check for existing conversation in localStorage
   useEffect(() => {
+    if (isAdmin) return;
     const savedConvId = localStorage.getItem('chat_conversation_id');
     if (savedConvId) {
       loadConversation(savedConvId);
     }
-  }, []);
-
-  // Track message IDs we've already processed to prevent duplicates
-  const processedMessageIds = useRef<Set<string>>(new Set());
+  }, [isAdmin]);
 
   // Subscribe to realtime messages
   useEffect(() => {
-    if (!conversation?.id) return;
+    if (isAdmin || !conversation?.id) return;
 
     const channel = supabase
       .channel(`chat:${conversation.id}`)
@@ -114,7 +111,7 @@ export default function ChatBubble() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversation?.id, supabase]);
+  }, [isAdmin, conversation?.id, supabase]);
 
   const loadConversation = async (convId: string) => {
     setLoading(true);
@@ -327,18 +324,19 @@ export default function ChatBubble() {
 
   // Pre-fill email if user is logged in
   useEffect(() => {
+    if (isAdmin) return;
     if (user?.email && !customerEmail) {
       setCustomerEmail(user.email);
       if (user.user_metadata?.full_name) {
         setCustomerName(user.user_metadata.full_name);
       }
     }
-  }, [user]);
+  }, [user, isAdmin]);
 
   // Poll for new conversations/messages for logged-in users
   // Handles: admin-created conversations, messages arriving while page was closed, etc.
   useEffect(() => {
-    if (!user?.email) return;
+    if (isAdmin || !user?.email) return;
 
     let active = true;
 
@@ -403,7 +401,10 @@ export default function ChatBubble() {
       clearInterval(interval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.email, conversation?.id]);
+  }, [isAdmin, user?.email, conversation?.id]);
+
+  // Admins use the Messages menu in sidebar — no need for chat bubble
+  if (isAdmin) return null;
 
   const handleOpenChat = () => {
     setIsOpen(true);

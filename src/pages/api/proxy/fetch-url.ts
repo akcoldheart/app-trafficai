@@ -130,12 +130,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const totalPages = Number(data.total_pages || data.TotalPages || data.totalPages || 0);
       const currentPage = Number(data.page || data.Page || data.current_page || 1);
 
-      console.log(`[Proxy] audiencelab.io pagination check - totalPages: ${totalPages}, currentPage: ${currentPage}`);
-
       if (totalPages > 1 && currentPage === 1) {
         // Collect all records from first page
         let allRecords = (data.Data || data.data || data.records || data.contacts || []) as unknown[];
-        console.log(`[Proxy] Page 1 records: ${allRecords.length}, fetching ${totalPages - 1} more pages...`);
 
         // Fetch remaining pages in parallel batches of 5
         const batchSize = 5;
@@ -167,10 +164,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           for (const records of batchResults) {
             allRecords = allRecords.concat(records);
           }
-          console.log(`[Proxy] Fetched pages ${batchStart}-${batchEnd}, total records so far: ${allRecords.length}`);
         }
-
-        console.log(`[Proxy] All pages fetched. Total records: ${allRecords.length}`);
 
         // Strip empty/null fields from each contact to reduce payload size
         // audiencelab.io returns 100+ fields per contact, most of which are empty strings
@@ -211,7 +205,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error) {
     console.error('Proxy fetch error:', error);
     return res.status(500).json({
-      error: 'Failed to fetch data: ' + (error as Error).message
+      error: 'Failed to fetch data'
     });
   }
 }

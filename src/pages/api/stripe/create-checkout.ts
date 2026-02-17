@@ -70,7 +70,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const stripeError = customerError as { code?: string; message?: string };
         // Customer doesn't exist in current mode (test/live mismatch)
         if (stripeError.code === 'resource_missing' || stripeError.message?.includes('No such customer')) {
-          console.log(`Customer ${customerId} not found in ${isTestMode ? 'test' : 'live'} mode, creating new customer`);
           needsNewCustomer = true;
         } else {
           throw customerError;

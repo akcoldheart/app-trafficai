@@ -58,7 +58,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await response.json();
-      console.log('User data from API:', data);
 
       return {
         profile: data.profile as UserProfile,

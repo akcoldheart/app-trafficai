@@ -585,7 +585,7 @@ export default function AdminLogs() {
         </div>
       )}
 
-      <style jsx>{`
+      <style jsx global>{`
         .spinner {
           animation: spin 1s linear infinite;
         }

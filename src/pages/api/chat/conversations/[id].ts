@@ -13,6 +13,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     if (req.method === 'GET') {
+      // Require authentication to view conversations
+      const user = await getAuthenticatedUser(req, res);
+      if (!user) return;
+
       // Fetch conversation with messages
       const { data: conversation, error: convError } = await supabase
         .from('chat_conversations')
@@ -24,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (convError.code === 'PGRST116') {
           return res.status(404).json({ error: 'Conversation not found' });
         }
-        return res.status(500).json({ error: convError.message });
+        return res.status(500).json({ error: 'Failed to fetch conversation' });
       }
 
       // Fetch messages for this conversation
@@ -35,20 +39,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .order('created_at', { ascending: true });
 
       if (msgError) {
-        return res.status(500).json({ error: msgError.message });
+        return res.status(500).json({ error: 'Failed to fetch messages' });
       }
 
-      // Check if authenticated user is viewing (for audit log)
-      const user = await getAuthenticatedUser(req, res).catch(() => null);
-      if (user) {
-        await logAuditAction(user.id, 'view_chat_conversation', req, res, 'conversation', id);
+      await logAuditAction(user.id, 'view_chat_conversation', req, res, 'conversation', id);
 
-        // Mark as read when agent views
-        await supabase
-          .from('chat_conversations')
-          .update({ read: true })
-          .eq('id', id);
-      }
+      // Mark as read when agent views
+      await supabase
+        .from('chat_conversations')
+        .update({ read: true })
+        .eq('id', id);
 
       return res.status(200).json({
         data: {
@@ -81,7 +81,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .single();
 
       if (error) {
-        return res.status(500).json({ error: error.message });
+        console.error('Error updating conversation:', error);
+        return res.status(500).json({ error: 'Failed to update conversation' });
       }
 
       await logAuditAction(user.id, 'update_chat_conversation', req, res, 'conversation', id);

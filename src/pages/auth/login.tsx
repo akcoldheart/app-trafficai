@@ -41,7 +41,6 @@ export default function Login() {
       if (code) {
         authProcessedRef.current = true;
         setIsProcessingAuth(true);
-        console.log('OAuth code detected, exchanging...');
 
         // Clear code from URL immediately to prevent re-processing on refresh
         window.history.replaceState({}, '', '/auth/login');
@@ -50,7 +49,6 @@ export default function Login() {
           // First check if we already have a session (code might have been processed)
           const { data: { session: existingSession } } = await supabase.auth.getSession();
           if (existingSession) {
-            console.log('Session already exists, redirecting...');
             const redirectUrl = sessionStorage.getItem('authRedirect') || '/';
             sessionStorage.removeItem('authRedirect');
             window.location.href = redirectUrl;
@@ -66,7 +64,6 @@ export default function Login() {
             // Check if session was created despite the error (race condition)
             const { data: { session: retrySession } } = await supabase.auth.getSession();
             if (retrySession) {
-              console.log('Session found after error, redirecting...');
               const redirectUrl = sessionStorage.getItem('authRedirect') || '/';
               sessionStorage.removeItem('authRedirect');
               window.location.href = redirectUrl;
@@ -79,7 +76,6 @@ export default function Login() {
           }
 
           if (data?.session) {
-            console.log('Session obtained, redirecting...');
             // Get redirect URL from sessionStorage or default to home
             const redirectUrl = sessionStorage.getItem('authRedirect') || '/';
             sessionStorage.removeItem('authRedirect');

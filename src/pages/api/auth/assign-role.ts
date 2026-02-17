@@ -74,7 +74,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .update({ role: 'user' })
         .eq('id', user.id);
     }
-    console.log('Assigning role for user:', userData?.email, 'role name:', roleName);
 
     // Look up the role
     const { data: roleData, error: roleError } = await supabaseAdmin
@@ -98,8 +97,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.error('Error updating user role_id:', updateError);
       return res.status(500).json({ error: 'Failed to assign role' });
     }
-
-    console.log('Successfully assigned role_id:', roleData.id, 'to user:', userData?.email);
 
     // Fetch menu items for this role
     const { data: permissionsData } = await supabaseAdmin
