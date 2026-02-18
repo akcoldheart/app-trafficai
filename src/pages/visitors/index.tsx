@@ -331,7 +331,7 @@ export default function Visitors() {
 
       // Define export columns in priority order
       const exportColumns = [
-        'full_name', 'email', 'company', 'job_title', 'city', 'state', 'country',
+        'full_name', 'email', 'phone', 'company', 'job_title', 'city', 'state', 'country',
         'lead_score', 'total_pageviews', 'total_sessions', 'total_clicks',
         'form_submissions', 'first_seen_at', 'last_seen_at', 'is_identified', 'is_enriched'
       ];
@@ -349,6 +349,11 @@ export default function Visitors() {
       // Data rows
       allVisitors.forEach((visitor: Visitor, index: number) => {
         const row = exportColumns.map((col) => {
+          // Phone is stored in metadata.phone
+          if (col === 'phone') {
+            const phone = (visitor.metadata as Record<string, string> | null)?.phone;
+            return phone ? `"${String(phone).replace(/"/g, '""')}"` : '';
+          }
           const value = visitor[col as keyof Visitor];
           if (value === null || value === undefined) return '';
           if (typeof value === 'boolean') return value ? 'Yes' : 'No';
