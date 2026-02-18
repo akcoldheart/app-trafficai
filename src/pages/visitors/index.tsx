@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/layout/Layout';
 import {
@@ -96,6 +96,19 @@ interface VisitorDetails {
 export default function Visitors() {
   const { userProfile } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
+
+  const isPlanExpired = useMemo(() => {
+    if (!userProfile) return false;
+    const currentPlan = userProfile.plan || 'trial';
+    if (currentPlan !== 'trial') return false;
+    const trialEnd = userProfile.trial_ends_at
+      ? new Date(userProfile.trial_ends_at)
+      : userProfile.created_at
+        ? new Date(new Date(userProfile.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
+        : null;
+    if (!trialEnd) return false;
+    return trialEnd.getTime() <= Date.now();
+  }, [userProfile]);
 
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [pixels, setPixels] = useState<Pixel[]>([]);
@@ -543,8 +556,8 @@ export default function Visitors() {
                     type="button"
                     className="btn btn-sm"
                     onClick={handleExport}
-                    disabled={exporting || loading}
-                    title="Export to CSV"
+                    disabled={exporting || loading || isPlanExpired}
+                    title={isPlanExpired ? 'Upgrade your plan to export data' : 'Export to CSV'}
                   >
                     {exporting ? (
                       <>
@@ -562,8 +575,8 @@ export default function Visitors() {
                     type="button"
                     className="btn btn-sm"
                     onClick={handleRefresh}
-                    disabled={loading || syncing}
-                    title="Sync from API & Refresh"
+                    disabled={loading || syncing || isPlanExpired}
+                    title={isPlanExpired ? 'Upgrade your plan to refresh data' : 'Sync from API & Refresh'}
                   >
                     {syncing ? (
                       <>
