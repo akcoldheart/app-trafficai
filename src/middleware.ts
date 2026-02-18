@@ -14,6 +14,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip auth for cron jobs (uses CRON_SECRET verification instead)
+  if (pathname.startsWith('/api/cron/')) {
+    return NextResponse.next();
+  }
+
   return await updateSession(request);
 }
 
@@ -29,6 +34,6 @@ export const config = {
      * - api/pixel (pixel tracking API)
      * - public folder assets
      */
-    '/((?!_next/static|_next/image|favicon.ico|images/|pixel\\.js|api/pixel|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|images/|pixel\\.js|api/pixel|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
