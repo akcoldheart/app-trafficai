@@ -48,7 +48,6 @@ export default function ConversationList({
   onSelect,
 }: ConversationListProps) {
   const router = useRouter();
-
   const handleSelect = (conversation: ChatConversation) => {
     if (onSelect) {
       onSelect(conversation);
