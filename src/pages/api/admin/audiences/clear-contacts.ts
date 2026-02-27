@@ -31,6 +31,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: 'Failed to clear contacts' });
   }
 
+  // Reset total_records in form_data so list page doesn't show stale count
+  const { data: reqRow } = await supabaseAdmin
+    .from('audience_requests')
+    .select('id, form_data')
+    .eq('audience_id', audience_id)
+    .single();
+
+  if (reqRow) {
+    const formData = (reqRow.form_data || {}) as Record<string, unknown>;
+    const manualAudience = (formData.manual_audience || {}) as Record<string, unknown>;
+    await supabaseAdmin
+      .from('audience_requests')
+      .update({
+        admin_notes: 'Re-importing...',
+        form_data: {
+          ...formData,
+          manual_audience: {
+            ...manualAudience,
+            total_records: 0,
+          },
+        },
+      })
+      .eq('id', reqRow.id);
+  }
+
   console.log(`[ClearContacts] Cleared contacts for audience ${audience_id}`);
   return res.status(200).json({ success: true });
 }

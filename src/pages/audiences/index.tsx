@@ -462,6 +462,28 @@ export default function Audiences() {
         console.error('Error loading local audiences:', localError);
       }
 
+      // Fetch actual contact counts from audience_contacts table
+      const manualIds = localAudiences
+        .map(a => a.audienceId || a.id)
+        .filter(Boolean);
+
+      if (manualIds.length > 0) {
+        try {
+          const countsResp = await fetch(`/api/audiences/manual/counts?ids=${manualIds.join(',')}`);
+          if (countsResp.ok) {
+            const { counts } = await countsResp.json();
+            for (const a of localAudiences) {
+              const aid = a.audienceId || a.id;
+              if (counts[aid] !== undefined && counts[aid] > 0) {
+                a.total_records = counts[aid];
+              }
+            }
+          }
+        } catch (countErr) {
+          console.error('Error fetching audience counts:', countErr);
+        }
+      }
+
       // Combine both sources
       const allAudiences = [...localAudiences, ...apiAudiences];
       const totalRecordsCount = apiTotalRecords + localAudiences.length;
