@@ -48,7 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(403).json({ error: 'Admin access required' });
   }
 
-  const { url, apiKey: providedApiKey } = req.body;
+  const { url, apiKey: providedApiKey, preview } = req.body;
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
@@ -125,16 +125,61 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Handle pagination for audiencelab.io API
-    // If response has pagination metadata, fetch all remaining pages
     if (parsedUrl.hostname.includes('audiencelab.io')) {
       const totalPages = Number(data.total_pages || data.TotalPages || data.totalPages || 0);
       const currentPage = Number(data.page || data.Page || data.current_page || 1);
+      const firstPageRecords = (data.Data || data.data || data.records || data.contacts || []) as Record<string, unknown>[];
+      const recordsPerPage = firstPageRecords.length;
+      const estimatedTotal = recordsPerPage * totalPages;
 
+      // Preview mode: return page 1 sample + total info (no fetching all pages)
+      if (preview && totalPages > 1 && currentPage === 1) {
+        // Clean first page records for preview
+        const cleanedSample = firstPageRecords.slice(0, 5).map(record => {
+          const cleaned: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(record)) {
+            if (value !== null && value !== undefined && value !== '') {
+              if (typeof value === 'object' && !Array.isArray(value)) {
+                const nested: Record<string, unknown> = {};
+                let hasValues = false;
+                for (const [nk, nv] of Object.entries(value as Record<string, unknown>)) {
+                  if (nv !== null && nv !== undefined && nv !== '') {
+                    nested[nk] = nv;
+                    hasValues = true;
+                  }
+                }
+                if (hasValues) cleaned[key] = nested;
+              } else {
+                cleaned[key] = value;
+              }
+            }
+          }
+          return cleaned;
+        });
+
+        return res.status(200).json({
+          preview: true,
+          sample_contacts: cleanedSample,
+          records_per_page: recordsPerPage,
+          total_pages: totalPages,
+          estimated_total_records: estimatedTotal,
+        });
+      }
+
+      // Full fetch mode: fetch all pages (only for small datasets)
       if (totalPages > 1 && currentPage === 1) {
-        // Collect all records from first page
-        let allRecords = (data.Data || data.data || data.records || data.contacts || []) as unknown[];
+        // For large datasets (>50 pages), reject and suggest using import-from-url instead
+        if (totalPages > 50) {
+          return res.status(413).json({
+            error: 'Dataset too large for direct fetch. Use server-side import instead.',
+            total_pages: totalPages,
+            estimated_total_records: estimatedTotal,
+            use_server_import: true,
+          });
+        }
 
-        // Fetch remaining pages in parallel batches of 5
+        let allRecords = [...firstPageRecords] as unknown[];
+
         const batchSize = 5;
         for (let batchStart = 2; batchStart <= totalPages; batchStart += batchSize) {
           const batchEnd = Math.min(batchStart + batchSize - 1, totalPages);
@@ -166,13 +211,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         }
 
-        // Strip empty/null fields from each contact to reduce payload size
-        // audiencelab.io returns 100+ fields per contact, most of which are empty strings
         const cleanedRecords = (allRecords as Record<string, unknown>[]).map(record => {
           const cleaned: Record<string, unknown> = {};
           for (const [key, value] of Object.entries(record)) {
             if (value !== null && value !== undefined && value !== '') {
-              // Recursively clean nested objects
               if (typeof value === 'object' && !Array.isArray(value)) {
                 const nested: Record<string, unknown> = {};
                 let hasValues = false;
@@ -191,7 +233,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return cleaned;
         });
 
-        // Return combined data with all records under a single key
         return res.status(200).json({
           contacts: cleanedRecords,
           total_records: cleanedRecords.length,

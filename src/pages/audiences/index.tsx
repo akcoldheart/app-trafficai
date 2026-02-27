@@ -120,6 +120,8 @@ export default function Audiences() {
   const [fetchingManualAudience, setFetchingManualAudience] = useState(false);
   const [creatingManualAudience, setCreatingManualAudience] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string>(''); // For linking to a user's request
+  const [urlPreview, setUrlPreview] = useState<{ total_pages: number; estimated_total_records: number; records_per_page: number } | null>(null);
+  const [importProgress, setImportProgress] = useState<string>('');
 
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -174,27 +176,41 @@ export default function Audiences() {
   }, [attributesLoaded]);
 
   // Fetch audience data from manual URL (via server proxy to avoid CORS)
+  // Uses preview mode first to check size, then fetches full data for small sets
   const handleFetchManualAudience = async () => {
     if (!manualAudienceUrl) return;
 
     setFetchingManualAudience(true);
+    setUrlPreview(null);
     try {
-      // Use server-side proxy to avoid CORS issues
-      // API key is automatically retrieved from settings (any admin's key)
-      const response = await fetch('/api/proxy/fetch-url', {
+      // First: preview mode to check dataset size
+      const previewResponse = await fetch('/api/proxy/fetch-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ url: manualAudienceUrl }),
+        body: JSON.stringify({ url: manualAudienceUrl, preview: true }),
       });
 
-      const data = await response.json();
+      const previewData = await previewResponse.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP error: ${response.status}`);
+      if (!previewResponse.ok) {
+        throw new Error(previewData.error || `HTTP error: ${previewResponse.status}`);
       }
 
-      setManualAudienceData(JSON.stringify(data, null, 2));
+      // If it's a preview response (large dataset), show info and let user use server-side import
+      if (previewData.preview && previewData.total_pages > 50) {
+        setUrlPreview({
+          total_pages: previewData.total_pages,
+          estimated_total_records: previewData.estimated_total_records,
+          records_per_page: previewData.records_per_page,
+        });
+        showToast(`Large dataset detected: ~${previewData.estimated_total_records.toLocaleString()} records across ${previewData.total_pages} pages. Click "Create Audience" to import directly.`, 'info');
+        return;
+      }
+
+      // Small dataset or single page - fetch was already complete
+      // If proxy returned full data or non-paginated response, put it in textarea
+      setManualAudienceData(JSON.stringify(previewData, null, 2));
       showToast('Data fetched successfully!', 'success');
     } catch (error) {
       showToast('Error fetching data: ' + (error as Error).message, 'error');
@@ -205,115 +221,158 @@ export default function Audiences() {
 
   // Create manual audience from fetched/uploaded data
   const handleCreateManualAudience = async () => {
-    if (!manualAudienceName || !manualAudienceData) {
-      showToast('Please provide a name and audience data', 'error');
+    if (!manualAudienceName) {
+      showToast('Please provide an audience name', 'error');
       return;
     }
 
-    setCreatingManualAudience(true);
-    try {
-      let audienceData;
+    // Use editingRequest if available, otherwise use selectedRequestId from dropdown
+    const linkedRequestId = editingRequest?.id || selectedRequestId || null;
+
+    // If URL is provided and it's a large dataset (or no JSON data), use server-side import
+    if (manualAudienceUrl && (urlPreview || !manualAudienceData)) {
+      setCreatingManualAudience(true);
+      setImportProgress('Starting server-side import...');
       try {
-        audienceData = JSON.parse(manualAudienceData);
-      } catch {
-        showToast('Invalid JSON data', 'error');
-        return;
-      }
-
-      // Extract just the contacts array to avoid sending unnecessary metadata
-      let contacts: Record<string, unknown>[] = [];
-      if (Array.isArray(audienceData)) {
-        contacts = audienceData;
-      } else if (audienceData && typeof audienceData === 'object') {
-        contacts = audienceData.contacts || audienceData.Data || audienceData.data || audienceData.records || [];
-      }
-
-      if (contacts.length === 0) {
-        showToast('No contacts found in data', 'error');
-        return;
-      }
-
-      // Strip empty/null fields from each contact to reduce payload size
-      contacts = contacts.map((contact: Record<string, unknown>) => {
-        const cleaned: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(contact)) {
-          if (value !== null && value !== undefined && value !== '') {
-            cleaned[key] = value;
-          }
-        }
-        return cleaned;
-      });
-
-      // Use editingRequest if available, otherwise use selectedRequestId from dropdown
-      const linkedRequestId = editingRequest?.id || selectedRequestId || null;
-
-      // Helper to send a batch to the API
-      const sendBatch = async (batchContacts: Record<string, unknown>[], appendToAudienceId?: string) => {
-        const response = await fetch('/api/admin/audiences/manual', {
+        const response = await fetch('/api/admin/audiences/import-from-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
+            url: manualAudienceUrl,
             name: manualAudienceName,
-            data: { contacts: batchContacts },
             request_id: linkedRequestId,
-            ...(appendToAudienceId ? { append_to_audience_id: appendToAudienceId } : {}),
           }),
         });
 
         const ct = response.headers.get('content-type');
         if (ct && ct.includes('application/json')) {
           const json = await response.json();
-          if (!response.ok) throw new Error(json.error || 'Failed to create audience');
-          return json;
+          if (!response.ok) throw new Error(json.error || 'Failed to import audience');
+          showToast(`Audience imported! ${json.audience.total_records.toLocaleString()} contacts from ${json.audience.total_pages} pages.`, 'success');
         } else {
           const text = await response.text();
           throw new Error(text || `HTTP error: ${response.status}`);
         }
-      };
-
-      // Batch contacts to stay under Vercel's ~4.5MB payload limit
-      // Estimate ~2KB per cleaned contact, target ~3MB per batch = ~1500 contacts
-      const BATCH_SIZE = 500;
-      let result;
-
-      if (contacts.length <= BATCH_SIZE) {
-        // Small enough to send in one request
-        result = await sendBatch(contacts);
-      } else {
-        // Send first batch to create the audience
-        const firstBatch = contacts.slice(0, BATCH_SIZE);
-        result = await sendBatch(firstBatch);
-        const audienceId = result.audience?.id;
-
-        // Send remaining batches to append
-        for (let i = BATCH_SIZE; i < contacts.length; i += BATCH_SIZE) {
-          const batch = contacts.slice(i, i + BATCH_SIZE);
-          await sendBatch(batch, audienceId);
-        }
+      } catch (error) {
+        showToast('Error importing: ' + (error as Error).message, 'error');
+        setCreatingManualAudience(false);
+        setImportProgress('');
+        return;
+      }
+    } else {
+      // Use existing flow for pasted JSON data
+      if (!manualAudienceData) {
+        showToast('Please provide audience data (paste JSON or fetch from URL)', 'error');
+        return;
       }
 
-      showToast('Audience created successfully!', 'success');
-      setShowManualModal(false);
-      setManualAudienceUrl('');
-      setManualAudienceName('');
-      setManualAudienceData('');
-      setSelectedRequestId('');
-
-      // Refresh audiences list
-      await loadAudiences(currentPage);
-      // If linked to a request (either via editingRequest or selectedRequestId), refresh requests
-      if (editingRequest || linkedRequestId) {
-        await loadAudienceRequests();
-        if (editingRequest) {
-          setShowEditModal(false);
-          setEditingRequest(null);
+      setCreatingManualAudience(true);
+      try {
+        let audienceData;
+        try {
+          audienceData = JSON.parse(manualAudienceData);
+        } catch {
+          showToast('Invalid JSON data', 'error');
+          setCreatingManualAudience(false);
+          return;
         }
+
+        // Extract just the contacts array to avoid sending unnecessary metadata
+        let contacts: Record<string, unknown>[] = [];
+        if (Array.isArray(audienceData)) {
+          contacts = audienceData;
+        } else if (audienceData && typeof audienceData === 'object') {
+          contacts = audienceData.contacts || audienceData.Data || audienceData.data || audienceData.records || [];
+        }
+
+        if (contacts.length === 0) {
+          showToast('No contacts found in data', 'error');
+          setCreatingManualAudience(false);
+          return;
+        }
+
+        // Strip empty/null fields from each contact to reduce payload size
+        contacts = contacts.map((contact: Record<string, unknown>) => {
+          const cleaned: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(contact)) {
+            if (value !== null && value !== undefined && value !== '') {
+              cleaned[key] = value;
+            }
+          }
+          return cleaned;
+        });
+
+        // Helper to send a batch to the API
+        const sendBatch = async (batchContacts: Record<string, unknown>[], appendToAudienceId?: string) => {
+          const response = await fetch('/api/admin/audiences/manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              name: manualAudienceName,
+              data: { contacts: batchContacts },
+              request_id: linkedRequestId,
+              ...(appendToAudienceId ? { append_to_audience_id: appendToAudienceId } : {}),
+            }),
+          });
+
+          const ct = response.headers.get('content-type');
+          if (ct && ct.includes('application/json')) {
+            const json = await response.json();
+            if (!response.ok) throw new Error(json.error || 'Failed to create audience');
+            return json;
+          } else {
+            const text = await response.text();
+            throw new Error(text || `HTTP error: ${response.status}`);
+          }
+        };
+
+        // Batch contacts to stay under Vercel's ~4.5MB payload limit
+        const BATCH_SIZE = 500;
+        let result;
+
+        if (contacts.length <= BATCH_SIZE) {
+          result = await sendBatch(contacts);
+        } else {
+          const firstBatch = contacts.slice(0, BATCH_SIZE);
+          result = await sendBatch(firstBatch);
+          const audienceId = result.audience?.id;
+
+          for (let i = BATCH_SIZE; i < contacts.length; i += BATCH_SIZE) {
+            const batch = contacts.slice(i, i + BATCH_SIZE);
+            await sendBatch(batch, audienceId);
+          }
+        }
+
+        showToast('Audience created successfully!', 'success');
+      } catch (error) {
+        showToast('Error creating audience: ' + (error as Error).message, 'error');
+        setCreatingManualAudience(false);
+        setImportProgress('');
+        return;
       }
-    } catch (error) {
-      showToast('Error: ' + (error as Error).message, 'error');
-    } finally {
-      setCreatingManualAudience(false);
+    }
+
+    // Common cleanup after successful creation/import
+    setShowManualModal(false);
+    setManualAudienceUrl('');
+    setManualAudienceName('');
+    setManualAudienceData('');
+    setSelectedRequestId('');
+    setUrlPreview(null);
+    setImportProgress('');
+    setCreatingManualAudience(false);
+
+    // Refresh audiences list
+    await loadAudiences(currentPage);
+    // If linked to a request, refresh requests
+    if (editingRequest || linkedRequestId) {
+      await loadAudienceRequests();
+      if (editingRequest) {
+        setShowEditModal(false);
+        setEditingRequest(null);
+      }
     }
   };
 
@@ -1436,14 +1495,27 @@ export default function Audiences() {
                 <small className="form-hint">Enter a URL to fetch audience data, or paste JSON below. API key from Settings will be used automatically.</small>
               </div>
 
-              <div className="mb-3">
-                <label className="form-label">Audience Data (JSON) <span className="text-danger">*</span></label>
-                <textarea
-                  className="form-control font-monospace"
-                  rows={10}
-                  value={manualAudienceData}
-                  onChange={(e) => setManualAudienceData(e.target.value)}
-                  placeholder={`Paste audience JSON data here...
+              {/* Show preview info for large datasets */}
+              {urlPreview && (
+                <div className="mb-3">
+                  <div className="alert alert-info">
+                    <strong>Large dataset detected</strong>
+                    <div>~{urlPreview.estimated_total_records.toLocaleString()} records across {urlPreview.total_pages} pages ({urlPreview.records_per_page} per page)</div>
+                    <small>Data will be fetched and saved directly on the server. No need to paste JSON.</small>
+                  </div>
+                </div>
+              )}
+
+              {/* Only show JSON textarea if no URL preview (small dataset or manual paste) */}
+              {!urlPreview && (
+                <div className="mb-3">
+                  <label className="form-label">Audience Data (JSON) {!manualAudienceUrl && <span className="text-danger">*</span>}</label>
+                  <textarea
+                    className="form-control font-monospace"
+                    rows={10}
+                    value={manualAudienceData}
+                    onChange={(e) => setManualAudienceData(e.target.value)}
+                    placeholder={`Paste audience JSON data here...
 
 Example format:
 {
@@ -1456,29 +1528,40 @@ Example format:
     }
   ]
 }`}
-                />
-              </div>
+                  />
+                </div>
+              )}
+
+              {/* Import progress */}
+              {importProgress && (
+                <div className="mb-3">
+                  <div className="alert alert-warning">
+                    <IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }} />
+                    {importProgress}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="card-footer">
               <div className="d-flex justify-content-end gap-2">
-                <button type="button" className="btn" onClick={() => setShowManualModal(false)}>
+                <button type="button" className="btn" onClick={() => { setShowManualModal(false); setUrlPreview(null); setImportProgress(''); }}>
                   Cancel
                 </button>
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={handleCreateManualAudience}
-                  disabled={creatingManualAudience || !manualAudienceName || !manualAudienceData}
+                  disabled={creatingManualAudience || !manualAudienceName || (!manualAudienceData && !urlPreview && !manualAudienceUrl)}
                 >
                   {creatingManualAudience ? (
                     <>
                       <IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
-                      Creating...
+                      {urlPreview ? 'Importing...' : 'Creating...'}
                     </>
                   ) : (
                     <>
                       <IconCheck size={16} className="me-1" />
-                      Create Audience
+                      {urlPreview ? 'Import Audience' : 'Create Audience'}
                     </>
                   )}
                 </button>
