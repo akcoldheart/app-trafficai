@@ -229,31 +229,66 @@ export default function Audiences() {
     // Use editingRequest if available, otherwise use selectedRequestId from dropdown
     const linkedRequestId = editingRequest?.id || selectedRequestId || null;
 
-    // If URL is provided and it's a large dataset (or no JSON data), use server-side import
+    // If URL is provided and it's a large dataset (or no JSON data), use chunked server-side import
     if (manualAudienceUrl && (urlPreview || !manualAudienceData)) {
       setCreatingManualAudience(true);
-      setImportProgress('Starting server-side import...');
+      setImportProgress('Initializing import...');
       try {
-        const response = await fetch('/api/admin/audiences/import-from-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            url: manualAudienceUrl,
-            name: manualAudienceName,
-            request_id: linkedRequestId,
-          }),
+        const importApi = async (body: Record<string, unknown>) => {
+          const resp = await fetch('/api/admin/audiences/import-from-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(body),
+          });
+          const ct = resp.headers.get('content-type');
+          if (ct && ct.includes('application/json')) {
+            const json = await resp.json();
+            if (!resp.ok) throw new Error(json.error || 'Import failed');
+            return json;
+          }
+          const text = await resp.text();
+          throw new Error(text || `HTTP error: ${resp.status}`);
+        };
+
+        // Step 1: Init - creates audience record, fetches page 1
+        const initResult = await importApi({
+          url: manualAudienceUrl,
+          name: manualAudienceName,
+          request_id: linkedRequestId,
         });
 
-        const ct = response.headers.get('content-type');
-        if (ct && ct.includes('application/json')) {
-          const json = await response.json();
-          if (!response.ok) throw new Error(json.error || 'Failed to import audience');
-          showToast(`Audience imported! ${json.audience.total_records.toLocaleString()} contacts from ${json.audience.total_pages} pages.`, 'success');
-        } else {
-          const text = await response.text();
-          throw new Error(text || `HTTP error: ${response.status}`);
+        const { audience_id: newAudienceId, total_pages: totalPages } = initResult;
+        let totalRecords = initResult.records_fetched || 0;
+
+        // Step 2: Fetch remaining pages in chunks of 50
+        const CHUNK_SIZE = 50;
+        if (totalPages > 1) {
+          for (let pageStart = 2; pageStart <= totalPages; pageStart += CHUNK_SIZE) {
+            const pageEnd = Math.min(pageStart + CHUNK_SIZE - 1, totalPages);
+            setImportProgress(`Fetching pages ${pageStart}-${pageEnd} of ${totalPages}...`);
+
+            const chunkResult = await importApi({
+              url: manualAudienceUrl,
+              audience_id: newAudienceId,
+              page_start: pageStart,
+              page_end: pageEnd,
+            });
+
+            totalRecords = chunkResult.total_records || totalRecords;
+          }
         }
+
+        // Step 3: Finalize
+        setImportProgress(`Finalizing ${totalRecords.toLocaleString()} contacts...`);
+        const finalResult = await importApi({
+          audience_id: newAudienceId,
+          finalize: true,
+          url: manualAudienceUrl,
+          request_id: linkedRequestId,
+        });
+
+        showToast(`Audience imported! ${finalResult.audience.total_records.toLocaleString()} contacts.`, 'success');
       } catch (error) {
         showToast('Error importing: ' + (error as Error).message, 'error');
         setCreatingManualAudience(false);
