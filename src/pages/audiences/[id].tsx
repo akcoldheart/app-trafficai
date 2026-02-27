@@ -370,7 +370,7 @@ export default function AudienceView() {
                               <div className="text-muted small">{subline}</div>
                             )}
                           </div>
-                          {record.company && (
+                          {Boolean(record.company) && (
                             <div className="col-auto d-none d-md-block">
                               <span className="text-muted small d-flex align-items-center">
                                 <IconBuilding size={14} className="me-1" />
@@ -380,7 +380,7 @@ export default function AudienceView() {
                               </span>
                             </div>
                           )}
-                          {record.job_title && (
+                          {Boolean(record.job_title) && (
                             <div className="col-auto d-none d-lg-block">
                               <span className="text-muted small d-flex align-items-center">
                                 <IconBriefcase size={14} className="me-1" />
@@ -456,20 +456,20 @@ export default function AudienceView() {
                     <IconUser size={32} />
                   </span>
                   <h3 className="mb-1">{getContactName(selectedRecord)}</h3>
-                  {selectedRecord.job_title && (
+                  {Boolean(selectedRecord.job_title) && (
                     <div className="text-muted mb-2">{String(selectedRecord.job_title)}</div>
                   )}
-                  {selectedRecord.company && (
+                  {Boolean(selectedRecord.company) && (
                     <div className="text-muted small">{String(selectedRecord.company)}</div>
                   )}
                 </div>
 
                 {/* Contact Information */}
-                {(selectedRecord.email || selectedRecord.phone || selectedRecord.company || selectedRecord.linkedin_url || selectedRecord.city) && (
+                {Boolean(selectedRecord.email || selectedRecord.phone || selectedRecord.company || selectedRecord.linkedin_url || selectedRecord.city) && (
                   <div className="mb-4">
                     <h5 className="text-muted small text-uppercase mb-3">Contact Information</h5>
                     <div className="list-group list-group-flush">
-                      {selectedRecord.email && (
+                      {Boolean(selectedRecord.email) && (
                         <div className="list-group-item px-0 py-2 d-flex align-items-center">
                           <span className="avatar avatar-sm bg-primary-lt me-3">
                             <IconMail size={14} />
@@ -479,7 +479,7 @@ export default function AudienceView() {
                           </a>
                         </div>
                       )}
-                      {selectedRecord.verified_email && selectedRecord.verified_email !== selectedRecord.email && (
+                      {Boolean(selectedRecord.verified_email && selectedRecord.verified_email !== selectedRecord.email) && (
                         <div className="list-group-item px-0 py-2 d-flex align-items-center">
                           <span className="avatar avatar-sm bg-success-lt me-3">
                             <IconMail size={14} />
@@ -492,7 +492,7 @@ export default function AudienceView() {
                           </div>
                         </div>
                       )}
-                      {selectedRecord.business_email && selectedRecord.business_email !== selectedRecord.email && (
+                      {Boolean(selectedRecord.business_email && selectedRecord.business_email !== selectedRecord.email) && (
                         <div className="list-group-item px-0 py-2 d-flex align-items-center">
                           <span className="avatar avatar-sm bg-azure-lt me-3">
                             <IconMail size={14} />
@@ -505,7 +505,7 @@ export default function AudienceView() {
                           </div>
                         </div>
                       )}
-                      {(selectedRecord.phone || selectedRecord.mobile_phone) && (
+                      {Boolean(selectedRecord.phone || selectedRecord.mobile_phone) && (
                         <div className="list-group-item px-0 py-2 d-flex align-items-center">
                           <span className="avatar avatar-sm bg-teal-lt me-3">
                             <IconPhone size={14} />
@@ -515,33 +515,33 @@ export default function AudienceView() {
                           </a>
                         </div>
                       )}
-                      {selectedRecord.company && (
+                      {Boolean(selectedRecord.company) && (
                         <div className="list-group-item px-0 py-2 d-flex align-items-center">
                           <span className="avatar avatar-sm bg-azure-lt me-3">
                             <IconBuilding size={14} />
                           </span>
                           <div>
                             {String(selectedRecord.company)}
-                            {selectedRecord.company_domain && (
+                            {Boolean(selectedRecord.company_domain) && (
                               <div className="text-muted small">{String(selectedRecord.company_domain)}</div>
                             )}
                           </div>
                         </div>
                       )}
-                      {selectedRecord.job_title && (
+                      {Boolean(selectedRecord.job_title) && (
                         <div className="list-group-item px-0 py-2 d-flex align-items-center">
                           <span className="avatar avatar-sm bg-yellow-lt me-3">
                             <IconBriefcase size={14} />
                           </span>
                           <div>
                             {String(selectedRecord.job_title)}
-                            {selectedRecord.seniority && (
+                            {Boolean(selectedRecord.seniority) && (
                               <div className="text-muted small">{String(selectedRecord.seniority)}</div>
                             )}
                           </div>
                         </div>
                       )}
-                      {selectedRecord.linkedin_url && (
+                      {Boolean(selectedRecord.linkedin_url) && (
                         <div className="list-group-item px-0 py-2 d-flex align-items-center">
                           <span className="avatar avatar-sm bg-blue-lt me-3">
                             <IconBrandLinkedin size={14} />
@@ -551,7 +551,7 @@ export default function AudienceView() {
                           </a>
                         </div>
                       )}
-                      {(selectedRecord.city || selectedRecord.country) && (
+                      {Boolean(selectedRecord.city || selectedRecord.country) && (
                         <div className="list-group-item px-0 py-2 d-flex align-items-center">
                           <span className="avatar avatar-sm bg-green-lt me-3">
                             <IconWorld size={14} />
