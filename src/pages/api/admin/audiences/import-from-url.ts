@@ -440,38 +440,60 @@ async function handleChunk(
   }
   fetchHeaders['X-API-Key'] = apiKey;
 
-  // Fetch all pages in this chunk in parallel
-  console.log(`[Import] Chunk: fetching pages ${pageStart}-${pageEnd}`);
-  const pagePromises = [];
-  for (let page = pageStart; page <= pageEnd; page++) {
-    const pageUrl = new URL(url);
-    pageUrl.searchParams.set('page', String(page));
+  // Fetch pages with limited concurrency (3 at a time) to avoid rate limiting
+  const CONCURRENCY = 3;
+  const MAX_RETRIES = 2;
+  console.log(`[Import] Chunk: fetching pages ${pageStart}-${pageEnd} (concurrency=${CONCURRENCY})`);
 
-    pagePromises.push(
-      fetch(pageUrl.toString(), { method: 'GET', headers: fetchHeaders })
-        .then(async (pageResponse) => {
-          if (pageResponse.ok) {
-            const pageData = await pageResponse.json();
-            return (pageData.Data || pageData.data || pageData.records || pageData.contacts || []) as Record<string, unknown>[];
-          }
-          console.error(`[Import] Page ${page} returned ${pageResponse.status}`);
-          return [];
-        })
-        .catch((err) => {
-          console.error(`[Import] Error fetching page ${page}:`, err);
-          return [];
-        })
-    );
-  }
+  const allPages = [];
+  for (let p = pageStart; p <= pageEnd; p++) allPages.push(p);
 
-  const batchResults = await Promise.all(pagePromises);
   const newContacts: Record<string, unknown>[] = [];
-  for (const records of batchResults) {
-    for (const record of records) {
-      newContacts.push(normalizeContact(cleanRecord(record)));
+  let failedPages = 0;
+
+  // Process pages in batches of CONCURRENCY
+  for (let i = 0; i < allPages.length; i += CONCURRENCY) {
+    const batch = allPages.slice(i, i + CONCURRENCY);
+
+    const batchResults = await Promise.all(
+      batch.map(async (page) => {
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const pageUrl = new URL(url);
+            pageUrl.searchParams.set('page', String(page));
+            const pageResponse = await fetch(pageUrl.toString(), { method: 'GET', headers: fetchHeaders });
+
+            if (pageResponse.ok) {
+              const pageData = await pageResponse.json();
+              return (pageData.Data || pageData.data || pageData.records || pageData.contacts || []) as Record<string, unknown>[];
+            }
+
+            console.error(`[Import] Page ${page} returned ${pageResponse.status} (attempt ${attempt + 1})`);
+            if (attempt < MAX_RETRIES) {
+              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+            }
+          } catch (err) {
+            console.error(`[Import] Error fetching page ${page} (attempt ${attempt + 1}):`, err);
+            if (attempt < MAX_RETRIES) {
+              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+            }
+          }
+        }
+        failedPages++;
+        return [];
+      })
+    );
+
+    for (const records of batchResults) {
+      for (const record of records) {
+        newContacts.push(normalizeContact(cleanRecord(record)));
+      }
     }
   }
 
+  if (failedPages > 0) {
+    console.warn(`[Import] Chunk: ${failedPages} pages failed after retries`);
+  }
   console.log(`[Import] Chunk: processed ${newContacts.length} contacts from pages ${pageStart}-${pageEnd}`);
 
   // Insert directly into audience_contacts — no read-modify-write
@@ -492,6 +514,7 @@ async function handleChunk(
     pages_fetched: `${pageStart}-${pageEnd}`,
     chunk_records: newContacts.length,
     total_inserted: inserted,
+    failed_pages: failedPages,
   });
 }
 

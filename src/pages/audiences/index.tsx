@@ -263,7 +263,7 @@ export default function Audiences() {
         let totalRecords = initResult.records_fetched || 0;
 
         // Step 2: Fetch remaining pages in chunks of 50
-        const CHUNK_SIZE = 50;
+        const CHUNK_SIZE = 10;
         if (totalPages > 1) {
           for (let pageStart = 2; pageStart <= totalPages; pageStart += CHUNK_SIZE) {
             const pageEnd = Math.min(pageStart + CHUNK_SIZE - 1, totalPages);
@@ -596,7 +596,7 @@ export default function Audiences() {
       const totalPages = initResult.total_pages || 1;
 
       // Step 2: Fetch remaining pages in chunks of 50
-      const CHUNK_SIZE = 50;
+      const CHUNK_SIZE = 10;
       if (totalPages > 1) {
         for (let pageStart = 2; pageStart <= totalPages; pageStart += CHUNK_SIZE) {
           const pageEnd = Math.min(pageStart + CHUNK_SIZE - 1, totalPages);
