@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { requireRole } from '@/lib/api-helpers';
+import { logEvent } from '@/lib/webhook-logger';
 
 const supabaseAdmin = createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -55,6 +56,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
       .eq('id', reqRow.id);
   }
+
+  await logEvent({
+    type: 'audience',
+    event_name: 'audience_contacts_cleared',
+    status: 'info',
+    message: `Audience contacts cleared for re-import: ${audience_id}`,
+    user_id: authResult.user.id,
+    request_data: { audience_id },
+  });
 
   console.log(`[ClearContacts] Cleared contacts for audience ${audience_id}`);
   return res.status(200).json({ success: true });

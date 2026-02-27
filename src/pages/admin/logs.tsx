@@ -19,6 +19,7 @@ import {
   IconChevronRight,
   IconClock,
   IconUser,
+  IconUsers,
   IconCode,
   IconAlertTriangle,
   IconChevronDown,
@@ -133,6 +134,8 @@ export default function AdminLogs() {
         return <IconWebhook size={18} />;
       case 'api':
         return <IconApi size={18} />;
+      case 'audience':
+        return <IconUsers size={18} />;
       case 'error':
         return <IconAlertCircle size={18} />;
       default:
@@ -279,6 +282,7 @@ export default function AdminLogs() {
                   }}
                 >
                   <option value="all">All Types</option>
+                  <option value="audience">Audience</option>
                   <option value="stripe">Stripe</option>
                   <option value="webhook">Webhook</option>
                   <option value="api">API</option>

@@ -6,7 +6,7 @@ const getServiceClient = () => {
   return createServiceClient(supabaseUrl, supabaseServiceKey);
 };
 
-export type LogType = 'webhook' | 'api' | 'stripe' | 'error' | 'info';
+export type LogType = 'webhook' | 'api' | 'stripe' | 'error' | 'info' | 'audience';
 export type LogStatus = 'success' | 'error' | 'warning' | 'info';
 
 export interface LogEntry {

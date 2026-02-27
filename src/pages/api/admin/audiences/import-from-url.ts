@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { requireRole, logAuditAction } from '@/lib/api-helpers';
+import { logEvent } from '@/lib/webhook-logger';
 import crypto from 'crypto';
 import type { Json } from '@/lib/supabase/types';
 
@@ -320,6 +321,16 @@ async function handleInit(
   const inserted = await insertContactsBatch(audienceId, contacts);
   console.log(`[Import] Init: inserted ${inserted} contacts into audience_contacts`);
 
+  await logEvent({
+    type: 'audience',
+    event_name: 'audience_import_start',
+    status: 'info',
+    message: `Audience import started: "${name.trim()}" — page 1/${totalPages}, ${contacts.length} contacts`,
+    user_id: authResult.user.id,
+    request_data: { audience_id: audienceId, source_url: url, total_pages: totalPages },
+    response_data: { page_1_records: contacts.length, inserted },
+  });
+
   return res.status(200).json({
     success: true,
     step: 'init',
@@ -397,6 +408,15 @@ async function handleReimportInit(
   // Insert page 1 contacts
   const inserted = await insertContactsBatch(audienceId, contacts);
   console.log(`[Import] Re-import init: inserted ${inserted} contacts`);
+
+  await logEvent({
+    type: 'audience',
+    event_name: 'audience_reimport_start',
+    status: 'info',
+    message: `Audience re-import started: "${name}" — page 1/${totalPages}, ${contacts.length} contacts`,
+    request_data: { audience_id: audienceId, source_url: url, total_pages: totalPages },
+    response_data: { page_1_records: contacts.length, inserted },
+  });
 
   return res.status(200).json({
     success: true,
@@ -508,6 +528,18 @@ async function handleChunk(
     })
     .eq('audience_id', audienceId);
 
+  // Log failed pages as warnings
+  if (failedPages > 0) {
+    await logEvent({
+      type: 'api',
+      event_name: 'audience_import_chunk',
+      status: 'warning',
+      message: `Audience chunk pages ${pageStart}-${pageEnd}: ${failedPages} pages failed after retries`,
+      request_data: { audience_id: audienceId, page_start: pageStart, page_end: pageEnd },
+      response_data: { chunk_records: newContacts.length, inserted, failed_pages: failedPages },
+    });
+  }
+
   return res.status(200).json({
     success: true,
     step: 'chunk',
@@ -576,6 +608,16 @@ async function handleFinalize(
     audienceId,
     { contacts_count: totalRecords, source_url: url, request_id }
   );
+
+  await logEvent({
+    type: 'audience',
+    event_name: 'audience_import_complete',
+    status: totalRecords > 0 ? 'success' : 'warning',
+    message: `Audience import completed: "${manualAudience.name}" — ${totalRecords.toLocaleString()} contacts saved`,
+    user_id: authResult.user.id,
+    request_data: { audience_id: audienceId, source_url: url },
+    response_data: { total_records: totalRecords, audience_name: manualAudience.name },
+  });
 
   return res.status(200).json({
     success: true,
