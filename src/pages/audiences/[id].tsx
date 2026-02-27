@@ -145,67 +145,70 @@ export default function AudienceView() {
 
     setExporting(true);
     try {
-      let allRecords: AudienceRecord[] = [];
-
       if (isManual) {
-        const response = await fetch(`/api/audiences/manual/${id}?export=true`);
-        const data = await response.json();
-        if (response.ok) allRecords = data.contacts || [];
+        // Server-side CSV generation — handles all records regardless of count
+        const link = document.createElement('a');
+        link.setAttribute('href', `/api/audiences/manual/${id}/export`);
+        link.setAttribute('download', `${audienceName.replace(/[^a-z0-9]/gi, '_')}_export.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showToast(`Export started for ${totalRecords.toLocaleString()} records`, 'success');
       } else {
-        allRecords = records;
-      }
+        // For external API audiences, export current page data
+        if (records.length === 0) {
+          showToast('No data to export', 'error');
+          setExporting(false);
+          return;
+        }
 
-      if (allRecords.length === 0) {
-        showToast('No data to export', 'error');
-        setExporting(false);
-        return;
-      }
+        const allColumns = new Set<string>();
+        records.forEach((record) => Object.keys(record).forEach((key) => allColumns.add(key)));
+        allColumns.delete('uuid');
 
-      const allColumns = new Set<string>();
-      allRecords.forEach((record) => Object.keys(record).forEach((key) => allColumns.add(key)));
-      allColumns.delete('uuid');
+        const exportPriorityColumns = [
+          'full_name', 'first_name', 'last_name', 'email', 'verified_email',
+          'company', 'job_title', 'phone', 'mobile_phone', 'city', 'state',
+          'country', 'gender', 'age_range', 'linkedin_url', 'company_domain',
+          'business_email', 'business_verified_emails', 'company_city',
+          'company_revenue', 'valid_phones'
+        ];
 
-      const exportPriorityColumns = [
-        'full_name', 'first_name', 'last_name', 'email', 'verified_email',
-        'company', 'job_title', 'phone', 'mobile_phone', 'city', 'state',
-        'country', 'gender', 'age_range', 'linkedin_url', 'company_domain',
-        'business_email', 'business_verified_emails', 'company_city',
-        'company_revenue', 'valid_phones'
-      ];
-
-      const exportColumns = Array.from(allColumns).sort((a, b) => {
-        const aIndex = exportPriorityColumns.indexOf(a);
-        const bIndex = exportPriorityColumns.indexOf(b);
-        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-        if (aIndex !== -1) return -1;
-        if (bIndex !== -1) return 1;
-        return a.localeCompare(b);
-      });
-
-      const csvRows: string[] = [];
-      csvRows.push(['"S.No."', ...exportColumns.map(col => `"${formatColumnName(col)}"`)].join(','));
-      allRecords.forEach((record, index) => {
-        const row = exportColumns.map((col) => {
-          const value = record[col];
-          if (value === null || value === undefined) return '';
-          if (typeof value === 'object') return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
-          return `"${String(value).replace(/"/g, '""')}"`;
+        const exportColumns = Array.from(allColumns).sort((a, b) => {
+          const aIndex = exportPriorityColumns.indexOf(a);
+          const bIndex = exportPriorityColumns.indexOf(b);
+          if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+          if (aIndex !== -1) return -1;
+          if (bIndex !== -1) return 1;
+          return a.localeCompare(b);
         });
-        csvRows.push([`"${index + 1}"`, ...row].join(','));
-      });
 
-      const csvContent = csvRows.join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${audienceName.replace(/[^a-z0-9]/gi, '_')}_export.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+        const csvRows: string[] = [];
+        csvRows.push(['"S.No."', ...exportColumns.map(col => `"${formatColumnName(col)}"`)].join(','));
+        records.forEach((record, index) => {
+          const row = exportColumns.map((col) => {
+            const value = record[col];
+            if (value === null || value === undefined) return '';
+            if (typeof value === 'object') return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
+            return `"${String(value).replace(/"/g, '""')}"`;
+          });
+          csvRows.push([`"${index + 1}"`, ...row].join(','));
+        });
 
-      showToast(`Exported ${allRecords.length} records successfully`, 'success');
+        const csvContent = csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `${audienceName.replace(/[^a-z0-9]/gi, '_')}_export.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        showToast(`Exported ${records.length} records successfully`, 'success');
+      }
     } catch (error) {
       showToast('Error exporting data: ' + (error as Error).message, 'error');
     } finally {

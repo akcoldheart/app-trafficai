@@ -89,25 +89,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (contactCount && contactCount > 0) {
       // New storage: read from audience_contacts table with server-side pagination
       if (exportAll) {
-        // Export: fetch all records (no pagination)
-        const { data: allContacts, error: fetchError } = await supabaseAdmin
-          .from('audience_contacts')
-          .select('*')
-          .eq('audience_id', id)
-          .order('created_at', { ascending: true });
+        // Export: fetch all records in batches (Supabase limits to 1000 per query)
+        const EXPORT_BATCH = 1000;
+        const allContacts: Record<string, unknown>[] = [];
 
-        if (fetchError) {
-          console.error('Error fetching contacts for export:', fetchError);
-          return res.status(500).json({ error: 'Failed to fetch contacts' });
+        for (let offset = 0; offset < contactCount; offset += EXPORT_BATCH) {
+          const { data: batch, error: fetchError } = await supabaseAdmin
+            .from('audience_contacts')
+            .select('*')
+            .eq('audience_id', id)
+            .order('created_at', { ascending: true })
+            .range(offset, offset + EXPORT_BATCH - 1);
+
+          if (fetchError) {
+            console.error(`Error fetching contacts at offset ${offset}:`, fetchError);
+            break;
+          }
+
+          if (batch) {
+            for (const row of batch) {
+              allContacts.push(flattenContactRow(row));
+            }
+          }
         }
-
-        const contacts = (allContacts || []).map(flattenContactRow);
 
         return res.status(200).json({
           id: request.audience_id,
           name: request.name,
           total_records: contactCount,
-          contacts,
+          contacts: allContacts,
           page: 1,
           total_pages: 1,
           created_at: request.created_at,
