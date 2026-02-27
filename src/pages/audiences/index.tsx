@@ -123,6 +123,7 @@ export default function Audiences() {
   const [urlPreview, setUrlPreview] = useState<{ total_pages: number; estimated_total_records: number; records_per_page: number } | null>(null);
   const [importProgress, setImportProgress] = useState<string>('');
   const [reimportingId, setReimportingId] = useState<string | null>(null);
+  const [reimportProgress, setReimportProgress] = useState<string>('');
 
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -552,6 +553,7 @@ export default function Audiences() {
   const handleReimport = async (audienceId: string, audienceName: string, sourceUrl: string) => {
     if (reimportingId) return;
     setReimportingId(audienceId);
+    setReimportProgress('Clearing old contacts...');
 
     try {
       const importApi = async (body: Record<string, unknown>) => {
@@ -572,7 +574,6 @@ export default function Audiences() {
       };
 
       // Step 0: Clear existing contacts for this audience
-      showToast('Clearing old contacts...', 'info');
       const clearResp = await fetch(`/api/admin/audiences/clear-contacts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -585,7 +586,7 @@ export default function Audiences() {
       }
 
       // Step 1: Init - re-create with same audience_id
-      showToast('Re-importing... fetching page 1', 'info');
+      setReimportProgress('Fetching page 1...');
       const initResult = await importApi({
         url: sourceUrl,
         name: audienceName,
@@ -594,34 +595,40 @@ export default function Audiences() {
       });
 
       const totalPages = initResult.total_pages || 1;
+      let totalFetched = initResult.records_fetched || 0;
 
-      // Step 2: Fetch remaining pages in chunks of 50
+      // Step 2: Fetch remaining pages in chunks
       const CHUNK_SIZE = 10;
       if (totalPages > 1) {
         for (let pageStart = 2; pageStart <= totalPages; pageStart += CHUNK_SIZE) {
           const pageEnd = Math.min(pageStart + CHUNK_SIZE - 1, totalPages);
-          showToast(`Re-importing... pages ${pageStart}-${pageEnd} of ${totalPages}`, 'info');
+          const pct = Math.round(((pageStart - 1) / totalPages) * 100);
+          setReimportProgress(`Re-importing "${audienceName}" — pages ${pageStart}-${pageEnd} of ${totalPages} (${pct}%, ${totalFetched.toLocaleString()} contacts so far)`);
 
-          await importApi({
+          const chunkResult = await importApi({
             url: sourceUrl,
             audience_id: audienceId,
             page_start: pageStart,
             page_end: pageEnd,
           });
+
+          totalFetched += chunkResult.chunk_records || 0;
         }
       }
 
       // Step 3: Finalize
-      showToast('Finalizing re-import...', 'info');
+      setReimportProgress(`Finalizing ${totalFetched.toLocaleString()} contacts...`);
       const finalResult = await importApi({
         audience_id: audienceId,
         finalize: true,
         url: sourceUrl,
       });
 
+      setReimportProgress('');
       showToast(`Re-import complete! ${finalResult.audience.total_records.toLocaleString()} contacts.`, 'success');
       loadAudiences(currentPage);
     } catch (error) {
+      setReimportProgress('');
       showToast('Re-import error: ' + (error as Error).message, 'error');
     } finally {
       setReimportingId(null);
@@ -1708,11 +1715,27 @@ Example format:
       )}
 
       {/* Toast Notification */}
+      {/* Persistent re-import progress banner */}
+      {reimportProgress && (
+        <div
+          className="position-fixed d-flex align-items-center gap-3 px-4 py-3 bg-primary text-white shadow-lg"
+          style={{
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10000,
+          }}
+        >
+          <span className="spinner-border spinner-border-sm flex-shrink-0" role="status"></span>
+          <span className="fw-medium">{reimportProgress}</span>
+        </div>
+      )}
+
       {toast && (
         <div
           className={`toast show position-fixed`}
           style={{
-            top: '20px',
+            top: reimportProgress ? '60px' : '20px',
             right: '20px',
             zIndex: 9999,
             minWidth: '300px',
