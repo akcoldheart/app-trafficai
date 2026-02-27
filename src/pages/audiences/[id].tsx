@@ -3,7 +3,12 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
 import { TrafficAPI } from '@/lib/api';
-import { IconArrowLeft, IconRefresh, IconTrash, IconDownload, IconEye } from '@tabler/icons-react';
+import {
+  IconArrowLeft, IconRefresh, IconTrash, IconDownload, IconEye,
+  IconUser, IconMail, IconPhone, IconBuilding, IconBrandLinkedin,
+  IconWorld, IconBriefcase, IconChevronRight, IconChevronLeft,
+  IconX, IconExternalLink, IconLoader2
+} from '@tabler/icons-react';
 
 interface AudienceRecord {
   [key: string]: unknown;
@@ -21,26 +26,25 @@ export default function AudienceView() {
   const [pageSize, setPageSize] = useState(100);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [columns, setColumns] = useState<string[]>([]);
   const [isManual, setIsManual] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<AudienceRecord | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Minimal columns to display in table
-  const minimalColumns = ['full_name', 'email', 'company', 'job_title'];
-
-  // Priority columns for display in modal
+  // Priority columns for detail panel display order
   const priorityColumns = [
     'first_name', 'last_name', 'full_name', 'email', 'verified_email',
-    'company', 'job_title', 'phone', 'mobile_phone', 'city', 'state',
-    'country', 'gender', 'age_range', 'linkedin_url', 'company_domain',
-    'business_email', 'business_verified_emails', 'company_city',
-    'company_revenue', 'uuid', 'valid_phones'
+    'business_email', 'company', 'job_title', 'seniority', 'department',
+    'phone', 'mobile_phone', 'direct_number', 'city', 'state',
+    'country', 'gender', 'age_range', 'income_range', 'linkedin_url',
+    'company_domain', 'company_description', 'company_revenue', 'company_phone',
   ];
 
   const getSortedColumns = (record: AudienceRecord) => {
-    const keys = Object.keys(record);
+    const keys = Object.keys(record).filter(k =>
+      record[k] !== null && record[k] !== undefined && record[k] !== ''
+    );
     return keys.sort((a, b) => {
       const aIndex = priorityColumns.indexOf(a);
       const bIndex = priorityColumns.indexOf(b);
@@ -56,6 +60,22 @@ export default function AudienceView() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  const formatColumnName = (name: string) => {
+    return name.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+  };
+
+  const getContactName = (record: AudienceRecord) => {
+    if (record.full_name) return String(record.full_name);
+    const first = record.first_name ? String(record.first_name) : '';
+    const last = record.last_name ? String(record.last_name) : '';
+    if (first || last) return `${first} ${last}`.trim();
+    return 'Unknown Contact';
+  };
+
+  const getContactSubline = (record: AudienceRecord) => {
+    return String(record.email || record.company || record.job_title || '');
+  };
+
   const loadAudienceData = useCallback(async (page = 1) => {
     if (!id || typeof id !== 'string') return;
 
@@ -63,11 +83,9 @@ export default function AudienceView() {
     setCurrentPage(page);
 
     try {
-      // Check if this is a manual audience
       if (id.startsWith('manual_')) {
         setIsManual(true);
-        // Fetch from local database
-        const response = await fetch(`/api/audiences/manual/${id}`);
+        const response = await fetch(`/api/audiences/manual/${id}?page=${page}&limit=${pageSize}`);
         const data = await response.json();
 
         if (!response.ok) {
@@ -75,65 +93,17 @@ export default function AudienceView() {
         }
 
         setAudienceName(data.name || 'Manual Audience');
-        const contacts = data.contacts || [];
-        setTotalRecords(contacts.length);
-        setTotalPages(Math.ceil(contacts.length / pageSize));
-
-        // Paginate locally
-        const startIdx = (page - 1) * pageSize;
-        const paginatedContacts = contacts.slice(startIdx, startIdx + pageSize);
-        setRecords(paginatedContacts);
-
-        // Extract columns from records - prioritize useful fields
-        if (paginatedContacts.length > 0) {
-          const allKeys = new Set<string>();
-          paginatedContacts.forEach((record: AudienceRecord) => {
-            Object.keys(record).forEach((key) => allKeys.add(key));
-          });
-
-          // Prioritize these columns in order
-          const priorityColumns = [
-            'first_name', 'last_name', 'full_name', 'email', 'verified_email',
-            'company', 'job_title', 'phone', 'mobile_phone', 'city', 'state',
-            'country', 'gender', 'linkedin_url', 'company_domain'
-          ];
-
-          const sortedColumns = Array.from(allKeys).sort((a, b) => {
-            const aIndex = priorityColumns.indexOf(a);
-            const bIndex = priorityColumns.indexOf(b);
-            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-            if (aIndex !== -1) return -1;
-            if (bIndex !== -1) return 1;
-            return a.localeCompare(b);
-          });
-
-          // Filter to only show minimal columns that exist in data
-          const displayColumns = minimalColumns.filter(col => allKeys.has(col));
-          setColumns(displayColumns.length > 0 ? displayColumns : sortedColumns.slice(0, 4));
-        }
+        setTotalRecords(data.total_records || 0);
+        setTotalPages(data.total_pages || 1);
+        setRecords(data.contacts || []);
       } else {
         setIsManual(false);
-        // Fetch from external API
         const data = await TrafficAPI.getAudience(id, page, pageSize);
 
         setAudienceName((data as unknown as { name?: string }).name || 'Audience');
         setTotalRecords(data.total_records || 0);
         setTotalPages((data as unknown as { total_pages?: number }).total_pages || 1);
-
-        const recordsData = (data as unknown as { Data?: AudienceRecord[] }).Data || [];
-        setRecords(recordsData);
-
-        // Extract columns from records
-        if (recordsData.length > 0) {
-          const allKeys = new Set<string>();
-          recordsData.forEach((record) => {
-            Object.keys(record).forEach((key) => allKeys.add(key));
-          });
-          const sortedColumns = Array.from(allKeys);
-          // Filter to only show minimal columns that exist in data
-          const displayColumns = minimalColumns.filter(col => allKeys.has(col));
-          setColumns(displayColumns.length > 0 ? displayColumns : sortedColumns.slice(0, 4));
-        }
+        setRecords((data as unknown as { Data?: AudienceRecord[] }).Data || []);
       }
     } catch (error) {
       console.error('Error loading audience:', error);
@@ -153,42 +123,21 @@ export default function AudienceView() {
 
     try {
       if (isManual) {
-        // Delete manual audience by updating the request
-        const response = await fetch(`/api/audiences/manual/${id}`, {
-          method: 'DELETE',
-        });
-
+        const response = await fetch(`/api/audiences/manual/${id}`, { method: 'DELETE' });
         if (!response.ok) {
           const data = await response.json();
           throw new Error(data.error || 'Failed to delete audience');
         }
       } else {
-        // Delete from external API
         await TrafficAPI.deleteAudience(id);
       }
 
       setShowDeleteModal(false);
       showToast('Audience deleted successfully', 'success');
-      // Redirect after a short delay to show toast
       setTimeout(() => router.push('/audiences'), 1500);
     } catch (error) {
       showToast('Error deleting audience: ' + (error as Error).message, 'error');
     }
-  };
-
-  const formatColumnName = (name: string) => {
-    return name.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
-  };
-
-  const formatCellValue = (value: unknown) => {
-    if (value === null || value === undefined) return <span className="text-muted">-</span>;
-    if (typeof value === 'object') {
-      return <code className="small">{JSON.stringify(value).substring(0, 50)}...</code>;
-    }
-    if (typeof value === 'string' && value.length > 50) {
-      return value.substring(0, 50) + '...';
-    }
-    return String(value);
   };
 
   const handleExport = async () => {
@@ -199,14 +148,10 @@ export default function AudienceView() {
       let allRecords: AudienceRecord[] = [];
 
       if (isManual) {
-        // Fetch all records for manual audience
-        const response = await fetch(`/api/audiences/manual/${id}`);
+        const response = await fetch(`/api/audiences/manual/${id}?export=true`);
         const data = await response.json();
-        if (response.ok) {
-          allRecords = data.contacts || [];
-        }
+        if (response.ok) allRecords = data.contacts || [];
       } else {
-        // For external API, export current page data
         allRecords = records;
       }
 
@@ -216,15 +161,10 @@ export default function AudienceView() {
         return;
       }
 
-      // Get all columns from the data, excluding uuid
       const allColumns = new Set<string>();
-      allRecords.forEach((record) => {
-        Object.keys(record).forEach((key) => allColumns.add(key));
-      });
-      // Remove uuid from export columns
+      allRecords.forEach((record) => Object.keys(record).forEach((key) => allColumns.add(key)));
       allColumns.delete('uuid');
 
-      // Sort columns with full_name first, then other priority columns
       const exportPriorityColumns = [
         'full_name', 'first_name', 'last_name', 'email', 'verified_email',
         'company', 'job_title', 'phone', 'mobile_phone', 'city', 'state',
@@ -242,13 +182,8 @@ export default function AudienceView() {
         return a.localeCompare(b);
       });
 
-      // Create CSV content
       const csvRows: string[] = [];
-
-      // Header row - add S.No. as first column
       csvRows.push(['"S.No."', ...exportColumns.map(col => `"${formatColumnName(col)}"`)].join(','));
-
-      // Data rows - add serial number as first column
       allRecords.forEach((record, index) => {
         const row = exportColumns.map((col) => {
           const value = record[col];
@@ -278,176 +213,100 @@ export default function AudienceView() {
     }
   };
 
-  const start = records.length > 0 ? (currentPage - 1) * pageSize + 1 : 0;
-  const end = Math.min(currentPage * pageSize, totalRecords);
-
-  // If viewing contact details, show inline view
-  if (selectedRecord) {
-    return (
-      <Layout title="Contact Details" pageTitle="Contact Details">
-        <div className="row row-cards">
-          {/* Header */}
-          <div className="col-12">
-            <div className="card">
-              <div className="card-body">
-                <div className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h2 className="mb-1">
-                      {selectedRecord.full_name ? String(selectedRecord.full_name) : 'Contact Details'}
-                    </h2>
-                    <div className="text-muted">From audience: {audienceName}</div>
-                  </div>
-                  <button
-                    className="btn btn-outline-secondary"
-                    onClick={() => setSelectedRecord(null)}
-                  >
-                    <IconArrowLeft className="icon" />
-                    Back to Audience
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Contact Details */}
-          <div className="col-12">
-            <div className="row g-3">
-              {getSortedColumns(selectedRecord).map((key) => {
-                const value = selectedRecord[key];
-                if (value === null || value === undefined || value === '') return null;
-                return (
-                  <div key={key} className="col-md-6 col-lg-4">
-                    <div className="card h-100">
-                      <div className="card-body">
-                        <div className="text-muted small mb-1">{formatColumnName(key)}</div>
-                        <div
-                          className="fw-medium"
-                          style={{
-                            wordBreak: 'break-word',
-                            whiteSpace: typeof value === 'object' ? 'pre-wrap' : 'normal'
-                          }}
-                        >
-                          {typeof value === 'object' ? (
-                            <code className="small d-block bg-light p-2 rounded">
-                              {JSON.stringify(value, null, 2)}
-                            </code>
-                          ) : (
-                            String(value)
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
+  // Filter records by search query
+  const filteredRecords = searchQuery
+    ? records.filter((record) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          String(record.full_name || '').toLowerCase().includes(q) ||
+          String(record.first_name || '').toLowerCase().includes(q) ||
+          String(record.last_name || '').toLowerCase().includes(q) ||
+          String(record.email || '').toLowerCase().includes(q) ||
+          String(record.company || '').toLowerCase().includes(q) ||
+          String(record.job_title || '').toLowerCase().includes(q)
+        );
+      })
+    : records;
 
   return (
     <Layout title={audienceName} pageTitle="Audience Details">
-      <div className="row row-cards">
-        {/* Audience Info */}
-        <div className="col-12">
-          <div className="card">
-            <div className="card-body">
-              <div className="d-flex justify-content-between align-items-start">
-                <div>
-                  <h2 className="mb-1">{audienceName}</h2>
-                  <div className="text-muted">ID: {id}</div>
-                </div>
-                <div className="btn-list">
-                  <Link href="/audiences" className="btn btn-outline-secondary">
-                    <IconArrowLeft className="icon" />
-                    Back to Audiences
-                  </Link>
-                  <button
-                    className="btn btn-outline-danger"
-                    onClick={() => setShowDeleteModal(true)}
-                  >
-                    <IconTrash className="icon" />
-                    Delete
-                  </button>
-                </div>
-              </div>
+      {/* Header */}
+      <div className="card mb-4">
+        <div className="card-body">
+          <div className="d-flex justify-content-between align-items-start">
+            <div>
+              <h2 className="mb-1">{audienceName}</h2>
+              <div className="text-muted small">ID: {id}</div>
+            </div>
+            <div className="btn-list">
+              <Link href="/audiences" className="btn btn-outline-secondary">
+                <IconArrowLeft className="icon" />
+                Back to Audiences
+              </Link>
+              <button className="btn btn-outline-danger" onClick={() => setShowDeleteModal(true)}>
+                <IconTrash className="icon" />
+                Delete
+              </button>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Stats */}
-        <div className="col-sm-6 col-lg-3">
-          <div className="card">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div className="subheader">Total Records</div>
-              </div>
-              <div className="h1 mb-0">
-                {loading ? <div className="placeholder col-4"></div> : totalRecords.toLocaleString()}
-              </div>
+      {/* Search / Filter Bar */}
+      <div className="card mb-4">
+        <div className="card-body py-3">
+          <div className="row g-3 align-items-end">
+            <div className="col-lg-4 col-md-6">
+              <label className="form-label small text-muted">Search</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Name, email, or company..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="col-lg-2 col-md-3">
+              <label className="form-label small text-muted">Per Page</label>
+              <select
+                className="form-select"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(parseInt(e.target.value));
+                  setCurrentPage(1);
+                }}
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={500}>500</option>
+              </select>
             </div>
           </div>
         </div>
-        <div className="col-sm-6 col-lg-3">
-          <div className="card">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div className="subheader">Current Page</div>
-              </div>
-              <div className="h1 mb-0">
-                {loading ? <div className="placeholder col-4"></div> : currentPage}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="col-sm-6 col-lg-3">
-          <div className="card">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div className="subheader">Page Size</div>
-              </div>
-              <div className="h1 mb-0">
-                {loading ? <div className="placeholder col-4"></div> : pageSize}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="col-sm-6 col-lg-3">
-          <div className="card">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div className="subheader">Total Pages</div>
-              </div>
-              <div className="h1 mb-0">
-                {loading ? <div className="placeholder col-4"></div> : totalPages}
-              </div>
-            </div>
-          </div>
-        </div>
+      </div>
 
-        {/* Data Table */}
-        <div className="col-12">
+      <div className="row g-4">
+        {/* Contact List */}
+        <div className={selectedRecord ? 'col-lg-7' : 'col-12'}>
           <div className="card">
             <div className="card-header">
-              <h3 className="card-title">Audience Data</h3>
+              <h3 className="card-title">
+                {loading ? (
+                  <span className="text-muted">Loading...</span>
+                ) : (
+                  <>
+                    {totalRecords.toLocaleString()} Contact{totalRecords !== 1 ? 's' : ''}
+                    {isManual && (
+                      <span className="badge bg-purple-lt text-purple ms-2" style={{ fontSize: '12px', fontWeight: 500 }}>
+                        Manual
+                      </span>
+                    )}
+                  </>
+                )}
+              </h3>
               <div className="card-actions">
                 <div className="btn-list">
-                  <select
-                    className="form-select form-select-sm"
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(parseInt(e.target.value));
-                      setCurrentPage(1);
-                    }}
-                    style={{ width: 'auto' }}
-                  >
-                    <option value={25}>25 per page</option>
-                    <option value={50}>50 per page</option>
-                    <option value={100}>100 per page</option>
-                    <option value={500}>500 per page</option>
-                  </select>
                   <button className="btn btn-sm" onClick={handleExport} disabled={exporting}>
                     {exporting ? (
                       <>
@@ -456,98 +315,295 @@ export default function AudienceView() {
                       </>
                     ) : (
                       <>
-                        <IconDownload className="icon" />
+                        <IconDownload size={16} className="me-1" />
                         Export
                       </>
                     )}
                   </button>
                   <button className="btn btn-sm" onClick={() => loadAudienceData(currentPage)}>
-                    <IconRefresh className="icon" />
+                    <IconRefresh size={16} className="me-1" />
                     Refresh
                   </button>
                 </div>
               </div>
             </div>
-            <div className="table-responsive">
-              <table className="table table-vcenter card-table table-striped">
-                <thead>
-                  <tr>
-                    <th style={{ width: '60px' }}>S.No.</th>
-                    {columns.length > 0 ? (
-                      columns.map((col) => <th key={col}>{formatColumnName(col)}</th>)
-                    ) : (
-                      <th>Loading...</th>
-                    )}
-                    <th style={{ width: '80px' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={columns.length + 2 || 3} className="text-center py-4">
-                        <div className="spinner-border spinner-border-sm me-2" role="status"></div>
-                        Loading audience data...
-                      </td>
-                    </tr>
-                  ) : records.length === 0 ? (
-                    <tr>
-                      <td colSpan={columns.length + 2 || 3} className="text-center text-muted py-4">
-                        No data available for this audience
-                      </td>
-                    </tr>
-                  ) : (
-                    records.map((record, idx) => (
-                      <tr key={idx}>
-                        <td className="text-muted">{(currentPage - 1) * pageSize + idx + 1}</td>
-                        {columns.map((col) => (
-                          <td key={col}>{formatCellValue(record[col])}</td>
-                        ))}
-                        <td>
-                          <button
-                            className="btn btn-sm btn-ghost-primary"
-                            onClick={() => setSelectedRecord(record)}
-                            title="View Details"
-                          >
-                            <IconEye className="icon" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="card-footer d-flex align-items-center">
-              <p className="m-0 text-muted">
-                Showing {start} to {end} of {totalRecords} entries
-              </p>
-              <ul className="pagination m-0 ms-auto">
-                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                  <button className="page-link" onClick={() => loadAudienceData(currentPage - 1)}>
-                    prev
-                  </button>
-                </li>
-                {Array.from(
-                  { length: Math.min(5, totalPages) },
-                  (_, i) => Math.max(1, currentPage - 2) + i
-                )
-                  .filter((page) => page <= totalPages)
-                  .map((page) => (
-                    <li key={page} className={`page-item ${page === currentPage ? 'active' : ''}`}>
-                      <button className="page-link" onClick={() => loadAudienceData(page)}>
-                        {page}
+
+            {loading ? (
+              <div className="card-body text-center py-5">
+                <IconLoader2 size={40} className="text-primary mb-3" style={{ animation: 'spin 1s linear infinite' }} />
+                <p className="text-muted mb-0">Loading audience data...</p>
+              </div>
+            ) : filteredRecords.length === 0 ? (
+              <div className="card-body text-center py-5">
+                <span className="avatar avatar-xl bg-primary-lt mb-3">
+                  <IconUser size={32} />
+                </span>
+                <h4>No contacts found</h4>
+                <p className="text-muted mb-0">
+                  {searchQuery ? 'Try a different search term.' : 'No data available for this audience.'}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="list-group list-group-flush list-group-hoverable">
+                  {filteredRecords.map((record, idx) => {
+                    const name = getContactName(record);
+                    const subline = getContactSubline(record);
+                    const isSelected = selectedRecord === record;
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`list-group-item ${isSelected ? 'bg-primary-lt' : ''}`}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => setSelectedRecord(record)}
+                      >
+                        <div className="row align-items-center g-3">
+                          <div className="col-auto">
+                            <span className="avatar" style={{ backgroundColor: record.email ? '#d4edda' : '#e9ecef', color: record.email ? '#28a745' : '#6c757d' }}>
+                              <IconUser size={20} />
+                            </span>
+                          </div>
+                          <div className="col">
+                            <div className="fw-semibold">{name}</div>
+                            {subline && subline !== name && (
+                              <div className="text-muted small">{subline}</div>
+                            )}
+                          </div>
+                          {record.company && (
+                            <div className="col-auto d-none d-md-block">
+                              <span className="text-muted small d-flex align-items-center">
+                                <IconBuilding size={14} className="me-1" />
+                                {String(record.company).length > 25
+                                  ? String(record.company).substring(0, 25) + '...'
+                                  : String(record.company)}
+                              </span>
+                            </div>
+                          )}
+                          {record.job_title && (
+                            <div className="col-auto d-none d-lg-block">
+                              <span className="text-muted small d-flex align-items-center">
+                                <IconBriefcase size={14} className="me-1" />
+                                {String(record.job_title).length > 20
+                                  ? String(record.job_title).substring(0, 20) + '...'
+                                  : String(record.job_title)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="col-auto">
+                            <IconChevronRight size={16} className="text-muted" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="card-footer d-flex align-items-center justify-content-between">
+                    <p className="m-0 text-muted small">
+                      Page {currentPage} of {totalPages} ({totalRecords.toLocaleString()} total)
+                    </p>
+                    <div className="btn-group">
+                      <button
+                        className="btn btn-sm"
+                        disabled={currentPage === 1}
+                        onClick={() => loadAudienceData(currentPage - 1)}
+                      >
+                        <IconChevronLeft size={16} />
                       </button>
-                    </li>
-                  ))}
-                <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                  <button className="page-link" onClick={() => loadAudienceData(currentPage + 1)}>
-                    next
-                  </button>
-                </li>
-              </ul>
-            </div>
+                      <button
+                        className="btn btn-sm"
+                        disabled={currentPage === totalPages}
+                        onClick={() => loadAudienceData(currentPage + 1)}
+                      >
+                        <IconChevronRight size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
+
+        {/* Contact Detail Panel */}
+        {selectedRecord && (
+          <div className="col-lg-5">
+            <div className="card sticky-top" style={{ top: '1rem' }}>
+              <div className="card-header">
+                <h3 className="card-title">Contact Details</h3>
+                <div className="card-actions">
+                  <button
+                    className="btn btn-ghost-secondary btn-icon btn-sm"
+                    onClick={() => setSelectedRecord(null)}
+                  >
+                    <IconX size={18} />
+                  </button>
+                </div>
+              </div>
+              <div className="card-body" style={{ maxHeight: 'calc(100vh - 8rem)', overflowY: 'auto' }}>
+                {/* Header */}
+                <div className="text-center mb-4 pb-4 border-bottom">
+                  <span
+                    className="avatar avatar-xl mb-3"
+                    style={{
+                      backgroundColor: selectedRecord.email ? '#d4edda' : '#e9ecef',
+                      color: selectedRecord.email ? '#28a745' : '#6c757d'
+                    }}
+                  >
+                    <IconUser size={32} />
+                  </span>
+                  <h3 className="mb-1">{getContactName(selectedRecord)}</h3>
+                  {selectedRecord.job_title && (
+                    <div className="text-muted mb-2">{String(selectedRecord.job_title)}</div>
+                  )}
+                  {selectedRecord.company && (
+                    <div className="text-muted small">{String(selectedRecord.company)}</div>
+                  )}
+                </div>
+
+                {/* Contact Information */}
+                {(selectedRecord.email || selectedRecord.phone || selectedRecord.company || selectedRecord.linkedin_url || selectedRecord.city) && (
+                  <div className="mb-4">
+                    <h5 className="text-muted small text-uppercase mb-3">Contact Information</h5>
+                    <div className="list-group list-group-flush">
+                      {selectedRecord.email && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-primary-lt me-3">
+                            <IconMail size={14} />
+                          </span>
+                          <a href={`mailto:${selectedRecord.email}`} className="text-reset">
+                            {String(selectedRecord.email)}
+                          </a>
+                        </div>
+                      )}
+                      {selectedRecord.verified_email && selectedRecord.verified_email !== selectedRecord.email && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-success-lt me-3">
+                            <IconMail size={14} />
+                          </span>
+                          <div>
+                            <a href={`mailto:${selectedRecord.verified_email}`} className="text-reset">
+                              {String(selectedRecord.verified_email)}
+                            </a>
+                            <span className="badge bg-success-lt text-success ms-2" style={{ fontSize: '10px' }}>Verified</span>
+                          </div>
+                        </div>
+                      )}
+                      {selectedRecord.business_email && selectedRecord.business_email !== selectedRecord.email && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-azure-lt me-3">
+                            <IconMail size={14} />
+                          </span>
+                          <div>
+                            <a href={`mailto:${selectedRecord.business_email}`} className="text-reset">
+                              {String(selectedRecord.business_email)}
+                            </a>
+                            <span className="badge bg-azure-lt text-azure ms-2" style={{ fontSize: '10px' }}>Business</span>
+                          </div>
+                        </div>
+                      )}
+                      {(selectedRecord.phone || selectedRecord.mobile_phone) && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-teal-lt me-3">
+                            <IconPhone size={14} />
+                          </span>
+                          <a href={`tel:${selectedRecord.phone || selectedRecord.mobile_phone}`} className="text-reset">
+                            {String(selectedRecord.phone || selectedRecord.mobile_phone)}
+                          </a>
+                        </div>
+                      )}
+                      {selectedRecord.company && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-azure-lt me-3">
+                            <IconBuilding size={14} />
+                          </span>
+                          <div>
+                            {String(selectedRecord.company)}
+                            {selectedRecord.company_domain && (
+                              <div className="text-muted small">{String(selectedRecord.company_domain)}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {selectedRecord.job_title && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-yellow-lt me-3">
+                            <IconBriefcase size={14} />
+                          </span>
+                          <div>
+                            {String(selectedRecord.job_title)}
+                            {selectedRecord.seniority && (
+                              <div className="text-muted small">{String(selectedRecord.seniority)}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {selectedRecord.linkedin_url && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-blue-lt me-3">
+                            <IconBrandLinkedin size={14} />
+                          </span>
+                          <a href={String(selectedRecord.linkedin_url)} target="_blank" rel="noopener noreferrer" className="text-reset">
+                            LinkedIn <IconExternalLink size={12} className="ms-1" />
+                          </a>
+                        </div>
+                      )}
+                      {(selectedRecord.city || selectedRecord.country) && (
+                        <div className="list-group-item px-0 py-2 d-flex align-items-center">
+                          <span className="avatar avatar-sm bg-green-lt me-3">
+                            <IconWorld size={14} />
+                          </span>
+                          {[selectedRecord.city, selectedRecord.state, selectedRecord.country]
+                            .filter(Boolean)
+                            .map(String)
+                            .join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* All Other Fields */}
+                <div>
+                  <h5 className="text-muted small text-uppercase mb-3">All Details</h5>
+                  <div className="table-responsive">
+                    <table className="table table-sm table-borderless">
+                      <tbody>
+                        {getSortedColumns(selectedRecord)
+                          .filter(key => !['full_name', 'first_name', 'last_name'].includes(key))
+                          .map((key) => {
+                            const value = selectedRecord[key];
+                            return (
+                              <tr key={key}>
+                                <td className="text-muted small" style={{ width: '40%' }}>
+                                  {formatColumnName(key)}
+                                </td>
+                                <td className="small" style={{ wordBreak: 'break-word' }}>
+                                  {typeof value === 'object' ? (
+                                    <code className="small">{JSON.stringify(value)}</code>
+                                  ) : key.includes('url') || key.includes('linkedin') ? (
+                                    <a href={String(value)} target="_blank" rel="noopener noreferrer" className="text-reset">
+                                      {String(value).length > 40 ? String(value).substring(0, 40) + '...' : String(value)}
+                                      <IconExternalLink size={10} className="ms-1" />
+                                    </a>
+                                  ) : (
+                                    String(value)
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Delete Modal */}
@@ -555,11 +611,7 @@ export default function AudienceView() {
         <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex={-1}>
           <div className="modal-dialog modal-sm modal-dialog-centered">
             <div className="modal-content">
-              <button
-                type="button"
-                className="btn-close"
-                onClick={() => setShowDeleteModal(false)}
-              ></button>
+              <button type="button" className="btn-close" onClick={() => setShowDeleteModal(false)}></button>
               <div className="modal-status bg-danger"></div>
               <div className="modal-body text-center py-4">
                 <IconTrash className="icon mb-2 text-danger icon-lg" />
@@ -572,14 +624,10 @@ export default function AudienceView() {
                 <div className="w-100">
                   <div className="row">
                     <div className="col">
-                      <button className="btn w-100" onClick={() => setShowDeleteModal(false)}>
-                        Cancel
-                      </button>
+                      <button className="btn w-100" onClick={() => setShowDeleteModal(false)}>Cancel</button>
                     </div>
                     <div className="col">
-                      <button className="btn btn-danger w-100" onClick={handleDelete}>
-                        Delete
-                      </button>
+                      <button className="btn btn-danger w-100" onClick={handleDelete}>Delete</button>
                     </div>
                   </div>
                 </div>
@@ -590,34 +638,23 @@ export default function AudienceView() {
         </div>
       )}
 
-      {/* Toast Notification */}
+      {/* Toast */}
       {toast && (
-        <div
-          className="toast show position-fixed"
-          style={{
-            top: '20px',
-            right: '20px',
-            zIndex: 9999,
-            minWidth: '300px',
-          }}
-        >
-          <div className={`toast-header ${
-            toast.type === 'success' ? 'bg-success text-white' : 'bg-danger text-white'
-          }`}>
-            <strong className="me-auto">
-              {toast.type === 'success' ? 'Success' : 'Error'}
-            </strong>
-            <button
-              type="button"
-              className="btn-close btn-close-white"
-              onClick={() => setToast(null)}
-            ></button>
+        <div className="toast show position-fixed" style={{ top: '20px', right: '20px', zIndex: 9999, minWidth: '300px' }}>
+          <div className={`toast-header ${toast.type === 'success' ? 'bg-success text-white' : 'bg-danger text-white'}`}>
+            <strong className="me-auto">{toast.type === 'success' ? 'Success' : 'Error'}</strong>
+            <button type="button" className="btn-close btn-close-white" onClick={() => setToast(null)}></button>
           </div>
-          <div className="toast-body">
-            {toast.message}
-          </div>
+          <div className="toast-body">{toast.message}</div>
         </div>
       )}
+
+      <style jsx>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </Layout>
   );
 }

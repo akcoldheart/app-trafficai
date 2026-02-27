@@ -1,8 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { requireRole, logAuditAction } from '@/lib/api-helpers';
 import crypto from 'crypto';
 import type { Json } from '@/lib/supabase/types';
+
+// Service role client to bypass RLS
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 interface AudienceContact {
   email?: string;
@@ -30,6 +37,53 @@ interface AudienceData {
   data?: AudienceContact[];
   records?: AudienceContact[];
   [key: string]: unknown;
+}
+
+// Known columns in the audience_contacts table
+const KNOWN_COLUMNS = [
+  'email', 'full_name', 'first_name', 'last_name', 'company',
+  'job_title', 'phone', 'city', 'state', 'country',
+  'linkedin_url', 'seniority', 'department',
+];
+
+// Convert a normalized contact into a row for the audience_contacts table
+function contactToRow(audienceId: string, contact: Record<string, unknown>) {
+  const row: Record<string, unknown> = { audience_id: audienceId };
+  const extraData: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(contact)) {
+    if (KNOWN_COLUMNS.includes(key)) {
+      row[key] = typeof value === 'string' ? value : String(value);
+    } else {
+      extraData[key] = value;
+    }
+  }
+
+  row.data = extraData;
+  return row;
+}
+
+// Insert contacts into audience_contacts in batches of 200
+async function insertContactsBatch(audienceId: string, contacts: Record<string, unknown>[]) {
+  const BATCH_SIZE = 200;
+  let inserted = 0;
+
+  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
+    const batch = contacts.slice(i, i + BATCH_SIZE);
+    const rows = batch.map(c => contactToRow(audienceId, c));
+
+    const { error } = await supabaseAdmin
+      .from('audience_contacts')
+      .insert(rows);
+
+    if (error) {
+      console.error(`[Manual] Error inserting batch at offset ${i}:`, error);
+    } else {
+      inserted += batch.length;
+    }
+  }
+
+  return inserted;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -77,15 +131,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Use provided audience ID (for appending) or generate a new one
     const audienceId = append_to_audience_id || `manual_${crypto.randomUUID()}`;
 
-    // Normalize contacts - handle various field name formats and nested resolution object
-    const normalizedContacts = contacts.map((contact, index) => {
-      // Audiencelab.io may return data nested in 'resolution' object
+    // Normalize contacts
+    const normalizedContacts = contacts.map((contact) => {
       const resolution = (contact.resolution || contact.Resolution || {}) as Record<string, unknown>;
-
-      // Merge top-level contact with resolution data (resolution takes priority for contact info)
       const merged = { ...contact, ...resolution };
 
-      // Helper to get field value from multiple possible keys (treats empty strings as missing)
       const getField = (...keys: string[]): unknown => {
         for (const key of keys) {
           const val = merged[key];
@@ -99,10 +149,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const firstName = getField('FIRST_NAME', 'first_name', 'firstName', 'FirstName');
       const lastName = getField('LAST_NAME', 'last_name', 'lastName', 'LastName');
 
-      // Build normalized object with standard field names
-      // Prioritize audiencelab.io UPPERCASE fields first
       const normalized: Record<string, unknown> = {
-        // Email: prefer verified emails, then business, then personal
         email: getField(
           'PERSONAL_VERIFIED_EMAILS', 'BUSINESS_VERIFIED_EMAILS', 'BUSINESS_EMAIL',
           'email', 'EMAIL', 'Email', 'PERSONAL_EMAILS'
@@ -112,37 +159,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         first_name: firstName,
         last_name: lastName,
         full_name: [firstName, lastName].filter(Boolean).join(' ') || null,
-        // Company fields
         company: getField('COMPANY_NAME', 'company', 'COMPANY', 'Company', 'company_name'),
         company_domain: getField('COMPANY_DOMAIN', 'company_domain', 'website'),
         company_description: getField('COMPANY_DESCRIPTION', 'company_description'),
         company_revenue: getField('COMPANY_REVENUE', 'company_revenue', 'revenue'),
         company_phone: getField('COMPANY_PHONE', 'company_phone'),
-        // Job fields
         job_title: getField('JOB_TITLE', 'title', 'job_title', 'jobTitle', 'JobTitle'),
         seniority: getField('SENIORITY_LEVEL', 'seniority', 'seniority_level'),
         department: getField('DEPARTMENT', 'department', 'Department'),
-        // Contact fields
         phone: getField('MOBILE_PHONE', 'DIRECT_NUMBER', 'phone', 'PHONE', 'mobile_phone', 'PERSONAL_PHONE'),
         mobile_phone: getField('MOBILE_PHONE', 'mobile_phone'),
         direct_number: getField('DIRECT_NUMBER', 'direct_number'),
         linkedin_url: getField('LINKEDIN_URL', 'COMPANY_LINKEDIN_URL', 'linkedin_url', 'linkedinUrl'),
-        // Location fields
         city: getField('CITY', 'PERSONAL_CITY', 'city', 'City', 'personal_city'),
         state: getField('STATE', 'PERSONAL_STATE', 'state', 'State', 'personal_state'),
         country: getField('COUNTRY', 'country', 'Country'),
-        // Demographics
         gender: getField('GENDER', 'gender', 'Gender'),
         age_range: getField('AGE_RANGE', 'age_range', 'AgeRange'),
         income_range: getField('INCOME_RANGE', 'income_range', 'IncomeRange'),
-        // Other fields
         url: getField('URL', 'url', 'page_url'),
         ip_address: getField('IP_ADDRESS', 'ip_address'),
         event_type: getField('EVENT_TYPE', 'event_type'),
         referrer_url: getField('REFERRER_URL', 'referrer_url'),
       };
 
-      // Add remaining original fields that aren't already normalized (skip empty strings and duplicates)
+      // Strip null values
+      for (const key of Object.keys(normalized)) {
+        if (normalized[key] === null) delete normalized[key];
+      }
+
+      // Add remaining original fields not already normalized
       for (const [key, value] of Object.entries(merged)) {
         const lowerKey = key.toLowerCase();
         if (value !== '' && value !== null && value !== undefined && !normalized[lowerKey]) {
@@ -153,9 +199,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return normalized;
     });
 
-    // Handle appending to an existing audience (for batched uploads)
+    // Insert contacts into audience_contacts table
+    const inserted = await insertContactsBatch(audienceId, normalizedContacts);
+    console.log(`[Manual] Inserted ${inserted} contacts for audience ${audienceId}`);
+
+    // Handle appending to an existing audience
     if (append_to_audience_id) {
-      // Find the existing audience request by audience_id
       const { data: existingReq, error: findError } = await supabase
         .from('audience_requests')
         .select('id, form_data')
@@ -167,44 +216,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(404).json({ error: 'Audience not found for appending' });
       }
 
+      // Count total contacts in the table for this audience
+      const { count } = await supabaseAdmin
+        .from('audience_contacts')
+        .select('id', { count: 'exact', head: true })
+        .eq('audience_id', append_to_audience_id);
+
+      const totalCount = count || inserted;
+
       const existingFormData = existingReq.form_data as Record<string, unknown> || {};
       const existingAudience = (existingFormData.manual_audience || {}) as Record<string, unknown>;
-      const existingContacts = (existingAudience.contacts || []) as Json[];
-      const allContacts = [...existingContacts, ...(normalizedContacts as Json[])];
 
-      const { error: updateError } = await supabase
+      await supabase
         .from('audience_requests')
         .update({
-          admin_notes: `Manual audience uploaded. ${allContacts.length} contacts.`,
+          admin_notes: `Manual audience uploaded. ${totalCount} contacts.`,
           form_data: {
             ...existingFormData,
             manual_audience: {
               ...existingAudience,
-              total_records: allContacts.length,
-              contacts: allContacts,
+              total_records: totalCount,
             },
           } as Json,
         })
         .eq('id', existingReq.id);
-
-      if (updateError) {
-        console.error('Error appending to audience:', updateError);
-        return res.status(500).json({ error: 'Failed to append contacts' });
-      }
 
       return res.status(200).json({
         success: true,
         audience: {
           id: append_to_audience_id,
           name: name.trim(),
-          total_records: allContacts.length,
+          total_records: totalCount,
         },
       });
     }
 
-    // If linked to a request, update it with the audience data
+    // If linked to a request, update it with the audience metadata
     if (request_id) {
-      // Get the existing request to preserve form_data
       const { data: existingRequest, error: fetchError } = await supabase
         .from('audience_requests')
         .select('form_data, user_id')
@@ -216,7 +264,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(404).json({ error: 'Request not found' });
       }
 
-      // Update the request with audience data
       const { error: requestError } = await supabase
         .from('audience_requests')
         .update({
@@ -224,14 +271,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           audience_id: audienceId,
           reviewed_by: authResult.user.id,
           reviewed_at: new Date().toISOString(),
-          admin_notes: `Manual audience uploaded. ${normalizedContacts.length} contacts.`,
+          admin_notes: `Manual audience uploaded. ${inserted} contacts.`,
           form_data: {
             ...(existingRequest.form_data as Record<string, unknown> || {}),
             manual_audience: {
               id: audienceId,
               name: name.trim(),
-              total_records: normalizedContacts.length,
-              contacts: normalizedContacts as Json[],
+              total_records: inserted,
               uploaded_at: new Date().toISOString(),
               uploaded_by: authResult.user.id,
             },
@@ -244,7 +290,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: 'Failed to update request' });
       }
     } else {
-      // Create a new audience request to store the manual audience
       const { error: createError } = await supabase
         .from('audience_requests')
         .insert({
@@ -255,13 +300,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           audience_id: audienceId,
           reviewed_by: authResult.user.id,
           reviewed_at: new Date().toISOString(),
-          admin_notes: `Manual audience created. ${normalizedContacts.length} contacts.`,
+          admin_notes: `Manual audience created. ${inserted} contacts.`,
           form_data: {
             manual_audience: {
               id: audienceId,
               name: name.trim(),
-              total_records: normalizedContacts.length,
-              contacts: normalizedContacts as Json[],
+              total_records: inserted,
               uploaded_at: new Date().toISOString(),
               uploaded_by: authResult.user.id,
             },
@@ -282,7 +326,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res,
       'audience',
       audienceId,
-      { contacts_count: normalizedContacts.length, request_id }
+      { contacts_count: inserted, request_id }
     );
 
     return res.status(200).json({
@@ -290,7 +334,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       audience: {
         id: audienceId,
         name: name.trim(),
-        total_records: normalizedContacts.length,
+        total_records: inserted,
       },
     });
   } catch (error) {

@@ -442,6 +442,7 @@ export default function Audiences() {
             .map((req: AudienceRequest) => {
               const formData = req.form_data as Record<string, unknown>;
               const manualAudience = formData.manual_audience as Record<string, unknown>;
+              const userInfo = req.user as unknown as { email?: string } | undefined;
               return {
                 id: req.audience_id || (manualAudience?.id as string) || req.id,
                 audienceId: req.audience_id || (manualAudience?.id as string),
@@ -450,6 +451,7 @@ export default function Audiences() {
                 created_at: req.created_at,
                 filters: { manual_upload: true },
                 isManual: true,
+                user_email: userInfo?.email || null,
               };
             });
         }
@@ -825,7 +827,7 @@ export default function Audiences() {
                   <thead>
                     <tr>
                       <th>Name</th>
-                      <th>Audience ID</th>
+                      {isAdmin && <th>User</th>}
                       <th>Total Records</th>
                       <th>Status</th>
                       <th>Created</th>
@@ -835,14 +837,14 @@ export default function Audiences() {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-4">
+                        <td colSpan={isAdmin ? 6 : 5} className="text-center py-4">
                           <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                           Loading audiences...
                         </td>
                       </tr>
                     ) : audiences.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center text-muted py-4">
+                        <td colSpan={isAdmin ? 6 : 5} className="text-center text-muted py-4">
                           No audiences found. <Link href="/audiences/create">{isAdmin ? 'Create your first audience' : 'Request your first audience'}</Link>
                         </td>
                       </tr>
@@ -864,7 +866,11 @@ export default function Audiences() {
                                 </div>
                               </div>
                             </td>
-                            <td><code className="small">{id}</code></td>
+                            {isAdmin && (
+                              <td className="text-muted">
+                                {(audience as unknown as { user_email?: string }).user_email || '-'}
+                              </td>
+                            )}
                             <td>{audience.total_records?.toLocaleString() || '-'}</td>
                             <td>
                               <span className={`badge ${

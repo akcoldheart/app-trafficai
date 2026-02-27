@@ -106,17 +106,64 @@ function normalizeContact(contact: Record<string, unknown>): Record<string, unkn
   return normalized;
 }
 
+// Known columns in the audience_contacts table
+const KNOWN_COLUMNS = [
+  'email', 'full_name', 'first_name', 'last_name', 'company',
+  'job_title', 'phone', 'city', 'state', 'country',
+  'linkedin_url', 'seniority', 'department',
+];
+
+// Convert a normalized contact into a row for the audience_contacts table
+function contactToRow(audienceId: string, contact: Record<string, unknown>) {
+  const row: Record<string, unknown> = { audience_id: audienceId };
+  const extraData: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(contact)) {
+    if (KNOWN_COLUMNS.includes(key)) {
+      row[key] = typeof value === 'string' ? value : String(value);
+    } else {
+      extraData[key] = value;
+    }
+  }
+
+  row.data = extraData;
+  return row;
+}
+
+// Insert contacts into audience_contacts in batches of 200
+async function insertContactsBatch(audienceId: string, contacts: Record<string, unknown>[]) {
+  const BATCH_SIZE = 200;
+  let inserted = 0;
+
+  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
+    const batch = contacts.slice(i, i + BATCH_SIZE);
+    const rows = batch.map(c => contactToRow(audienceId, c));
+
+    const { error } = await supabaseAdmin
+      .from('audience_contacts')
+      .insert(rows);
+
+    if (error) {
+      console.error(`[Import] Error inserting batch at offset ${i}:`, error);
+    } else {
+      inserted += batch.length;
+    }
+  }
+
+  return inserted;
+}
+
 /**
  * Chunked audience import from URL.
  *
  * Step 1 (init): POST { url, name, request_id }
- *   - Fetches page 1, creates audience record, returns audience_id + total_pages
+ *   - Fetches page 1, creates audience record, inserts contacts into audience_contacts table
  *
  * Step 2 (chunk): POST { url, audience_id, page_start, page_end }
- *   - Fetches pages page_start..page_end, normalizes, appends to existing audience
+ *   - Fetches pages, normalizes, inserts directly into audience_contacts (no read-modify-write)
  *
  * Step 3 (finalize): POST { audience_id, finalize: true }
- *   - Updates final count and logs audit
+ *   - Counts rows in audience_contacts, updates audience_requests with final count
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -136,7 +183,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // --- Step 2: Fetch chunk of pages ---
   if (audience_id && page_start && page_end && url) {
-    return await handleChunk(supabase, res, url, audience_id, page_start, page_end);
+    return await handleChunk(res, url, audience_id, page_start, page_end);
   }
 
   // --- Step 1: Init ---
@@ -232,7 +279,6 @@ async function handleInit(
             id: audienceId,
             name: name.trim(),
             total_records: contacts.length,
-            contacts: contacts as Json[],
             uploaded_at: new Date().toISOString(),
             uploaded_by: authResult.user.id,
             source_url: url,
@@ -257,7 +303,6 @@ async function handleInit(
             id: audienceId,
             name: name.trim(),
             total_records: contacts.length,
-            contacts: contacts as Json[],
             uploaded_at: new Date().toISOString(),
             uploaded_by: authResult.user.id,
             source_url: url,
@@ -265,6 +310,10 @@ async function handleInit(
         } as Json,
       });
   }
+
+  // Insert page 1 contacts into audience_contacts table
+  const inserted = await insertContactsBatch(audienceId, contacts);
+  console.log(`[Import] Init: inserted ${inserted} contacts into audience_contacts`);
 
   return res.status(200).json({
     success: true,
@@ -275,9 +324,8 @@ async function handleInit(
   });
 }
 
-// Step 2: Fetch a chunk of pages and append to audience
+// Step 2: Fetch a chunk of pages and insert into audience_contacts
 async function handleChunk(
-  supabase: ReturnType<typeof createClient>,
   res: NextApiResponse,
   url: string,
   audienceId: string,
@@ -343,49 +391,24 @@ async function handleChunk(
 
   console.log(`[Import] Chunk: processed ${newContacts.length} contacts from pages ${pageStart}-${pageEnd}`);
 
-  // Append to existing audience
-  const { data: existingReq, error: findError } = await supabase
-    .from('audience_requests')
-    .select('id, form_data')
-    .eq('audience_id', audienceId)
-    .single();
+  // Insert directly into audience_contacts — no read-modify-write
+  const inserted = await insertContactsBatch(audienceId, newContacts);
+  console.log(`[Import] Chunk: inserted ${inserted} contacts`);
 
-  if (findError || !existingReq) {
-    console.error('[Import] Error finding audience:', findError);
-    return res.status(404).json({ error: 'Audience not found' });
-  }
-
-  const existingFormData = existingReq.form_data as Record<string, unknown> || {};
-  const existingAudience = (existingFormData.manual_audience || {}) as Record<string, unknown>;
-  const existingContacts = (existingAudience.contacts || []) as Json[];
-  const allContacts = [...existingContacts, ...(newContacts as Json[])];
-
-  const { error: updateError } = await supabase
+  // Update progress note (lightweight — no contacts payload)
+  await supabaseAdmin
     .from('audience_requests')
     .update({
-      admin_notes: `Importing from URL... (pages ${pageStart}-${pageEnd} done, ${allContacts.length} contacts)`,
-      form_data: {
-        ...existingFormData,
-        manual_audience: {
-          ...existingAudience,
-          total_records: allContacts.length,
-          contacts: allContacts,
-        },
-      } as Json,
+      admin_notes: `Importing from URL... (pages ${pageStart}-${pageEnd} done)`,
     })
-    .eq('id', existingReq.id);
-
-  if (updateError) {
-    console.error('[Import] Error saving chunk:', updateError);
-    return res.status(500).json({ error: 'Failed to save chunk' });
-  }
+    .eq('audience_id', audienceId);
 
   return res.status(200).json({
     success: true,
     step: 'chunk',
     pages_fetched: `${pageStart}-${pageEnd}`,
     chunk_records: newContacts.length,
-    total_records: allContacts.length,
+    total_inserted: inserted,
   });
 }
 
@@ -399,6 +422,18 @@ async function handleFinalize(
   url?: string,
   request_id?: string,
 ) {
+  // Count actual rows in audience_contacts
+  const { count, error: countError } = await supabaseAdmin
+    .from('audience_contacts')
+    .select('id', { count: 'exact', head: true })
+    .eq('audience_id', audienceId);
+
+  if (countError) {
+    console.error('[Import] Error counting contacts:', countError);
+  }
+
+  const totalRecords = count || 0;
+
   const { data: finalReq } = await supabase
     .from('audience_requests')
     .select('id, form_data')
@@ -411,7 +446,6 @@ async function handleFinalize(
 
   const formData = finalReq.form_data as Record<string, unknown> || {};
   const manualAudience = (formData.manual_audience || {}) as Record<string, unknown>;
-  const totalRecords = ((manualAudience.contacts || []) as Json[]).length;
 
   await supabase
     .from('audience_requests')
