@@ -17,6 +17,7 @@ export interface Audience {
   segment?: string;
   days_back?: number;
   isManual?: boolean;
+  source_url?: string;
 }
 
 export interface AudiencesResponse {

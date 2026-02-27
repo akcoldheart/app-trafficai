@@ -174,7 +174,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!authResult) return;
 
   const supabase = createClient(req, res);
-  const { url, name, request_id, audience_id, page_start, page_end, finalize } = req.body;
+  const { url, name, request_id, audience_id, page_start, page_end, finalize, reimport } = req.body;
 
   // --- Step 3: Finalize ---
   if (finalize && audience_id) {
@@ -184,6 +184,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // --- Step 2: Fetch chunk of pages ---
   if (audience_id && page_start && page_end && url) {
     return await handleChunk(res, url, audience_id, page_start, page_end);
+  }
+
+  // --- Step 1a: Re-import into existing audience ---
+  if (reimport && audience_id && url && name) {
+    return await handleReimportInit(supabase, res, url, name, audience_id);
   }
 
   // --- Step 1: Init ---
@@ -314,6 +319,84 @@ async function handleInit(
   // Insert page 1 contacts into audience_contacts table
   const inserted = await insertContactsBatch(audienceId, contacts);
   console.log(`[Import] Init: inserted ${inserted} contacts into audience_contacts`);
+
+  return res.status(200).json({
+    success: true,
+    step: 'init',
+    audience_id: audienceId,
+    total_pages: totalPages,
+    records_fetched: contacts.length,
+  });
+}
+
+// Step 1a: Re-import into existing audience (contacts already cleared by clear-contacts endpoint)
+async function handleReimportInit(
+  supabase: ReturnType<typeof createClient>,
+  res: NextApiResponse,
+  url: string,
+  name: string,
+  audienceId: string,
+) {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL format' });
+  }
+
+  const { data: anyApiKey } = await supabaseAdmin
+    .from('user_api_keys')
+    .select('api_key')
+    .limit(1)
+    .single();
+
+  const apiKey = anyApiKey?.api_key;
+  if (!apiKey) {
+    return res.status(400).json({ error: 'No API key configured.' });
+  }
+
+  const fetchHeaders: Record<string, string> = { 'Accept': 'application/json' };
+  if (parsedUrl.hostname.includes('audiencelab.io')) {
+    fetchHeaders['Authorization'] = `Bearer ${apiKey}`;
+  }
+  fetchHeaders['X-API-Key'] = apiKey;
+
+  console.log(`[Import] Re-import init: fetching page 1 from ${url}`);
+  const firstPageResponse = await fetch(url, { method: 'GET', headers: fetchHeaders });
+  if (!firstPageResponse.ok) {
+    return res.status(firstPageResponse.status).json({
+      error: `Failed to fetch: ${firstPageResponse.status} ${firstPageResponse.statusText}`
+    });
+  }
+
+  let firstPageData: Record<string, unknown>;
+  const contentType = firstPageResponse.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    firstPageData = await firstPageResponse.json();
+  } else {
+    const text = await firstPageResponse.text();
+    try { firstPageData = JSON.parse(text); } catch {
+      return res.status(400).json({ error: 'Response is not valid JSON' });
+    }
+  }
+
+  const totalPages = Number(firstPageData.total_pages || firstPageData.TotalPages || firstPageData.totalPages || 1);
+  const firstPageRecords = (firstPageData.Data || firstPageData.data || firstPageData.records || firstPageData.contacts || []) as Record<string, unknown>[];
+
+  const contacts = firstPageRecords.map(r => normalizeContact(cleanRecord(r)));
+  console.log(`[Import] Re-import init: page 1 has ${contacts.length} records, ${totalPages} total pages`);
+
+  // Update the existing audience_requests row with progress
+  await supabaseAdmin
+    .from('audience_requests')
+    .update({
+      admin_notes: `Re-importing from URL... (page 1/${totalPages})`,
+    })
+    .eq('audience_id', audienceId);
+
+  // Insert page 1 contacts
+  const inserted = await insertContactsBatch(audienceId, contacts);
+  console.log(`[Import] Re-import init: inserted ${inserted} contacts`);
 
   return res.status(200).json({
     success: true,

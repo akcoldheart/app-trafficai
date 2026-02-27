@@ -122,6 +122,7 @@ export default function Audiences() {
   const [selectedRequestId, setSelectedRequestId] = useState<string>(''); // For linking to a user's request
   const [urlPreview, setUrlPreview] = useState<{ total_pages: number; estimated_total_records: number; records_per_page: number } | null>(null);
   const [importProgress, setImportProgress] = useState<string>('');
+  const [reimportingId, setReimportingId] = useState<string | null>(null);
 
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -452,6 +453,7 @@ export default function Audiences() {
                 filters: { manual_upload: true },
                 isManual: true,
                 user_email: userInfo?.email || null,
+                source_url: (manualAudience?.source_url as string) || undefined,
               };
             });
         }
@@ -544,6 +546,85 @@ export default function Audiences() {
       showToast('Error deleting audience: ' + (error as Error).message, 'error');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleReimport = async (audienceId: string, audienceName: string, sourceUrl: string) => {
+    if (reimportingId) return;
+    setReimportingId(audienceId);
+
+    try {
+      const importApi = async (body: Record<string, unknown>) => {
+        const resp = await fetch('/api/admin/audiences/import-from-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(body),
+        });
+        const ct = resp.headers.get('content-type');
+        if (ct && ct.includes('application/json')) {
+          const json = await resp.json();
+          if (!resp.ok) throw new Error(json.error || 'Import failed');
+          return json;
+        }
+        const text = await resp.text();
+        throw new Error(text || `HTTP error: ${resp.status}`);
+      };
+
+      // Step 0: Clear existing contacts for this audience
+      showToast('Clearing old contacts...', 'info');
+      const clearResp = await fetch(`/api/admin/audiences/clear-contacts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ audience_id: audienceId }),
+      });
+      if (!clearResp.ok) {
+        const err = await clearResp.json();
+        throw new Error(err.error || 'Failed to clear contacts');
+      }
+
+      // Step 1: Init - re-create with same audience_id
+      showToast('Re-importing... fetching page 1', 'info');
+      const initResult = await importApi({
+        url: sourceUrl,
+        name: audienceName,
+        audience_id: audienceId,
+        reimport: true,
+      });
+
+      const totalPages = initResult.total_pages || 1;
+
+      // Step 2: Fetch remaining pages in chunks of 50
+      const CHUNK_SIZE = 50;
+      if (totalPages > 1) {
+        for (let pageStart = 2; pageStart <= totalPages; pageStart += CHUNK_SIZE) {
+          const pageEnd = Math.min(pageStart + CHUNK_SIZE - 1, totalPages);
+          showToast(`Re-importing... pages ${pageStart}-${pageEnd} of ${totalPages}`, 'info');
+
+          await importApi({
+            url: sourceUrl,
+            audience_id: audienceId,
+            page_start: pageStart,
+            page_end: pageEnd,
+          });
+        }
+      }
+
+      // Step 3: Finalize
+      showToast('Finalizing re-import...', 'info');
+      const finalResult = await importApi({
+        audience_id: audienceId,
+        finalize: true,
+        url: sourceUrl,
+      });
+
+      showToast(`Re-import complete! ${finalResult.audience.total_records.toLocaleString()} contacts.`, 'success');
+      loadAudiences(currentPage);
+    } catch (error) {
+      showToast('Re-import error: ' + (error as Error).message, 'error');
+    } finally {
+      setReimportingId(null);
     }
   };
 
@@ -887,6 +968,20 @@ export default function Audiences() {
                             <td>
                               <div className="btn-list flex-nowrap">
                                 <Link href={`/audiences/${id}`} className="btn btn-sm">View</Link>
+                                {audience.isManual && audience.source_url && isAdmin && (
+                                  <button
+                                    className="btn btn-sm btn-outline-primary"
+                                    title="Re-import from source URL"
+                                    disabled={reimportingId === id}
+                                    onClick={() => handleReimport(id, audience.name, audience.source_url!)}
+                                  >
+                                    {reimportingId === id ? (
+                                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                                    ) : (
+                                      <IconRefresh className="icon icon-sm" />
+                                    )}
+                                  </button>
+                                )}
                                 <button
                                   className="btn btn-sm btn-outline-danger"
                                   onClick={() => {
