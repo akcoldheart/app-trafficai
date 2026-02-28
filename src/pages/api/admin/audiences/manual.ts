@@ -98,7 +98,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabase = createClient(req, res);
 
   try {
-    const { name, data, request_id, append_to_audience_id } = req.body;
+    const { name, data, request_id, append_to_audience_id, source_url } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Audience name is required' });
@@ -280,6 +280,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               total_records: inserted,
               uploaded_at: new Date().toISOString(),
               uploaded_by: authResult.user.id,
+              ...(source_url ? { source_url } : {}),
             },
           } as Json,
         })
@@ -308,6 +309,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               total_records: inserted,
               uploaded_at: new Date().toISOString(),
               uploaded_by: authResult.user.id,
+              ...(source_url ? { source_url } : {}),
             },
           } as Json,
         });
