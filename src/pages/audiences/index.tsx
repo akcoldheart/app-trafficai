@@ -123,7 +123,15 @@ export default function Audiences() {
   const [urlPreview, setUrlPreview] = useState<{ total_pages: number; estimated_total_records: number; records_per_page: number } | null>(null);
   const [importProgress, setImportProgress] = useState<string>('');
   const [reimportingId, setReimportingId] = useState<string | null>(null);
-  const [reimportProgress, setReimportProgress] = useState<string>('');
+  const [reimportProgress, setReimportProgress] = useState<{
+    step: 'clearing' | 'fetching' | 'importing' | 'finalizing' | 'done' | 'error';
+    audienceName: string;
+    currentPage?: number;
+    totalPages?: number;
+    contactsFetched?: number;
+    percent?: number;
+    errorMessage?: string;
+  } | null>(null);
 
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -607,7 +615,7 @@ export default function Audiences() {
   const handleReimport = async (audienceId: string, audienceName: string, sourceUrl: string) => {
     if (reimportingId) return;
     setReimportingId(audienceId);
-    setReimportProgress('Clearing old contacts...');
+    setReimportProgress({ step: 'clearing', audienceName, percent: 0, contactsFetched: 0 });
 
     try {
       const importApi = async (body: Record<string, unknown>) => {
@@ -640,7 +648,7 @@ export default function Audiences() {
       }
 
       // Step 1: Init - re-create with same audience_id
-      setReimportProgress('Fetching page 1...');
+      setReimportProgress({ step: 'fetching', audienceName, currentPage: 1, totalPages: 1, percent: 5, contactsFetched: 0 });
       const initResult = await importApi({
         url: sourceUrl,
         name: audienceName,
@@ -656,8 +664,8 @@ export default function Audiences() {
       if (totalPages > 1) {
         for (let pageStart = 2; pageStart <= totalPages; pageStart += CHUNK_SIZE) {
           const pageEnd = Math.min(pageStart + CHUNK_SIZE - 1, totalPages);
-          const pct = Math.round(((pageStart - 1) / totalPages) * 100);
-          setReimportProgress(`Re-importing "${audienceName}" — pages ${pageStart}-${pageEnd} of ${totalPages} (${pct}%, ${totalFetched.toLocaleString()} contacts so far)`);
+          const pct = Math.min(95, Math.round(((pageStart - 1) / totalPages) * 100));
+          setReimportProgress({ step: 'importing', audienceName, currentPage: pageEnd, totalPages, percent: pct, contactsFetched: totalFetched });
 
           const chunkResult = await importApi({
             url: sourceUrl,
@@ -671,19 +679,19 @@ export default function Audiences() {
       }
 
       // Step 3: Finalize
-      setReimportProgress(`Finalizing ${totalFetched.toLocaleString()} contacts...`);
+      setReimportProgress({ step: 'finalizing', audienceName, percent: 98, contactsFetched: totalFetched, totalPages });
       const finalResult = await importApi({
         audience_id: audienceId,
         finalize: true,
         url: sourceUrl,
       });
 
-      setReimportProgress('');
-      showToast(`Re-import complete! ${finalResult.audience.total_records.toLocaleString()} contacts.`, 'success');
+      setReimportProgress({ step: 'done', audienceName, percent: 100, contactsFetched: finalResult.audience.total_records || totalFetched, totalPages });
+      setTimeout(() => setReimportProgress(null), 4000);
       loadAudiences(currentPage);
     } catch (error) {
-      setReimportProgress('');
-      showToast('Re-import error: ' + (error as Error).message, 'error');
+      setReimportProgress({ step: 'error', audienceName, errorMessage: (error as Error).message });
+      setTimeout(() => setReimportProgress(null), 6000);
     } finally {
       setReimportingId(null);
     }
@@ -1768,28 +1776,97 @@ Example format:
         </>
       )}
 
-      {/* Toast Notification */}
-      {/* Persistent re-import progress banner */}
+      {/* Re-import progress card */}
       {reimportProgress && (
         <div
-          className="position-fixed d-flex align-items-center gap-3 px-4 py-3 bg-primary text-white shadow-lg"
+          className="position-fixed shadow-lg"
           style={{
-            top: 0,
-            left: 0,
-            right: 0,
+            top: '24px',
+            right: '24px',
             zIndex: 10000,
+            width: '380px',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            background: 'var(--tblr-bg-surface)',
+            border: '1px solid var(--tblr-border-color)',
           }}
         >
-          <span className="spinner-border spinner-border-sm flex-shrink-0" role="status"></span>
-          <span className="fw-medium">{reimportProgress}</span>
+          {/* Header */}
+          <div className="d-flex align-items-center justify-content-between px-3 py-2" style={{ borderBottom: '1px solid var(--tblr-border-color)' }}>
+            <div className="d-flex align-items-center gap-2">
+              {reimportProgress.step === 'done' ? (
+                <IconCheck size={18} className="text-success" />
+              ) : reimportProgress.step === 'error' ? (
+                <IconX size={18} className="text-danger" />
+              ) : (
+                <span className="spinner-border spinner-border-sm text-primary" role="status" />
+              )}
+              <span className="fw-semibold" style={{ fontSize: '13px' }}>
+                {reimportProgress.step === 'done' ? 'Re-import Complete' :
+                 reimportProgress.step === 'error' ? 'Re-import Failed' :
+                 'Re-importing Audience'}
+              </span>
+            </div>
+            <button
+              className="btn-close"
+              style={{ fontSize: '10px' }}
+              onClick={() => setReimportProgress(null)}
+            />
+          </div>
+
+          {/* Body */}
+          <div className="px-3 py-3">
+            <div className="text-muted mb-2" style={{ fontSize: '12px' }}>
+              {reimportProgress.audienceName}
+            </div>
+
+            {reimportProgress.step === 'error' ? (
+              <div className="text-danger" style={{ fontSize: '12px' }}>
+                {reimportProgress.errorMessage}
+              </div>
+            ) : (
+              <>
+                {/* Progress bar */}
+                <div className="progress mb-2" style={{ height: '6px', borderRadius: '3px' }}>
+                  <div
+                    className={`progress-bar ${reimportProgress.step === 'done' ? 'bg-success' : 'bg-primary'} ${reimportProgress.step !== 'done' ? 'progress-bar-indeterminate' : ''}`}
+                    style={{
+                      width: `${reimportProgress.percent || 0}%`,
+                      transition: 'width 0.4s ease',
+                      ...(reimportProgress.step === 'clearing' || reimportProgress.step === 'fetching'
+                        ? { animation: 'progress-indeterminate 1.5s infinite linear', width: '100%', opacity: 0.6 }
+                        : {}),
+                    }}
+                  />
+                </div>
+
+                {/* Status line */}
+                <div className="d-flex justify-content-between" style={{ fontSize: '12px' }}>
+                  <span className="text-muted">
+                    {reimportProgress.step === 'clearing' && 'Clearing old contacts...'}
+                    {reimportProgress.step === 'fetching' && 'Fetching first page...'}
+                    {reimportProgress.step === 'importing' && `Page ${reimportProgress.currentPage} of ${reimportProgress.totalPages}`}
+                    {reimportProgress.step === 'finalizing' && 'Saving contacts...'}
+                    {reimportProgress.step === 'done' && 'All contacts imported'}
+                  </span>
+                  <span className="text-muted fw-medium">
+                    {reimportProgress.step === 'importing' || reimportProgress.step === 'finalizing' || reimportProgress.step === 'done'
+                      ? `${(reimportProgress.contactsFetched || 0).toLocaleString()} contacts`
+                      : ''}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
+      {/* Toast Notification */}
       {toast && (
         <div
           className={`toast show position-fixed`}
           style={{
-            top: reimportProgress ? '60px' : '20px',
+            top: '20px',
             right: '20px',
             zIndex: 9999,
             minWidth: '300px',
@@ -1816,7 +1893,13 @@ Example format:
         </div>
       )}
 
-      <style jsx>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style jsx>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes progress-indeterminate {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(200%); }
+        }
+      `}</style>
     </Layout>
   );
 }
