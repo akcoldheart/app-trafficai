@@ -210,6 +210,25 @@ export default function Audiences() {
         return;
       }
 
+      // Medium paginated dataset (2-50 pages): do a full fetch to get all pages
+      if (previewData.preview && previewData.total_pages > 1) {
+        const fullResponse = await fetch('/api/proxy/fetch-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ url: manualAudienceUrl }),
+        });
+
+        const fullData = await fullResponse.json();
+        if (!fullResponse.ok) {
+          throw new Error(fullData.error || `HTTP error: ${fullResponse.status}`);
+        }
+
+        setManualAudienceData(JSON.stringify(fullData, null, 2));
+        showToast(`Data fetched successfully! ${fullData.total_records?.toLocaleString() || ''} contacts loaded.`, 'success');
+        return;
+      }
+
       // Small dataset or single page - fetch was already complete
       // If proxy returned full data or non-paginated response, put it in textarea
       setManualAudienceData(JSON.stringify(previewData, null, 2));
@@ -320,7 +339,7 @@ export default function Audiences() {
         if (Array.isArray(audienceData)) {
           contacts = audienceData;
         } else if (audienceData && typeof audienceData === 'object') {
-          contacts = audienceData.contacts || audienceData.Data || audienceData.data || audienceData.records || [];
+          contacts = audienceData.contacts || audienceData.Data || audienceData.data || audienceData.records || audienceData.sample_contacts || [];
         }
 
         if (contacts.length === 0) {
