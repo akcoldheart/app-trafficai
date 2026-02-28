@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Layout from '@/components/layout/Layout';
@@ -433,24 +433,36 @@ export default function Audiences() {
     }
   };
 
+  // Ref to hold local audiences for merging when external API completes
+  const localAudiencesRef = useRef<Audience[]>([]);
+
   const loadAudiences = useCallback(async (page = 1) => {
     setLoading(true);
     setCurrentPage(page);
 
+    // Start external API fetch in background (non-blocking, with 10s timeout)
+    const apiController = new AbortController();
+    const apiTimeout = setTimeout(() => apiController.abort(), 10000);
+    TrafficAPI.getAudiences(page, pageSize)
+      .then((data) => {
+        clearTimeout(apiTimeout);
+        const apiAudiences = data.Data || [];
+        if (apiAudiences.length > 0) {
+          // Merge with local audiences already displayed
+          const merged = [...localAudiencesRef.current, ...apiAudiences];
+          const totalCount = (data.total_records || 0) + localAudiencesRef.current.length;
+          setAudiences(merged);
+          setTotalRecords(totalCount);
+          setTotalPages(Math.ceil(totalCount / pageSize));
+        }
+      })
+      .catch((err) => {
+        clearTimeout(apiTimeout);
+        console.error('Error loading audiences from API:', err);
+      });
+
     try {
-      // Fetch from external API
-      let apiAudiences: Audience[] = [];
-      let apiTotalRecords = 0;
-
-      try {
-        const data = await TrafficAPI.getAudiences(page, pageSize);
-        apiAudiences = data.Data || [];
-        apiTotalRecords = data.total_records || 0;
-      } catch (apiError) {
-        console.error('Error loading audiences from API:', apiError);
-      }
-
-      // Fetch local manual audiences from approved requests
+      // Fetch local manual audiences (fast — hits our own Supabase)
       let localAudiences: Audience[] = [];
       try {
         const response = await fetch('/api/audience-requests?status=approved&has_manual=true');
@@ -504,13 +516,13 @@ export default function Audiences() {
         }
       }
 
-      // Combine both sources
-      const allAudiences = [...localAudiences, ...apiAudiences];
-      const totalRecordsCount = apiTotalRecords + localAudiences.length;
+      // Store for merging when external API completes
+      localAudiencesRef.current = localAudiences;
 
-      setAudiences(allAudiences);
-      setTotalRecords(totalRecordsCount);
-      setTotalPages(Math.ceil(totalRecordsCount / pageSize));
+      // Show local audiences immediately — don't wait for external API
+      setAudiences(localAudiences);
+      setTotalRecords(localAudiences.length);
+      setTotalPages(Math.ceil(localAudiences.length / pageSize));
     } catch (error) {
       console.error('Error loading audiences:', error);
     } finally {
