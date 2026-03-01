@@ -615,7 +615,7 @@ export default function Audiences() {
   const handleReimport = async (audienceId: string, audienceName: string, sourceUrl: string) => {
     if (reimportingId) return;
     setReimportingId(audienceId);
-    setReimportProgress({ step: 'clearing', audienceName, percent: 0, contactsFetched: 0 });
+    setReimportProgress({ step: 'fetching', audienceName, currentPage: 1, totalPages: 1, percent: 2, contactsFetched: 0 });
 
     try {
       const importApi = async (body: Record<string, unknown>) => {
@@ -635,7 +635,18 @@ export default function Audiences() {
         throw new Error(text || `HTTP error: ${resp.status}`);
       };
 
-      // Step 0: Clear existing contacts for this audience
+      // Step 1: Verify URL works by fetching page 1 BEFORE clearing old data
+      setReimportProgress({ step: 'fetching', audienceName, currentPage: 1, totalPages: 1, percent: 5, contactsFetched: 0 });
+      const initResult = await importApi({
+        url: sourceUrl,
+        name: audienceName,
+        audience_id: audienceId,
+        reimport: true,
+        verify_only: true,
+      });
+
+      // Step 2: URL is valid — now safe to clear old contacts
+      setReimportProgress({ step: 'clearing', audienceName, percent: 10, contactsFetched: 0 });
       const clearResp = await fetch(`/api/admin/audiences/clear-contacts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -647,19 +658,19 @@ export default function Audiences() {
         throw new Error(err.error || 'Failed to clear contacts');
       }
 
-      // Step 1: Init - re-create with same audience_id
-      setReimportProgress({ step: 'fetching', audienceName, currentPage: 1, totalPages: 1, percent: 5, contactsFetched: 0 });
-      const initResult = await importApi({
+      // Step 3: Now do the actual import of page 1
+      setReimportProgress({ step: 'importing', audienceName, currentPage: 1, totalPages: initResult.total_pages || 1, percent: 15, contactsFetched: 0 });
+      const importResult = await importApi({
         url: sourceUrl,
         name: audienceName,
         audience_id: audienceId,
         reimport: true,
       });
 
-      const totalPages = initResult.total_pages || 1;
-      let totalFetched = initResult.records_fetched || 0;
+      const totalPages = importResult.total_pages || 1;
+      let totalFetched = importResult.records_fetched || 0;
 
-      // Step 2: Fetch remaining pages in chunks
+      // Step 4: Fetch remaining pages in chunks
       const CHUNK_SIZE = 10;
       if (totalPages > 1) {
         for (let pageStart = 2; pageStart <= totalPages; pageStart += CHUNK_SIZE) {

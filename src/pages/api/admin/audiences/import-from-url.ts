@@ -175,7 +175,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!authResult) return;
 
   const supabase = createClient(req, res);
-  const { url, name, request_id, audience_id, page_start, page_end, finalize, reimport } = req.body;
+  const { url, name, request_id, audience_id, page_start, page_end, finalize, reimport, verify_only } = req.body;
 
   // --- Step 3: Finalize ---
   if (finalize && audience_id) {
@@ -189,7 +189,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // --- Step 1a: Re-import into existing audience ---
   if (reimport && audience_id && url && name) {
-    return await handleReimportInit(supabase, res, url, name, audience_id);
+    return await handleReimportInit(supabase, res, url, name, audience_id, verify_only);
   }
 
   // --- Step 1: Init ---
@@ -347,6 +347,7 @@ async function handleReimportInit(
   url: string,
   name: string,
   audienceId: string,
+  verifyOnly?: boolean,
 ) {
   let parsedUrl: URL;
   try {
@@ -396,6 +397,17 @@ async function handleReimportInit(
 
   const contacts = firstPageRecords.map(r => normalizeContact(cleanRecord(r)));
   console.log(`[Import] Re-import init: page 1 has ${contacts.length} records, ${totalPages} total pages`);
+
+  // If verify_only, return success without inserting — confirms URL is accessible
+  if (verifyOnly) {
+    return res.status(200).json({
+      success: true,
+      step: 'verify',
+      audience_id: audienceId,
+      total_pages: totalPages,
+      records_fetched: 0,
+    });
+  }
 
   // Update the existing audience_requests row with progress
   await supabaseAdmin
