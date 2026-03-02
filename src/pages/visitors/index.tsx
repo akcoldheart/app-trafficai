@@ -27,7 +27,9 @@ import {
   IconForms,
   IconPlayerPlay,
   IconDownload,
+  IconLock,
 } from '@tabler/icons-react';
+import Link from 'next/link';
 
 interface Visitor {
   id: string;
@@ -419,7 +421,7 @@ export default function Visitors() {
   return (
     <Layout title="Visitors" pageTitle="Visitors">
       {/* Filters Card */}
-      <div className="card mb-4">
+      <div className="card mb-4" style={isPlanExpired ? { opacity: 0.5, pointerEvents: 'none' } : undefined}>
         <div className="card-body py-3">
           <form onSubmit={handleSearch}>
             <div className="row g-3 align-items-end">
@@ -538,7 +540,7 @@ export default function Visitors() {
 
       <div className="row g-4">
         {/* Visitors List */}
-        <div className={selectedVisitor ? 'col-lg-7' : 'col-12'}>
+        <div className={selectedVisitor && !isPlanExpired ? 'col-lg-7' : 'col-12'}>
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">
@@ -598,7 +600,73 @@ export default function Visitors() {
                 </div>
               </div>
             </div>
-            {loading ? (
+            {isPlanExpired ? (
+              <div className="position-relative" style={{ overflow: 'hidden' }}>
+                {/* Blurred placeholder rows to show data exists */}
+                <div style={{ filter: 'blur(6px)', pointerEvents: 'none', userSelect: 'none' }}>
+                  <div className="list-group list-group-flush">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="list-group-item">
+                        <div className="row align-items-center g-3">
+                          <div className="col-auto">
+                            <span className="avatar" style={{ backgroundColor: '#e9ecef' }}>
+                              <IconUser size={20} />
+                            </span>
+                          </div>
+                          <div className="col">
+                            <div className="fw-semibold">Visitor Name</div>
+                            <div className="text-muted small">visitor@example.com</div>
+                          </div>
+                          <div className="col-auto">
+                            <div className="badge" style={{ backgroundColor: '#d6393920', color: '#d63939', fontWeight: 600, fontSize: '13px', padding: '6px 10px' }}>42</div>
+                          </div>
+                          <div className="col-auto d-none d-md-block">
+                            <div className="d-flex gap-3 text-muted small">
+                              <span><IconEye size={14} className="me-1" />12</span>
+                              <span><IconClick size={14} className="me-1" />5</span>
+                              <span><IconClock size={14} className="me-1" />3</span>
+                            </div>
+                          </div>
+                          <div className="col-auto">
+                            <span className="text-muted small">2d ago</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Paywall overlay */}
+                <div
+                  className="position-absolute d-flex flex-column align-items-center justify-content-center"
+                  style={{
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(24, 24, 27, 0.55)',
+                    backdropFilter: 'blur(2px)',
+                    zIndex: 10,
+                  }}
+                >
+                  <div className="text-center px-4" style={{ maxWidth: '400px' }}>
+                    <span className="avatar avatar-xl mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: '#fff' }}>
+                      <IconLock size={32} />
+                    </span>
+                    <h3 className="text-white mb-2">Your Trial Has Ended</h3>
+                    <p className="mb-1 text-white" style={{ opacity: 0.9 }}>
+                      You have <strong>{pagination.total > 0 ? pagination.total.toLocaleString() : ''} visitor{pagination.total !== 1 ? 's' : ''}</strong> ready to view.
+                    </p>
+                    <p className="mb-4" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '14px' }}>
+                      Upgrade to a paid plan to access your visitor data, export contacts, and unlock all features.
+                    </p>
+                    <Link href="/account/billing" className="btn btn-primary btn-lg px-5">
+                      <IconLock size={18} className="me-2" />
+                      Upgrade to View Data
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ) : loading ? (
               <div className="card-body text-center py-5">
                 <IconLoader2 size={40} className="text-primary mb-3" style={{ animation: 'spin 1s linear infinite' }} />
                 <p className="text-muted mb-0">Loading visitors...</p>
@@ -731,7 +799,7 @@ export default function Visitors() {
         </div>
 
         {/* Visitor Details Panel */}
-        {selectedVisitor && (
+        {selectedVisitor && !isPlanExpired && (
           <div className="col-lg-5">
             <div className="card sticky-top" style={{ top: '1rem' }}>
               <div className="card-header">
