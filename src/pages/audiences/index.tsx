@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Layout from '@/components/layout/Layout';
@@ -17,6 +17,7 @@ import {
   IconLoader2,
   IconEdit,
   IconEye,
+  IconLock,
 } from '@tabler/icons-react';
 import type { AudienceRequest, RequestStatus } from '@/lib/supabase/types';
 
@@ -43,6 +44,19 @@ export default function Audiences() {
   const router = useRouter();
   const { userProfile } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
+
+  const isPlanExpired = useMemo(() => {
+    if (!userProfile) return false;
+    const currentPlan = userProfile.plan || 'trial';
+    if (currentPlan !== 'trial') return false;
+    const trialEnd = userProfile.trial_ends_at
+      ? new Date(userProfile.trial_ends_at)
+      : userProfile.created_at
+        ? new Date(new Date(userProfile.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
+        : null;
+    if (!trialEnd) return false;
+    return trialEnd.getTime() <= Date.now();
+  }, [userProfile]);
 
   const [audiences, setAudiences] = useState<Audience[]>([]);
   const [audienceRequests, setAudienceRequests] = useState<AudienceRequest[]>([]);
@@ -910,14 +924,23 @@ export default function Audiences() {
                   <p className="text-muted mb-0">View, create, and manage your target audiences</p>
                 </div>
                 <div className="btn-list">
-                  <Link href="/audiences/custom" className="btn btn-outline-primary">
-                    <IconMoon className="icon" />
-                    {isAdmin ? 'Custom Audience' : 'Request Custom'}
-                  </Link>
-                  <Link href="/audiences/create" className="btn btn-primary">
-                    <IconPlus className="icon" />
-                    {isAdmin ? 'Create Audience' : 'Request Audience'}
-                  </Link>
+                  {isPlanExpired ? (
+                    <Link href="/account/billing" className="btn btn-primary">
+                      <IconLock className="icon" />
+                      Upgrade to Manage Audiences
+                    </Link>
+                  ) : (
+                    <>
+                      <Link href="/audiences/custom" className="btn btn-outline-primary">
+                        <IconMoon className="icon" />
+                        {isAdmin ? 'Custom Audience' : 'Request Custom'}
+                      </Link>
+                      <Link href="/audiences/create" className="btn btn-primary">
+                        <IconPlus className="icon" />
+                        {isAdmin ? 'Create Audience' : 'Request Audience'}
+                      </Link>
+                    </>
+                  )}
                   {isAdmin && (
                     <button
                       className="btn btn-outline-primary"
@@ -983,127 +1006,196 @@ export default function Audiences() {
                   </button>
                 </div>
               </div>
-              <div className="table-responsive">
-                <table className="table table-vcenter card-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      {isAdmin && <th>User</th>}
-                      <th>Total Records</th>
-                      <th>Status</th>
-                      <th>Created</th>
-                      <th className="w-1">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr>
-                        <td colSpan={isAdmin ? 6 : 5} className="text-center py-4">
-                          <div className="spinner-border spinner-border-sm me-2" role="status"></div>
-                          Loading audiences...
-                        </td>
-                      </tr>
-                    ) : audiences.length === 0 ? (
-                      <tr>
-                        <td colSpan={isAdmin ? 6 : 5} className="text-center text-muted py-4">
-                          No audiences found. <Link href="/audiences/create">{isAdmin ? 'Create your first audience' : 'Request your first audience'}</Link>
-                        </td>
-                      </tr>
-                    ) : (
-                      audiences.map((audience) => {
-                        const id = audience.id || audience.audienceId || '';
-                        return (
-                          <tr key={id}>
+              {isPlanExpired ? (
+                <div className="position-relative" style={{ overflow: 'hidden' }}>
+                  {/* Blurred placeholder table to show data exists */}
+                  <div style={{ filter: 'blur(6px)', pointerEvents: 'none', userSelect: 'none' }}>
+                    <table className="table table-vcenter card-table">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Total Records</th>
+                          <th>Status</th>
+                          <th>Created</th>
+                          <th className="w-1">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[1, 2, 3, 4].map((i) => (
+                          <tr key={i}>
                             <td>
                               <div className="d-flex align-items-center">
-                                <span className={`avatar avatar-sm ${audience.isManual && isAdmin ? 'bg-purple-lt' : 'bg-primary-lt'} me-2`}>
+                                <span className="avatar avatar-sm bg-primary-lt me-2">
                                   <IconUsers className="icon" />
                                 </span>
-                                <div>
-                                  <span className="text-reset">{audience.name || 'Unnamed Audience'}</span>
-                                  {audience.isManual && isAdmin && (
-                                    <span className="badge bg-purple-lt text-purple ms-2">Manual</span>
-                                  )}
-                                </div>
+                                <span>Sample Audience {i}</span>
                               </div>
                             </td>
-                            {isAdmin && (
-                              <td className="text-muted">
-                                {(audience as unknown as { user_email?: string }).user_email || '-'}
-                              </td>
-                            )}
-                            <td>{audience.total_records?.toLocaleString() || '-'}</td>
-                            <td>
-                              <span className={`badge ${
-                                audience.isManual && isAdmin ? 'bg-purple' :
-                                (audience as unknown as { status?: string }).status === 'ready' ? 'bg-green' :
-                                (audience as unknown as { status?: string }).status === 'processing' ? 'bg-yellow' : 'bg-blue'
-                              }`}>
-                                {audience.isManual && isAdmin ? 'Manual' : ((audience as unknown as { status?: string }).status || 'Active')}
-                              </span>
-                            </td>
-                            <td className="text-muted">
-                              {audience.created_at ? new Date(audience.created_at).toLocaleDateString() : '-'}
-                            </td>
-                            <td>
-                              <div className="btn-list flex-nowrap">
-                                <Link href={`/audiences/${id}`} className="btn btn-sm">View</Link>
-                                {audience.isManual && audience.source_url && isAdmin && (
-                                  <button
-                                    className="btn btn-sm btn-outline-primary"
-                                    title="Re-import from source URL"
-                                    disabled={reimportingId === id}
-                                    onClick={() => handleReimport(id, audience.name, audience.source_url!)}
-                                  >
-                                    {reimportingId === id ? (
-                                      <span className="spinner-border spinner-border-sm" role="status"></span>
-                                    ) : (
-                                      <IconRefresh className="icon icon-sm" />
-                                    )}
-                                  </button>
-                                )}
-                                <button
-                                  className="btn btn-sm btn-outline-danger"
-                                  onClick={() => {
-                                    setDeleteId(id);
-                                    setShowDeleteModal(true);
-                                  }}
-                                >
-                                  <IconTrash className="icon icon-sm" />
-                                </button>
-                              </div>
+                            <td>{(i * 1250).toLocaleString()}</td>
+                            <td><span className="badge bg-green">Active</span></td>
+                            <td className="text-muted">01/01/2026</td>
+                            <td><button className="btn btn-sm">View</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Paywall overlay */}
+                  <div
+                    className="position-absolute d-flex flex-column align-items-center justify-content-center"
+                    style={{
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      background: 'rgba(24, 24, 27, 0.55)',
+                      backdropFilter: 'blur(2px)',
+                      zIndex: 10,
+                    }}
+                  >
+                    <div className="text-center px-4" style={{ maxWidth: '400px' }}>
+                      <span className="avatar avatar-xl mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: '#fff' }}>
+                        <IconLock size={32} />
+                      </span>
+                      <h3 className="text-white mb-2">Your Trial Has Ended</h3>
+                      <p className="mb-1 text-white" style={{ opacity: 0.9 }}>
+                        You have <strong>{totalRecords > 0 ? `${totalRecords.toLocaleString()} audience${totalRecords !== 1 ? 's' : ''}` : 'audiences'}</strong> ready to access.
+                      </p>
+                      <p className="mb-4" style={{ color: 'rgba(255,255,255,0.7)', fontSize: '14px' }}>
+                        Upgrade to a paid plan to view your audiences, create new ones, and unlock all features.
+                      </p>
+                      <Link href="/account/billing" className="btn btn-primary btn-lg px-5">
+                        <IconLock size={18} className="me-2" />
+                        Upgrade to View Data
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="table-responsive">
+                    <table className="table table-vcenter card-table">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          {isAdmin && <th>User</th>}
+                          <th>Total Records</th>
+                          <th>Status</th>
+                          <th>Created</th>
+                          <th className="w-1">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {loading ? (
+                          <tr>
+                            <td colSpan={isAdmin ? 6 : 5} className="text-center py-4">
+                              <div className="spinner-border spinner-border-sm me-2" role="status"></div>
+                              Loading audiences...
                             </td>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="card-footer d-flex align-items-center">
-                <p className="m-0 text-muted">
-                  Showing {start} to {end} of {totalRecords} entries
-                </p>
-                <ul className="pagination m-0 ms-auto">
-                  <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                    <button className="page-link" onClick={() => loadAudiences(currentPage - 1)}>
-                      prev
-                    </button>
-                  </li>
-                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((page) => (
-                    <li key={page} className={`page-item ${page === currentPage ? 'active' : ''}`}>
-                      <button className="page-link" onClick={() => loadAudiences(page)}>
-                        {page}
-                      </button>
-                    </li>
-                  ))}
-                  <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                    <button className="page-link" onClick={() => loadAudiences(currentPage + 1)}>
-                      next
-                    </button>
-                  </li>
-                </ul>
-              </div>
+                        ) : audiences.length === 0 ? (
+                          <tr>
+                            <td colSpan={isAdmin ? 6 : 5} className="text-center text-muted py-4">
+                              No audiences found. <Link href="/audiences/create">{isAdmin ? 'Create your first audience' : 'Request your first audience'}</Link>
+                            </td>
+                          </tr>
+                        ) : (
+                          audiences.map((audience) => {
+                            const id = audience.id || audience.audienceId || '';
+                            return (
+                              <tr key={id}>
+                                <td>
+                                  <div className="d-flex align-items-center">
+                                    <span className={`avatar avatar-sm ${audience.isManual && isAdmin ? 'bg-purple-lt' : 'bg-primary-lt'} me-2`}>
+                                      <IconUsers className="icon" />
+                                    </span>
+                                    <div>
+                                      <span className="text-reset">{audience.name || 'Unnamed Audience'}</span>
+                                      {audience.isManual && isAdmin && (
+                                        <span className="badge bg-purple-lt text-purple ms-2">Manual</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                {isAdmin && (
+                                  <td className="text-muted">
+                                    {(audience as unknown as { user_email?: string }).user_email || '-'}
+                                  </td>
+                                )}
+                                <td>{audience.total_records?.toLocaleString() || '-'}</td>
+                                <td>
+                                  <span className={`badge ${
+                                    audience.isManual && isAdmin ? 'bg-purple' :
+                                    (audience as unknown as { status?: string }).status === 'ready' ? 'bg-green' :
+                                    (audience as unknown as { status?: string }).status === 'processing' ? 'bg-yellow' : 'bg-blue'
+                                  }`}>
+                                    {audience.isManual && isAdmin ? 'Manual' : ((audience as unknown as { status?: string }).status || 'Active')}
+                                  </span>
+                                </td>
+                                <td className="text-muted">
+                                  {audience.created_at ? new Date(audience.created_at).toLocaleDateString() : '-'}
+                                </td>
+                                <td>
+                                  <div className="btn-list flex-nowrap">
+                                    <Link href={`/audiences/${id}`} className="btn btn-sm">View</Link>
+                                    {audience.isManual && audience.source_url && isAdmin && (
+                                      <button
+                                        className="btn btn-sm btn-outline-primary"
+                                        title="Re-import from source URL"
+                                        disabled={reimportingId === id}
+                                        onClick={() => handleReimport(id, audience.name, audience.source_url!)}
+                                      >
+                                        {reimportingId === id ? (
+                                          <span className="spinner-border spinner-border-sm" role="status"></span>
+                                        ) : (
+                                          <IconRefresh className="icon icon-sm" />
+                                        )}
+                                      </button>
+                                    )}
+                                    <button
+                                      className="btn btn-sm btn-outline-danger"
+                                      onClick={() => {
+                                        setDeleteId(id);
+                                        setShowDeleteModal(true);
+                                      }}
+                                    >
+                                      <IconTrash className="icon icon-sm" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="card-footer d-flex align-items-center">
+                    <p className="m-0 text-muted">
+                      Showing {start} to {end} of {totalRecords} entries
+                    </p>
+                    <ul className="pagination m-0 ms-auto">
+                      <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                        <button className="page-link" onClick={() => loadAudiences(currentPage - 1)}>
+                          prev
+                        </button>
+                      </li>
+                      {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((page) => (
+                        <li key={page} className={`page-item ${page === currentPage ? 'active' : ''}`}>
+                          <button className="page-link" onClick={() => loadAudiences(page)}>
+                            {page}
+                          </button>
+                        </li>
+                      ))}
+                      <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                        <button className="page-link" onClick={() => loadAudiences(currentPage + 1)}>
+                          next
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
