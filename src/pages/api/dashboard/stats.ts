@@ -30,8 +30,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchUserStats(supabase: any, userId: string) {
+  // Use UTC so results are consistent regardless of server timezone
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
@@ -53,7 +54,7 @@ async function fetchUserStats(supabase: any, userId: string) {
     enrichedVisitorsResult,
     visitorsTodayResult,
     visitorsYesterdayResult,
-    newVisitorsTodayResult,
+    eventsTodayResult,
     recentVisitorsResult,
     // DB aggregate functions
     avgLeadScoreResult,
@@ -65,10 +66,10 @@ async function fetchUserStats(supabase: any, userId: string) {
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId),
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_identified', true),
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_enriched', true),
-    supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId).gte('last_seen_at', today.toISOString()),
-    supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId).gte('last_seen_at', yesterday.toISOString()).lt('last_seen_at', today.toISOString()),
-    // Visitors today (created today) — replaces pixel_events count
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', today.toISOString()),
+    supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString()),
+    // Actual events from pixel_events table created today
+    supabase.from('pixel_events').select('*', { count: 'exact', head: true }).in('pixel_id', pixelFilter).gte('created_at', today.toISOString()),
     // Recent visitors (just 5 rows)
     supabase.from('visitors').select('id, full_name, email, company, lead_score, last_seen_at, is_identified, is_enriched').eq('user_id', userId).order('last_seen_at', { ascending: false }).limit(5),
     // RPC: average lead score for this user (replaces fetching 1000 rows)
@@ -86,7 +87,7 @@ async function fetchUserStats(supabase: any, userId: string) {
   const enrichedVisitors = enrichedVisitorsResult.count || 0;
   const visitorsToday = visitorsTodayResult.count || 0;
   const visitorsYesterday = visitorsYesterdayResult.count || 0;
-  const eventsToday = newVisitorsTodayResult.count || 0;
+  const eventsToday = eventsTodayResult.count || 0;
   const recentVisitors = recentVisitorsResult.data || [];
 
   const avgLeadScore = typeof avgLeadScoreResult.data === 'number'

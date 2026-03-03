@@ -36,8 +36,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 async function fetchAdminStats() {
   const supabase = supabaseAdmin;
 
+  // Use UTC so results are consistent regardless of server timezone
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
@@ -62,8 +63,8 @@ async function fetchAdminStats() {
     supabase.from('visitors').select('*', { count: 'exact', head: true }),
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('is_identified', true),
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('is_enriched', true),
-    supabase.from('visitors').select('*', { count: 'exact', head: true }).gte('last_seen_at', today.toISOString()),
-    supabase.from('visitors').select('*', { count: 'exact', head: true }).gte('last_seen_at', yesterday.toISOString()).lt('last_seen_at', today.toISOString()),
+    supabase.from('visitors').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+    supabase.from('visitors').select('*', { count: 'exact', head: true }).gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString()),
     // Recent visitors (just 10 rows)
     supabase.from('visitors').select('id, full_name, email, company, lead_score, last_seen_at, is_identified, is_enriched, user_id').order('last_seen_at', { ascending: false }).limit(10),
     // Users
@@ -122,13 +123,13 @@ async function fetchAdminStats() {
 
   // Run visitor aggregate RPCs (depend on pixel IDs)
   const [
-    newVisitorsTodayResult,
+    eventsTodayResult,
     visitorStatsByDayResult,
     activityCountsResult,
     topEntryPagesResult,
   ] = await Promise.all([
-    // Visitors created today
-    supabase.from('visitors').select('*', { count: 'exact', head: true })
+    // Actual events from pixel_events table created today
+    supabase.from('pixel_events').select('*', { count: 'exact', head: true })
       .gte('created_at', today.toISOString()),
     // RPC: daily visitor stats
     supabase.rpc('get_visitor_stats_by_day', { p_pixel_ids: allPixelIds, p_days: 7 }),
@@ -138,7 +139,7 @@ async function fetchAdminStats() {
     supabase.rpc('get_top_entry_pages', { p_pixel_ids: allPixelIds, p_days: 7, p_limit: 5 }),
   ]);
 
-  const eventsToday = newVisitorsTodayResult.count || 0;
+  const eventsToday = eventsTodayResult.count || 0;
 
   // Build chart data from RPC results
   const visitorsByDayMap: Record<string, { visitors: number; pageviews: number }> = {};
