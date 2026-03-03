@@ -383,6 +383,7 @@ export default function AdminRequests() {
             data: { contacts: batchContacts },
             request_id: linkedRequestId,
             ...(appendToAudienceId ? { append_to_audience_id: appendToAudienceId } : {}),
+            ...(manualAudienceUrl ? { source_url: manualAudienceUrl } : {}),
           }),
         });
 

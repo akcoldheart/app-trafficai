@@ -221,33 +221,15 @@ export default function Audiences() {
         throw new Error(previewData.error || `HTTP error: ${previewResponse.status}`);
       }
 
-      // If it's a preview response (large dataset), show info and let user use server-side import
-      if (previewData.preview && previewData.total_pages > 50) {
+      // If it's a multi-page dataset (2+ pages), use server-side import for reliability
+      // (server-side import has retries per page and always saves source_url)
+      if (previewData.preview && previewData.total_pages > 1) {
         setUrlPreview({
           total_pages: previewData.total_pages,
           estimated_total_records: previewData.estimated_total_records,
           records_per_page: previewData.records_per_page,
         });
-        showToast(`Large dataset detected: ~${previewData.estimated_total_records.toLocaleString()} records across ${previewData.total_pages} pages. Click "Create Audience" to import directly.`, 'info');
-        return;
-      }
-
-      // Medium paginated dataset (2-50 pages): do a full fetch to get all pages
-      if (previewData.preview && previewData.total_pages > 1) {
-        const fullResponse = await fetch('/api/proxy/fetch-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ url: manualAudienceUrl }),
-        });
-
-        const fullData = await fullResponse.json();
-        if (!fullResponse.ok) {
-          throw new Error(fullData.error || `HTTP error: ${fullResponse.status}`);
-        }
-
-        setManualAudienceData(JSON.stringify(fullData, null, 2));
-        showToast(`Data fetched successfully! ${fullData.total_records?.toLocaleString() || ''} contacts loaded.`, 'success');
+        showToast(`Dataset detected: ~${previewData.estimated_total_records.toLocaleString()} records across ${previewData.total_pages} pages. Click "Import Audience" to import directly.`, 'info');
         return;
       }
 
