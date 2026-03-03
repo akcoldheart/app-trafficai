@@ -4,7 +4,90 @@ import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { TrafficAPI } from '@/lib/api';
-import { IconPlus, IconInfoCircle, IconArrowLeft, IconCheck, IconCircleCheck, IconBriefcase, IconCoin, IconUserCircle, IconUsers, IconHome, IconMapPin } from '@tabler/icons-react';
+import { IconPlus, IconInfoCircle, IconArrowLeft, IconCheck, IconCircleCheck, IconBriefcase, IconCoin, IconUserCircle, IconUsers, IconHome, IconMapPin, IconBuilding, IconUsersGroup, IconTrophy, IconCalendar, IconX } from '@tabler/icons-react';
+import IntentFiltersCard from '@/components/intent-filters/IntentFiltersCard';
+
+/* ── Chip-picker: reusable multi-select with clickable tags ── */
+function ChipPicker({
+  label,
+  items,
+  selected,
+  onSelectedChange,
+  searchable = false,
+}: {
+  label: string;
+  items: string[];
+  selected: string[];
+  onSelectedChange: (v: string[]) => void;
+  searchable?: boolean;
+}) {
+  const [search, setSearch] = useState('');
+  const filtered = searchable && search
+    ? items.filter((i) => i.toLowerCase().includes(search.toLowerCase()))
+    : items;
+
+  const toggle = (item: string) => {
+    onSelectedChange(
+      selected.includes(item) ? selected.filter((s) => s !== item) : [...selected, item],
+    );
+  };
+
+  return (
+    <div className="mb-3">
+      <div className="d-flex align-items-center justify-content-between mb-2">
+        <label className="form-label mb-0">{label}</label>
+        {selected.length > 0 && (
+          <span
+            className="text-primary"
+            style={{ fontSize: '11px', cursor: 'pointer', fontWeight: 500 }}
+            onClick={() => onSelectedChange([])}
+          >
+            Clear ({selected.length})
+          </span>
+        )}
+      </div>
+      {searchable && (
+        <input
+          type="text"
+          className="form-control form-control-sm mb-2"
+          placeholder={`Search ${label.toLowerCase()}...`}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      )}
+      <div className="d-flex flex-wrap gap-1">
+        {filtered.map((item) => {
+          const isSelected = selected.includes(item);
+          return (
+            <span
+              key={item}
+              onClick={() => toggle(item)}
+              className="badge d-inline-flex align-items-center gap-1"
+              style={{
+                fontSize: '12px',
+                fontWeight: isSelected ? 600 : 400,
+                padding: '6px 10px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                border: isSelected
+                  ? '1.5px solid rgba(32, 107, 196, 0.5)'
+                  : '1.5px solid var(--tblr-border-color)',
+                backgroundColor: isSelected
+                  ? 'rgba(32, 107, 196, 0.1)'
+                  : 'transparent',
+                color: isSelected ? '#4299e1' : 'var(--tblr-body-color)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {item}
+              {isSelected && <IconX size={12} />}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function CreateAudience() {
   const router = useRouter();
@@ -63,12 +146,11 @@ export default function CreateAudience() {
   const [selectedIndustries, setSelectedIndustries] = useState<string[]>([]);
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const [selectedSeniority, setSelectedSeniority] = useState<string[]>([]);
-  const [segments, setSegments] = useState('');
+  const [selectedPremades, setSelectedPremades] = useState<string[]>([]);
   const allDataPoints = ['business', 'financial', 'personal', 'family', 'housing', 'location'];
   const [dataPoints, setDataPoints] = useState<string[]>([]);
 
   useEffect(() => {
-
     loadAttributes();
   }, [router]);
 
@@ -91,7 +173,6 @@ export default function CreateAudience() {
       if (extracted.length > 0) setIndustries(extracted);
     } catch (error) {
       console.error('Error loading industries, using static list:', error);
-      // Keep static fallback (already set as default)
     }
 
     try {
@@ -141,8 +222,8 @@ export default function CreateAudience() {
     if (selectedSeniority.length > 0) businessProfile.seniority = selectedSeniority;
     if (Object.keys(businessProfile).length > 0) filters.businessProfile = businessProfile;
 
-    // Segments
-    const segmentList = segments ? segments.split(',').map((s) => s.trim()).filter((s) => s) : [];
+    // Segments from selected premades
+    const segmentList = selectedPremades.map((key) => key.split('|')[2]);
 
     return {
       filters,
@@ -160,7 +241,6 @@ export default function CreateAudience() {
       const formData = buildFormData();
 
       if (isAdmin) {
-        // Admin can create audience directly
         const data = {
           name,
           ...formData,
@@ -170,7 +250,6 @@ export default function CreateAudience() {
         showToast('Audience created successfully!', 'success');
         setTimeout(() => router.push('/audiences'), 1500);
       } else {
-        // Non-admin users submit a request
         const response = await fetch('/api/audience-requests', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -208,29 +287,30 @@ export default function CreateAudience() {
         </Link>
       </div>
 
-      <div className="row row-cards">
-        <div className="col-lg-8">
-          <form onSubmit={handleSubmit}>
-            {!isAdmin && (
-              <div className="alert alert-info mb-3">
-                <div className="d-flex align-items-start">
-                  <IconInfoCircle size={20} className="me-2 flex-shrink-0 mt-1" />
-                  <div>
-                    <h4 className="alert-title">Request Mode</h4>
-                    <p className="mb-0">
-                      Your audience request will be submitted for admin approval. Once approved,
-                      the audience will be created and available in your Audiences list.
-                    </p>
-                  </div>
-                </div>
+      <form onSubmit={handleSubmit}>
+        {!isAdmin && (
+          <div className="alert alert-info mb-3">
+            <div className="d-flex align-items-start">
+              <IconInfoCircle size={20} className="me-2 flex-shrink-0 mt-1" />
+              <div>
+                <h4 className="alert-title">Request Mode</h4>
+                <p className="mb-0">
+                  Your audience request will be submitted for admin approval. Once approved,
+                  the audience will be created and available in your Audiences list.
+                </p>
               </div>
-            )}
+            </div>
+          </div>
+        )}
 
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Audience Details</h3>
-              </div>
-              <div className="card-body">
+        {/* ── Audience Details ── */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Audience Details</h3>
+          </div>
+          <div className="card-body">
+            <div className="row">
+              <div className="col-md-8">
                 <div className="mb-3">
                   <label className="form-label required">Audience Name</label>
                   <input
@@ -243,90 +323,121 @@ export default function CreateAudience() {
                   />
                   <small className="form-hint">Give your audience a descriptive name</small>
                 </div>
-
-                <div className="mb-3">
-                  <label className="form-label">Description</label>
-                  <textarea
-                    className="form-control"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={3}
-                    placeholder="e.g., Target technology professionals working in New York City for our enterprise software campaign"
-                  />
-                  <small className="form-hint">Describe the purpose of this audience (optional)</small>
-                </div>
-
+              </div>
+              <div className="col-md-4">
                 <div className="mb-3">
                   <label className="form-label">Days Back</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={daysBack}
-                    onChange={(e) => setDaysBack(parseInt(e.target.value) || 7)}
-                    min={1}
-                    max={365}
-                  />
-                  <small className="form-hint">Number of days to look back for data (1-365)</small>
+                  <div className="d-flex align-items-center gap-2">
+                    <IconCalendar size={16} className="text-muted" style={{ flexShrink: 0 }} />
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={daysBack}
+                      onChange={(e) => setDaysBack(parseInt(e.target.value) || 7)}
+                      min={1}
+                      max={365}
+                    />
+                  </div>
+                  <small className="form-hint">Look back 1–365 days</small>
                 </div>
               </div>
             </div>
+            <div className="mb-0">
+              <label className="form-label">Description</label>
+              <textarea
+                className="form-control"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                placeholder="e.g., Target technology professionals working in New York City for our enterprise software campaign"
+              />
+              <small className="form-hint">Describe the purpose of this audience (optional)</small>
+            </div>
+          </div>
+        </div>
 
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Demographic Filters</h3>
-              </div>
-              <div className="card-body">
+        {/* ── Intent Filters ── */}
+        <IntentFiltersCard
+          selectedPremades={selectedPremades}
+          onSelectedChange={setSelectedPremades}
+        />
+
+        {/* ── Demographics & Location (merged, 2-column) ── */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Demographics &amp; Location</h3>
+          </div>
+          <div className="card-body">
+            <div className="row">
+              {/* Left column — Demographics */}
+              <div className="col-md-6" style={{ borderRight: '1px solid var(--tblr-border-color)' }}>
                 <div className="row">
-                  <div className="col-md-6">
+                  <div className="col-6">
                     <div className="mb-3">
-                      <label className="form-label">Minimum Age</label>
+                      <label className="form-label">Min Age</label>
                       <input
                         type="number"
                         className="form-control"
                         value={minAge}
                         onChange={(e) => setMinAge(e.target.value)}
-                        placeholder="e.g., 25"
+                        placeholder="18"
                         min={18}
                         max={100}
                       />
                     </div>
                   </div>
-                  <div className="col-md-6">
+                  <div className="col-6">
                     <div className="mb-3">
-                      <label className="form-label">Maximum Age</label>
+                      <label className="form-label">Max Age</label>
                       <input
                         type="number"
                         className="form-control"
                         value={maxAge}
                         onChange={(e) => setMaxAge(e.target.value)}
-                        placeholder="e.g., 65"
+                        placeholder="100"
                         min={18}
                         max={100}
                       />
                     </div>
                   </div>
                 </div>
-
                 <div className="mb-3">
                   <label className="form-label">Gender</label>
-                  <select
-                    className="form-select"
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value)}
-                  >
-                    <option value="">Any</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                  </select>
+                  <div className="d-flex gap-2">
+                    {[
+                      { value: '', label: 'Any' },
+                      { value: 'male', label: 'Male' },
+                      { value: 'female', label: 'Female' },
+                    ].map((opt) => (
+                      <span
+                        key={opt.value}
+                        onClick={() => setGender(opt.value)}
+                        className="badge"
+                        style={{
+                          fontSize: '12px',
+                          fontWeight: gender === opt.value ? 600 : 400,
+                          padding: '7px 16px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          border: gender === opt.value
+                            ? '1.5px solid rgba(32, 107, 196, 0.5)'
+                            : '1.5px solid var(--tblr-border-color)',
+                          backgroundColor: gender === opt.value
+                            ? 'rgba(32, 107, 196, 0.1)'
+                            : 'transparent',
+                          color: gender === opt.value ? '#4299e1' : 'var(--tblr-body-color)',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {opt.label}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Location Filters</h3>
-              </div>
-              <div className="card-body">
+              {/* Right column — Location */}
+              <div className="col-md-6 ps-md-4">
                 <div className="mb-3">
                   <label className="form-label">Cities</label>
                   <input
@@ -336,10 +447,9 @@ export default function CreateAudience() {
                     onChange={(e) => setCities(e.target.value)}
                     placeholder="e.g., New York, San Francisco, Los Angeles"
                   />
-                  <small className="form-hint">Enter city names separated by commas</small>
+                  <small className="form-hint">Comma-separated city names</small>
                 </div>
-
-                <div className="mb-3">
+                <div className="mb-0">
                   <label className="form-label">States</label>
                   <input
                     type="text"
@@ -348,231 +458,198 @@ export default function CreateAudience() {
                     onChange={(e) => setStates(e.target.value)}
                     placeholder="e.g., CA, NY, TX"
                   />
-                  <small className="form-hint">Enter state codes separated by commas</small>
+                  <small className="form-hint">Comma-separated state codes</small>
                 </div>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Business Profile Filters</h3>
-              </div>
-              <div className="card-body">
-                <div className="mb-3">
-                  <label className="form-label">Industries</label>
-                  <select
-                    className="form-select"
-                    multiple
-                    value={selectedIndustries}
-                    onChange={(e) =>
-                      setSelectedIndustries(Array.from(e.target.selectedOptions, (o) => o.value))
-                    }
-                  >
-                    {industries.map((industry) => (
-                      <option key={industry} value={industry}>
-                        {industry}
-                      </option>
-                    ))}
-                  </select>
-                  <small className="form-hint">Hold Ctrl/Cmd to select multiple industries</small>
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-label">Departments</label>
-                  <select
-                    className="form-select"
-                    multiple
-                    value={selectedDepartments}
-                    onChange={(e) =>
-                      setSelectedDepartments(Array.from(e.target.selectedOptions, (o) => o.value))
-                    }
-                  >
-                    {departments.map((dept) => (
-                      <option key={dept} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                  </select>
-                  <small className="form-hint">Hold Ctrl/Cmd to select multiple departments</small>
-                </div>
-
-                <div className="mb-3">
-                  <label className="form-label">Seniority Level</label>
-                  <select
-                    className="form-select"
-                    multiple
-                    value={selectedSeniority}
-                    onChange={(e) =>
-                      setSelectedSeniority(Array.from(e.target.selectedOptions, (o) => o.value))
-                    }
-                  >
-                    {seniority.map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </select>
-                  <small className="form-hint">Hold Ctrl/Cmd to select multiple levels</small>
-                </div>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Segments</h3>
-              </div>
-              <div className="card-body">
-                <div className="mb-3">
-                  <label className="form-label">Segment IDs</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={segments}
-                    onChange={(e) => setSegments(e.target.value)}
-                    placeholder="e.g., 100073, 100074"
-                  />
-                  <small className="form-hint">Enter segment IDs separated by commas</small>
-                </div>
-              </div>
-            </div>
-
-            {!isAdmin && (
-              <div className="card">
-                <div className="card-header">
-                  <div className="d-flex align-items-center justify-content-between w-100">
-                    <h3 className="card-title mb-0">Data Points <span className="text-muted fw-normal" style={{ fontSize: '12px' }}>(optional)</span></h3>
-                    <span
-                      className="text-primary"
-                      style={{ fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}
-                      onClick={() => {
-                        const allSelected = dataPoints.length === allDataPoints.length;
-                        setDataPoints(allSelected ? [] : [...allDataPoints]);
-                      }}
-                    >
-                      {dataPoints.length === allDataPoints.length ? 'Deselect all' : 'Select all'}
-                    </span>
-                  </div>
-                </div>
-                <div className="card-body">
-                  <div className="row g-2 mb-3">
-                    {[
-                      { key: 'business', label: 'Business', icon: IconBriefcase, desc: 'Company & job info' },
-                      { key: 'financial', label: 'Financial', icon: IconCoin, desc: 'Income & net worth' },
-                      { key: 'personal', label: 'Personal', icon: IconUserCircle, desc: 'Age, gender & email' },
-                      { key: 'family', label: 'Family', icon: IconUsers, desc: 'Marital & children' },
-                      { key: 'housing', label: 'Housing', icon: IconHome, desc: 'Homeowner status' },
-                      { key: 'location', label: 'Location', icon: IconMapPin, desc: 'City, state & zip' },
-                    ].map((point) => {
-                      const isSelected = dataPoints.includes(point.key);
-                      const PointIcon = point.icon;
-                      return (
-                        <div key={point.key} className="col-6 col-md-4">
-                          <div
-                            onClick={() => {
-                              if (loading) return;
-                              setDataPoints(isSelected
-                                ? dataPoints.filter((d) => d !== point.key)
-                                : [...dataPoints, point.key]
-                              );
-                            }}
-                            style={{
-                              padding: '10px 12px',
-                              borderRadius: '8px',
-                              border: isSelected ? '1.5px solid rgba(32, 107, 196, 0.6)' : '1.5px solid var(--tblr-border-color)',
-                              backgroundColor: isSelected ? 'rgba(32, 107, 196, 0.08)' : 'transparent',
-                              cursor: loading ? 'not-allowed' : 'pointer',
-                              transition: 'all 0.15s ease',
-                              opacity: loading ? 0.6 : 1,
-                            }}
-                          >
-                            <div className="d-flex align-items-center gap-2">
-                              <div style={{
-                                width: '32px', height: '32px', borderRadius: '6px',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                backgroundColor: isSelected ? 'rgba(32, 107, 196, 0.15)' : 'var(--tblr-bg-surface-secondary)',
-                                color: isSelected ? '#4299e1' : 'var(--tblr-secondary)',
-                                flexShrink: 0, transition: 'all 0.15s ease',
-                              }}>
-                                <PointIcon size={16} />
-                              </div>
-                              <div className="flex-fill" style={{ minWidth: 0 }}>
-                                <div style={{ fontSize: '13px', fontWeight: isSelected ? 600 : 500, color: isSelected ? '#4299e1' : 'var(--tblr-body-color)' }}>{point.label}</div>
-                                <div className="text-muted" style={{ fontSize: '11px', lineHeight: 1.2 }}>{point.desc}</div>
-                              </div>
-                              {isSelected && <IconCheck size={14} style={{ color: '#4299e1', flexShrink: 0 }} />}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{
-                    background: 'linear-gradient(135deg, rgba(32, 107, 196, 0.06), rgba(32, 196, 140, 0.06))',
-                    border: '1px solid rgba(32, 196, 140, 0.15)',
-                    borderRadius: '8px',
-                    padding: '8px 12px',
-                  }}>
-                    <div className="d-flex align-items-center gap-2" style={{ fontSize: '11px', color: 'var(--tblr-body-color)' }}>
-                      <IconCircleCheck size={14} style={{ color: '#20c997', flexShrink: 0 }} />
-                      <span>All visitors include <strong>Name</strong>, <strong>Email</strong> &amp; <strong>Phone</strong> by default</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="card">
-              <div className="card-body">
-                <div className="d-flex justify-content-between">
-                  <Link href="/audiences" className="btn btn-outline-secondary">
-                    Cancel
-                  </Link>
-                  <button type="submit" className="btn btn-primary" disabled={loading}>
-                    {loading ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                        {isAdmin ? 'Creating...' : 'Submitting...'}
-                      </>
-                    ) : (
-                      <>
-                        <IconPlus className="icon" />
-                        {isAdmin ? 'Create Audience' : 'Submit Request'}
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </form>
-        </div>
-
-        <div className="col-lg-4">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Help</h3>
-            </div>
-            <div className="card-body">
-              <h4>Creating an Audience</h4>
-              <p className="text-muted">
-                Audiences allow you to target specific groups of people based on demographics, location, and business profile.
-              </p>
-
-              <h4>Filter Tips</h4>
-              <ul className="text-muted">
-                <li><strong>Age Range:</strong> Set minimum and maximum age to target specific demographics</li>
-                <li><strong>Location:</strong> Target by city or state for geographic targeting</li>
-                <li><strong>Industries:</strong> Focus on specific business sectors</li>
-                <li><strong>Seniority:</strong> Target decision-makers or specific job levels</li>
-              </ul>
-
-              <div className="alert alert-info mt-3">
-                <h4 className="alert-title">Note</h4>
-                <p className="mb-0">All filters are optional. Leave blank to not filter by that criteria.</p>
               </div>
             </div>
           </div>
         </div>
-      </div>
+
+        {/* ── Business Profile Filters (chip-based) ── */}
+        <div className="card">
+          <div className="card-header">
+            <div className="d-flex align-items-center gap-2">
+              <IconBuilding size={18} />
+              <h3 className="card-title mb-0">Business Profile Filters</h3>
+            </div>
+          </div>
+          <div className="card-body">
+            <ChipPicker
+              label="Industries"
+              items={industries}
+              selected={selectedIndustries}
+              onSelectedChange={setSelectedIndustries}
+              searchable
+            />
+            <ChipPicker
+              label="Departments"
+              items={departments}
+              selected={selectedDepartments}
+              onSelectedChange={setSelectedDepartments}
+            />
+            <div className="mb-0">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <label className="form-label mb-0">Seniority Level</label>
+                {selectedSeniority.length > 0 && (
+                  <span
+                    className="text-primary"
+                    style={{ fontSize: '11px', cursor: 'pointer', fontWeight: 500 }}
+                    onClick={() => setSelectedSeniority([])}
+                  >
+                    Clear ({selectedSeniority.length})
+                  </span>
+                )}
+              </div>
+              <div className="d-flex flex-wrap gap-1">
+                {seniority.map((level) => {
+                  const isSelected = selectedSeniority.includes(level);
+                  return (
+                    <span
+                      key={level}
+                      onClick={() =>
+                        setSelectedSeniority(
+                          isSelected
+                            ? selectedSeniority.filter((s) => s !== level)
+                            : [...selectedSeniority, level],
+                        )
+                      }
+                      className="badge d-inline-flex align-items-center gap-1"
+                      style={{
+                        fontSize: '12px',
+                        fontWeight: isSelected ? 600 : 400,
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        border: isSelected
+                          ? '1.5px solid rgba(32, 107, 196, 0.5)'
+                          : '1.5px solid var(--tblr-border-color)',
+                        backgroundColor: isSelected
+                          ? 'rgba(32, 107, 196, 0.1)'
+                          : 'transparent',
+                        color: isSelected ? '#4299e1' : 'var(--tblr-body-color)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {level}
+                      {isSelected && <IconX size={12} />}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Data Points (non-admin only) ── */}
+        {!isAdmin && (
+          <div className="card">
+            <div className="card-header">
+              <div className="d-flex align-items-center justify-content-between w-100">
+                <h3 className="card-title mb-0">Data Points <span className="text-muted fw-normal" style={{ fontSize: '12px' }}>(optional)</span></h3>
+                <span
+                  className="text-primary"
+                  style={{ fontSize: '12px', cursor: 'pointer', fontWeight: 500 }}
+                  onClick={() => {
+                    const allSelected = dataPoints.length === allDataPoints.length;
+                    setDataPoints(allSelected ? [] : [...allDataPoints]);
+                  }}
+                >
+                  {dataPoints.length === allDataPoints.length ? 'Deselect all' : 'Select all'}
+                </span>
+              </div>
+            </div>
+            <div className="card-body">
+              <div className="row g-2 mb-3">
+                {[
+                  { key: 'business', label: 'Business', icon: IconBriefcase, desc: 'Company & job info' },
+                  { key: 'financial', label: 'Financial', icon: IconCoin, desc: 'Income & net worth' },
+                  { key: 'personal', label: 'Personal', icon: IconUserCircle, desc: 'Age, gender & email' },
+                  { key: 'family', label: 'Family', icon: IconUsers, desc: 'Marital & children' },
+                  { key: 'housing', label: 'Housing', icon: IconHome, desc: 'Homeowner status' },
+                  { key: 'location', label: 'Location', icon: IconMapPin, desc: 'City, state & zip' },
+                ].map((point) => {
+                  const isSelected = dataPoints.includes(point.key);
+                  const PointIcon = point.icon;
+                  return (
+                    <div key={point.key} className="col-6 col-md-4">
+                      <div
+                        onClick={() => {
+                          if (loading) return;
+                          setDataPoints(isSelected
+                            ? dataPoints.filter((d) => d !== point.key)
+                            : [...dataPoints, point.key]
+                          );
+                        }}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: isSelected ? '1.5px solid rgba(32, 107, 196, 0.6)' : '1.5px solid var(--tblr-border-color)',
+                          backgroundColor: isSelected ? 'rgba(32, 107, 196, 0.08)' : 'transparent',
+                          cursor: loading ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.15s ease',
+                          opacity: loading ? 0.6 : 1,
+                        }}
+                      >
+                        <div className="d-flex align-items-center gap-2">
+                          <div style={{
+                            width: '32px', height: '32px', borderRadius: '6px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            backgroundColor: isSelected ? 'rgba(32, 107, 196, 0.15)' : 'var(--tblr-bg-surface-secondary)',
+                            color: isSelected ? '#4299e1' : 'var(--tblr-secondary)',
+                            flexShrink: 0, transition: 'all 0.15s ease',
+                          }}>
+                            <PointIcon size={16} />
+                          </div>
+                          <div className="flex-fill" style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '13px', fontWeight: isSelected ? 600 : 500, color: isSelected ? '#4299e1' : 'var(--tblr-body-color)' }}>{point.label}</div>
+                            <div className="text-muted" style={{ fontSize: '11px', lineHeight: 1.2 }}>{point.desc}</div>
+                          </div>
+                          {isSelected && <IconCheck size={14} style={{ color: '#4299e1', flexShrink: 0 }} />}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(32, 107, 196, 0.06), rgba(32, 196, 140, 0.06))',
+                border: '1px solid rgba(32, 196, 140, 0.15)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+              }}>
+                <div className="d-flex align-items-center gap-2" style={{ fontSize: '11px', color: 'var(--tblr-body-color)' }}>
+                  <IconCircleCheck size={14} style={{ color: '#20c997', flexShrink: 0 }} />
+                  <span>All visitors include <strong>Name</strong>, <strong>Email</strong> &amp; <strong>Phone</strong> by default</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Submit ── */}
+        <div className="card">
+          <div className="card-body">
+            <div className="d-flex justify-content-between">
+              <Link href="/audiences" className="btn btn-outline-secondary">
+                Cancel
+              </Link>
+              <button type="submit" className="btn btn-primary" disabled={loading}>
+                {loading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                    {isAdmin ? 'Creating...' : 'Submitting...'}
+                  </>
+                ) : (
+                  <>
+                    <IconPlus className="icon" />
+                    {isAdmin ? 'Create Audience' : 'Submit Request'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
 
       {/* Toast Notification */}
       {toast && (

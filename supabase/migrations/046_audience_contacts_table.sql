@@ -23,3 +23,4 @@ CREATE TABLE audience_contacts (
 CREATE INDEX idx_audience_contacts_audience_id ON audience_contacts(audience_id);
 CREATE INDEX idx_audience_contacts_email ON audience_contacts(email) WHERE email IS NOT NULL;
 CREATE INDEX idx_audience_contacts_full_name ON audience_contacts(full_name) WHERE full_name IS NOT NULL;
+
