@@ -144,8 +144,10 @@ export default function Audiences() {
   const [assignableUsers, setAssignableUsers] = useState<{ id: string; email: string; role: string }[]>([]);
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [reassignRequestId, setReassignRequestId] = useState('');
-  const [reassignUserId, setReassignUserId] = useState('');
+  const [reassignAudienceId, setReassignAudienceId] = useState('');
+  const [reassignUserIds, setReassignUserIds] = useState<string[]>([]);
   const [reassigning, setReassigning] = useState(false);
+  const [audienceAssignments, setAudienceAssignments] = useState<Record<string, { user_id: string; email: string }[]>>({});
 
   // Manual audience creation state
   const [showManualModal, setShowManualModal] = useState(false);
@@ -576,7 +578,15 @@ export default function Audiences() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load attributes and assignable users for admin modal when admin status is confirmed
+  const loadAudienceAssignments = useCallback(async () => {
+    try {
+      const r = await fetch('/api/admin/audience-assignments');
+      const data = await r.json();
+      if (data.assignments) setAudienceAssignments(data.assignments);
+    } catch {}
+  }, []);
+
+  // Load attributes, assignable users, and audience assignments for admin
   useEffect(() => {
     if (isAdmin) {
       loadAttributes();
@@ -586,6 +596,7 @@ export default function Audiences() {
           if (data.users) setAssignableUsers(data.users.map((u: { id: string; email: string; role: string }) => ({ id: u.id, email: u.email, role: u.role })));
         })
         .catch(() => {});
+      loadAudienceAssignments();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
@@ -638,19 +649,19 @@ export default function Audiences() {
   };
 
   const handleReassignUser = async () => {
-    if (!reassignRequestId || !reassignUserId) return;
+    if (!reassignRequestId || !reassignAudienceId || reassignUserIds.length === 0) return;
     setReassigning(true);
     try {
       const response = await fetch(`/api/admin/audience-requests/${reassignRequestId}/reassign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_user_id: reassignUserId }),
+        body: JSON.stringify({ audience_id: reassignAudienceId, user_ids: reassignUserIds }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to reassign audience');
+      if (!response.ok) throw new Error(data.error || 'Failed to assign users');
       setShowReassignModal(false);
-      await loadAudiences(currentPage);
-      showToast('Audience reassigned successfully.', 'success');
+      await loadAudienceAssignments();
+      showToast('Audience assigned successfully.', 'success');
     } catch (error) {
       showToast((error as Error).message, 'error');
     } finally {
@@ -1159,7 +1170,14 @@ export default function Audiences() {
                                 </td>
                                 {isAdmin && (
                                   <td className="text-muted">
-                                    {(audience as unknown as { user_email?: string }).user_email || '-'}
+                                    {(() => {
+                                      const aid = audience.audienceId || audience.id || '';
+                                      const assigned = audienceAssignments[aid];
+                                      if (assigned && assigned.length > 0) {
+                                        return assigned.map(a => a.email).join(', ');
+                                      }
+                                      return (audience as unknown as { user_email?: string }).user_email || '-';
+                                    })()}
                                   </td>
                                 )}
                                 <td>{audience.total_records?.toLocaleString() || '-'}</td>
@@ -1198,8 +1216,11 @@ export default function Audiences() {
                                         title="Assign to User"
                                         onClick={() => {
                                           const a = audience as unknown as { request_id?: string; user_id?: string };
+                                          const audienceId = audience.audienceId || audience.id || '';
                                           setReassignRequestId(a.request_id || '');
-                                          setReassignUserId(a.user_id || '');
+                                          setReassignAudienceId(audienceId);
+                                          const existing = audienceAssignments[audienceId];
+                                          setReassignUserIds(existing ? existing.map(e => e.user_id) : (a.user_id ? [a.user_id] : []));
                                           setShowReassignModal(true);
                                         }}
                                       >
@@ -1445,7 +1466,7 @@ export default function Audiences() {
         </>
       )}
 
-      {/* Reassign User Modal */}
+      {/* Assign Users Modal */}
       {showReassignModal && (
         <>
           <div
@@ -1461,35 +1482,46 @@ export default function Audiences() {
             <div className="modal-dialog modal-sm modal-dialog-centered">
               <div className="modal-content">
                 <div className="modal-header">
-                  <h5 className="modal-title">Assign to User</h5>
+                  <h5 className="modal-title">Assign to Users</h5>
                   <button type="button" className="btn-close" onClick={() => setShowReassignModal(false)} disabled={reassigning} />
                 </div>
-                <div className="modal-body">
-                  <label className="form-label">Select User</label>
-                  <select
-                    className="form-select"
-                    value={reassignUserId}
-                    onChange={(e) => setReassignUserId(e.target.value)}
-                  >
-                    {assignableUsers.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.email} ({u.role})
-                      </option>
-                    ))}
-                  </select>
+                <div className="modal-body" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {assignableUsers.map((u) => (
+                    <label key={u.id} className="form-check mb-2" style={{ cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={reassignUserIds.includes(u.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setReassignUserIds([...reassignUserIds, u.id]);
+                          } else {
+                            setReassignUserIds(reassignUserIds.filter(id => id !== u.id));
+                          }
+                        }}
+                      />
+                      <span className="form-check-label">
+                        {u.email} <span className="badge bg-muted-lt ms-1">{u.role}</span>
+                      </span>
+                    </label>
+                  ))}
                 </div>
                 <div className="modal-footer">
                   <button className="btn" onClick={() => setShowReassignModal(false)} disabled={reassigning}>
                     Cancel
                   </button>
-                  <button className="btn btn-primary" onClick={handleReassignUser} disabled={reassigning}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleReassignUser}
+                    disabled={reassigning || reassignUserIds.length === 0}
+                  >
                     {reassigning ? (
                       <>
                         <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                        Reassigning...
+                        Assigning...
                       </>
                     ) : (
-                      'Assign'
+                      `Assign (${reassignUserIds.length})`
                     )}
                   </button>
                 </div>

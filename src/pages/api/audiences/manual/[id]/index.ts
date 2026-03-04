@@ -30,20 +30,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const isAdmin = profile.role === 'admin';
 
     // Find the audience request with this audience_id
-    let query = supabase
+    const { data: request, error } = await supabaseAdmin
       .from('audience_requests')
       .select('*')
-      .eq('audience_id', id);
-
-    // Non-admins can only see their own audiences
-    if (!isAdmin) {
-      query = query.eq('user_id', user.id);
-    }
-
-    const { data: request, error } = await query.single();
+      .eq('audience_id', id)
+      .single();
 
     if (error || !request) {
       return res.status(404).json({ error: 'Audience not found' });
+    }
+
+    // Non-admins: verify ownership or assignment
+    if (!isAdmin && request.user_id !== user.id) {
+      const { data: assignment } = await supabaseAdmin
+        .from('audience_assignments')
+        .select('id')
+        .eq('audience_id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!assignment) {
+        return res.status(404).json({ error: 'Audience not found' });
+      }
     }
 
     // Handle DELETE request

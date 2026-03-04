@@ -1,5 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createClient } from '@/lib/supabase/api';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser, getUserProfile } from '@/lib/api-helpers';
 
@@ -56,24 +55,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Audience ID is required' });
   }
 
-  const supabase = createClient(req, res);
-
   try {
     const profile = await getUserProfile(user.id, req, res);
     const isAdmin = profile.role === 'admin';
 
-    let query = supabase
+    const { data: request, error } = await supabaseAdmin
       .from('audience_requests')
-      .select('audience_id, name, form_data')
-      .eq('audience_id', id);
+      .select('audience_id, name, form_data, user_id')
+      .eq('audience_id', id)
+      .single();
 
-    if (!isAdmin) {
-      query = query.eq('user_id', user.id);
-    }
-
-    const { data: request, error } = await query.single();
     if (error || !request) {
       return res.status(404).json({ error: 'Audience not found' });
+    }
+
+    // Non-admins: verify ownership or assignment
+    if (!isAdmin && request.user_id !== user.id) {
+      const { data: assignment } = await supabaseAdmin
+        .from('audience_assignments')
+        .select('id')
+        .eq('audience_id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!assignment) {
+        return res.status(404).json({ error: 'Audience not found' });
+      }
     }
 
     const audienceName = request.name || 'Audience';

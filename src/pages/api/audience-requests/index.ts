@@ -1,6 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser, getUserProfile, createAdminNotification, logAuditAction } from '@/lib/api-helpers';
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
@@ -42,7 +48,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: 'Failed to fetch audience requests' });
       }
 
-      return res.status(200).json({ requests: data || [] });
+      let results = data || [];
+
+      // For non-admin users, also include audiences assigned via audience_assignments
+      if (!isAdmin) {
+        const { data: assignments } = await supabaseAdmin
+          .from('audience_assignments')
+          .select('audience_id')
+          .eq('user_id', user.id);
+
+        if (assignments && assignments.length > 0) {
+          const assignedIds = assignments.map(a => a.audience_id);
+          const ownAudienceIds = new Set(results.map(r => r.audience_id).filter(Boolean));
+          const extraIds = assignedIds.filter(id => !ownAudienceIds.has(id));
+
+          if (extraIds.length > 0) {
+            let assignedQuery = supabaseAdmin
+              .from('audience_requests')
+              .select('*, user:users!audience_requests_user_id_fkey(email)')
+              .in('audience_id', extraIds)
+              .order('created_at', { ascending: false });
+
+            if (status && typeof status === 'string' && ['pending', 'approved', 'rejected'].includes(status)) {
+              assignedQuery = assignedQuery.eq('status', status);
+            }
+            if (has_manual === 'true') {
+              assignedQuery = assignedQuery.not('form_data->manual_audience', 'is', null);
+            }
+
+            const { data: assignedData } = await assignedQuery;
+            if (assignedData) {
+              results = [...results, ...assignedData];
+            }
+          }
+        }
+      }
+
+      return res.status(200).json({ requests: results });
     }
 
     if (req.method === 'POST') {
