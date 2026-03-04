@@ -18,6 +18,7 @@ interface TaxonomyDetail {
 interface IntentFiltersCardProps {
   selectedPremades: string[];
   onSelectedChange: (premades: string[]) => void;
+  compact?: boolean;
 }
 
 const INITIAL_SHOW = 50;
@@ -25,6 +26,7 @@ const INITIAL_SHOW = 50;
 export default function IntentFiltersCard({
   selectedPremades,
   onSelectedChange,
+  compact = false,
 }: IntentFiltersCardProps) {
   const [search, setSearch] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -122,10 +124,6 @@ export default function IntentFiltersCard({
     setHoveredPremade(key);
   };
 
-  // Get detail for the hovered or last selected premade
-  const activeKey = hoveredPremade || (selectedPremades.length > 0 ? selectedPremades[selectedPremades.length - 1] : null);
-  const activeDetail = activeKey && details ? details[activeKey] : null;
-
   const displayTree = filteredTree ?? taxonomyIndex;
   const displayCategories = Object.keys(displayTree).sort();
 
@@ -137,14 +135,133 @@ export default function IntentFiltersCard({
       )
     : null;
 
+  // Helper to render a single premade detail block
+  const renderDetail = (key: string, detail: TaxonomyDetail | undefined, showRemove: boolean) => {
+    const parts = key.split('|');
+    const premadeName = parts[2];
+    const breadcrumb = `${parts[0]} > ${parts[1]}`;
+
+    return (
+      <div
+        key={key}
+        style={{
+          padding: '10px 12px',
+          borderRadius: '8px',
+          border: '1px solid var(--tblr-border-color)',
+          backgroundColor: 'rgba(32, 107, 196, 0.04)',
+          marginBottom: '8px',
+        }}
+      >
+        <div className="d-flex align-items-start justify-content-between gap-2">
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="d-flex align-items-center gap-2 mb-1">
+              <span style={{ fontSize: '13px', fontWeight: 600 }}>{premadeName}</span>
+              {detail?.type && (
+                <span
+                  className="badge"
+                  style={{
+                    fontSize: '9px',
+                    backgroundColor:
+                      detail.type === 'B2B'
+                        ? 'rgba(32, 107, 196, 0.15)'
+                        : 'rgba(32, 196, 140, 0.15)',
+                    color: detail.type === 'B2B' ? '#4299e1' : '#20c997',
+                  }}
+                >
+                  {detail.type}
+                </span>
+              )}
+            </div>
+            <div className="text-muted" style={{ fontSize: '10px', marginBottom: '4px' }}>
+              {breadcrumb}
+            </div>
+            {detail?.description && (
+              <p className="text-muted mb-1" style={{ fontSize: '11px', lineHeight: 1.4 }}>
+                {detail.description.length > 120 ? detail.description.slice(0, 120) + '...' : detail.description}
+              </p>
+            )}
+            {detail?.keywords && (
+              <div className="d-flex flex-wrap gap-1">
+                {detail.keywords
+                  .split(',')
+                  .slice(0, 6)
+                  .map((kw, i) => (
+                    <span
+                      key={i}
+                      className="badge"
+                      style={{
+                        fontSize: '9px',
+                        fontWeight: 400,
+                        backgroundColor: 'var(--tblr-bg-surface-secondary)',
+                        color: 'var(--tblr-body-color)',
+                      }}
+                    >
+                      {kw.trim()}
+                    </span>
+                  ))}
+              </div>
+            )}
+          </div>
+          {showRemove && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                removePremade(key);
+              }}
+              className="btn-close"
+              style={{ fontSize: '8px', flexShrink: 0, marginTop: '2px' }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="card">
       <div className="card-header">
-        <div className="d-flex align-items-center gap-2">
+        <div className="d-flex align-items-center gap-2 w-100">
           <IconFilter size={18} />
           <h3 className="card-title mb-0">Intent Filters</h3>
           {selectedPremades.length > 0 && (
-            <span className="badge bg-primary ms-auto">{selectedPremades.length} selected</span>
+            <div className="d-flex align-items-center gap-2 ms-auto">
+              <div className="d-flex flex-wrap gap-1" style={{ maxWidth: '400px' }}>
+                {selectedPremades.slice(0, 3).map((key) => (
+                  <span
+                    key={key}
+                    className="badge d-inline-flex align-items-center gap-1"
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      backgroundColor: 'rgba(32, 107, 196, 0.1)',
+                      color: 'var(--tblr-primary)',
+                      padding: '3px 7px',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => removePremade(key)}
+                  >
+                    {key.split('|')[2]}
+                    <IconX size={10} />
+                  </span>
+                ))}
+                {selectedPremades.length > 3 && (
+                  <span
+                    className="badge"
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      backgroundColor: 'rgba(32, 107, 196, 0.1)',
+                      color: 'var(--tblr-primary)',
+                      padding: '3px 7px',
+                    }}
+                  >
+                    +{selectedPremades.length - 3} more
+                  </span>
+                )}
+              </div>
+              <span className="badge bg-primary">{selectedPremades.length}</span>
+            </div>
           )}
         </div>
       </div>
@@ -183,7 +300,7 @@ export default function IntentFiltersCard({
             </div>
 
             {/* Tree */}
-            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            <div style={{ maxHeight: compact ? '280px' : '500px', overflowY: 'auto' }}>
               {displayCategories.length === 0 ? (
                 <div className="p-3 text-muted text-center">No results found</div>
               ) : (
@@ -346,80 +463,53 @@ export default function IntentFiltersCard({
             </div>
           </div>
 
-          {/* Right Panel: Detail View */}
+          {/* Right Panel: Hover detail or Selected premades list */}
           <div className="col-md-5">
             <div
               style={{
-                position: 'sticky',
-                top: 0,
-                padding: '16px',
-                minHeight: '200px',
+                padding: '12px',
+                maxHeight: compact ? '340px' : '560px',
+                overflowY: 'auto',
               }}
             >
-              {activeDetail ? (
+              {/* Hover detail — shown temporarily when hovering a premade */}
+              {hoveredPremade && details?.[hoveredPremade] ? (
                 <>
-                  <div className="d-flex align-items-center gap-2 mb-2">
-                    <h4
-                      className="mb-0"
-                      style={{ fontSize: '14px', fontWeight: 600 }}
-                    >
-                      {activeKey!.split('|')[2]}
-                    </h4>
-                    {activeDetail.type && (
-                      <span
-                        className="badge"
-                        style={{
-                          fontSize: '10px',
-                          backgroundColor:
-                            activeDetail.type === 'B2B'
-                              ? 'rgba(32, 107, 196, 0.15)'
-                              : 'rgba(32, 196, 140, 0.15)',
-                          color:
-                            activeDetail.type === 'B2B' ? '#4299e1' : '#20c997',
-                        }}
-                      >
-                        {activeDetail.type}
-                      </span>
-                    )}
-                  </div>
-                  <p
-                    className="text-muted mb-3"
-                    style={{ fontSize: '12px', lineHeight: 1.5 }}
+                  <div
+                    className="text-muted mb-2"
+                    style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}
                   >
-                    {activeDetail.description}
-                  </p>
-                  {activeDetail.keywords && (
-                    <>
-                      <div
-                        className="text-muted mb-2"
-                        style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}
-                      >
-                        Keywords
-                      </div>
-                      <div className="d-flex flex-wrap gap-1">
-                        {activeDetail.keywords
-                          .split(',')
-                          .slice(0, 15)
-                          .map((kw, i) => (
-                            <span
-                              key={i}
-                              className="badge"
-                              style={{
-                                fontSize: '10px',
-                                fontWeight: 400,
-                                backgroundColor: 'var(--tblr-bg-surface-secondary)',
-                                color: 'var(--tblr-body-color)',
-                              }}
-                            >
-                              {kw.trim()}
-                            </span>
-                          ))}
-                      </div>
-                    </>
+                    Preview
+                  </div>
+                  {renderDetail(hoveredPremade, details[hoveredPremade], false)}
+                </>
+              ) : selectedPremades.length > 0 ? (
+                /* Selected premades with details */
+                <>
+                  <div className="d-flex align-items-center justify-content-between mb-2">
+                    <span
+                      className="text-muted"
+                      style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                    >
+                      Selected ({selectedPremades.length})
+                    </span>
+                    <span
+                      className="text-primary"
+                      style={{ fontSize: '11px', cursor: 'pointer', fontWeight: 500 }}
+                      onClick={() => onSelectedChange([])}
+                    >
+                      Clear all
+                    </span>
+                  </div>
+                  {selectedPremades.map((key) =>
+                    renderDetail(key, details?.[key], true),
                   )}
                 </>
               ) : detailsLoading ? (
-                <div className="d-flex align-items-center justify-content-center h-100 text-muted">
+                <div
+                  className="d-flex align-items-center justify-content-center text-muted"
+                  style={{ height: '200px' }}
+                >
                   <span className="spinner-border spinner-border-sm me-2" />
                   Loading details...
                 </div>
@@ -437,44 +527,6 @@ export default function IntentFiltersCard({
             </div>
           </div>
         </div>
-
-        {/* Selected chips */}
-        {selectedPremades.length > 0 && (
-          <div
-            style={{
-              padding: '12px 16px',
-              borderTop: '1px solid var(--tblr-border-color)',
-            }}
-          >
-            <div
-              className="text-muted mb-2"
-              style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}
-            >
-              Selected ({selectedPremades.length})
-            </div>
-            <div className="d-flex flex-wrap gap-1">
-              {selectedPremades.map((key) => (
-                <span
-                  key={key}
-                  className="badge d-inline-flex align-items-center gap-1"
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    backgroundColor: 'rgba(32, 107, 196, 0.1)',
-                    color: 'var(--tblr-primary)',
-                    padding: '4px 8px',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => removePremade(key)}
-                  title={key.split('|').slice(0, 2).join(' > ')}
-                >
-                  {key.split('|')[2]}
-                  <IconX size={12} />
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

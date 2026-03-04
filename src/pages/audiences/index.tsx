@@ -20,6 +20,20 @@ import {
   IconLock,
 } from '@tabler/icons-react';
 import type { AudienceRequest, RequestStatus } from '@/lib/supabase/types';
+import IntentFiltersCard from '@/components/intent-filters/IntentFiltersCard';
+import { taxonomyIndex } from '@/data/taxonomy-index';
+
+// Helper: find full "Category|SubCategory|Premade" key from just a premade name
+function findPremadeKey(premadeName: string): string | null {
+  for (const cat of Object.keys(taxonomyIndex)) {
+    for (const sub of Object.keys(taxonomyIndex[cat])) {
+      if (taxonomyIndex[cat][sub].includes(premadeName)) {
+        return `${cat}|${sub}|${premadeName}`;
+      }
+    }
+  }
+  return null;
+}
 
 interface EditFormData {
   name: string;
@@ -34,7 +48,7 @@ interface EditFormData {
   industries: string[];
   departments: string[];
   seniority: string[];
-  segments: string;
+  selectedPremades: string[];
   // Custom fields
   topic: string;
   description: string;
@@ -120,7 +134,7 @@ export default function Audiences() {
     industries: [],
     departments: [],
     seniority: [],
-    segments: '',
+    selectedPremades: [],
     topic: '',
     description: '',
   });
@@ -711,6 +725,12 @@ export default function Audiences() {
     const businessProfile = (filters.businessProfile || {}) as Record<string, string[]>;
     const age = (filters.age || {}) as Record<string, number>;
 
+    // Convert saved segment names back to full premade keys
+    const savedSegments = Array.isArray(formData.segment) ? (formData.segment as string[]) : [];
+    const premadeKeys = savedSegments
+      .map((name) => findPremadeKey(name))
+      .filter((key): key is string => key !== null);
+
     if (request.request_type === 'custom') {
       setEditFormData({
         name: request.name,
@@ -724,7 +744,7 @@ export default function Audiences() {
         industries: [],
         departments: [],
         seniority: [],
-        segments: '',
+        selectedPremades: premadeKeys,
         topic: (formData.topic as string) || request.name,
         description: (formData.description as string) || '',
       });
@@ -741,7 +761,7 @@ export default function Audiences() {
         industries: businessProfile.industry || [],
         departments: businessProfile.department || [],
         seniority: businessProfile.seniority || [],
-        segments: Array.isArray(formData.segment) ? (formData.segment as string[]).join(', ') : '',
+        selectedPremades: premadeKeys,
         topic: '',
         description: '',
       });
@@ -787,8 +807,8 @@ export default function Audiences() {
     if (editFormData.seniority.length > 0) businessProfile.seniority = editFormData.seniority;
     if (Object.keys(businessProfile).length > 0) filters.businessProfile = businessProfile;
 
-    // Segments
-    const segmentList = editFormData.segments ? editFormData.segments.split(',').map((s) => s.trim()).filter((s) => s) : [];
+    // Segments from selected premades
+    const segmentList = editFormData.selectedPremades.map((key) => key.split('|')[2]);
 
     return {
       filters,
@@ -1386,11 +1406,11 @@ export default function Audiences() {
             style={{
               position: 'fixed',
               top: '50%',
-              left: '50%',
+              left: 'calc(50% + 120px)',
               transform: 'translate(-50%, -50%)',
-              width: '90%',
-              maxWidth: '800px',
-              maxHeight: '85vh',
+              width: '80%',
+              maxWidth: '1100px',
+              maxHeight: '90vh',
               zIndex: 1050,
               display: 'flex',
               flexDirection: 'column',
@@ -1483,152 +1503,210 @@ export default function Audiences() {
                       </div>
                     </div>
 
-                    <h4 className="mb-3">Demographics</h4>
-                    <div className="row">
-                      <div className="col-md-4">
-                        <div className="mb-3">
-                          <label className="form-label">Min Age</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            value={editFormData.minAge}
-                            onChange={(e) => setEditFormData({ ...editFormData, minAge: e.target.value })}
-                            placeholder="e.g., 25"
-                          />
+                    <h4 className="mb-3" style={{ fontSize: '14px', fontWeight: 600 }}>Demographics &amp; Location</h4>
+                    <div className="row mb-3" style={{ border: '1px solid var(--tblr-border-color)', borderRadius: '8px', padding: '12px', margin: 0 }}>
+                      <div className="col-md-6" style={{ borderRight: '1px solid var(--tblr-border-color)' }}>
+                        <div className="row">
+                          <div className="col-6">
+                            <div className="mb-2">
+                              <label className="form-label" style={{ fontSize: '12px' }}>Min Age</label>
+                              <input
+                                type="number"
+                                className="form-control form-control-sm"
+                                value={editFormData.minAge}
+                                onChange={(e) => setEditFormData({ ...editFormData, minAge: e.target.value })}
+                                placeholder="18"
+                              />
+                            </div>
+                          </div>
+                          <div className="col-6">
+                            <div className="mb-2">
+                              <label className="form-label" style={{ fontSize: '12px' }}>Max Age</label>
+                              <input
+                                type="number"
+                                className="form-control form-control-sm"
+                                value={editFormData.maxAge}
+                                onChange={(e) => setEditFormData({ ...editFormData, maxAge: e.target.value })}
+                                placeholder="100"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mb-0">
+                          <label className="form-label" style={{ fontSize: '12px' }}>Gender</label>
+                          <div className="d-flex gap-2">
+                            {[
+                              { value: '', label: 'Any' },
+                              { value: 'male', label: 'Male' },
+                              { value: 'female', label: 'Female' },
+                            ].map((opt) => (
+                              <span
+                                key={opt.value}
+                                onClick={() => setEditFormData({ ...editFormData, gender: opt.value })}
+                                className="badge"
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: editFormData.gender === opt.value ? 600 : 400,
+                                  padding: '5px 12px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  border: editFormData.gender === opt.value
+                                    ? '1.5px solid rgba(32, 107, 196, 0.5)'
+                                    : '1.5px solid var(--tblr-border-color)',
+                                  backgroundColor: editFormData.gender === opt.value
+                                    ? 'rgba(32, 107, 196, 0.1)'
+                                    : 'transparent',
+                                  color: editFormData.gender === opt.value ? '#4299e1' : 'var(--tblr-body-color)',
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                {opt.label}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                      <div className="col-md-4">
-                        <div className="mb-3">
-                          <label className="form-label">Max Age</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            value={editFormData.maxAge}
-                            onChange={(e) => setEditFormData({ ...editFormData, maxAge: e.target.value })}
-                            placeholder="e.g., 65"
-                          />
-                        </div>
-                      </div>
-                      <div className="col-md-4">
-                        <div className="mb-3">
-                          <label className="form-label">Gender</label>
-                          <select
-                            className="form-select"
-                            value={editFormData.gender}
-                            onChange={(e) => setEditFormData({ ...editFormData, gender: e.target.value })}
-                          >
-                            <option value="">Any</option>
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    <h4 className="mb-3">Location</h4>
-                    <div className="row">
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Cities</label>
+                      <div className="col-md-6 ps-md-3">
+                        <div className="mb-2">
+                          <label className="form-label" style={{ fontSize: '12px' }}>Cities</label>
                           <input
                             type="text"
-                            className="form-control"
+                            className="form-control form-control-sm"
                             value={editFormData.cities}
                             onChange={(e) => setEditFormData({ ...editFormData, cities: e.target.value })}
                             placeholder="e.g., New York, Los Angeles"
                           />
-                          <small className="form-hint">Comma-separated</small>
                         </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">States</label>
+                        <div className="mb-0">
+                          <label className="form-label" style={{ fontSize: '12px' }}>States</label>
                           <input
                             type="text"
-                            className="form-control"
+                            className="form-control form-control-sm"
                             value={editFormData.states}
                             onChange={(e) => setEditFormData({ ...editFormData, states: e.target.value })}
                             placeholder="e.g., CA, NY, TX"
                           />
-                          <small className="form-hint">Comma-separated</small>
                         </div>
                       </div>
                     </div>
 
-                    <h4 className="mb-3">Business Profile</h4>
-                    <div className="mb-3">
-                      <label className="form-label">Industries</label>
-                      <select
-                        className="form-select"
-                        multiple
-                        size={6}
-                        value={editFormData.industries}
-                        onChange={(e) => setEditFormData({
-                          ...editFormData,
-                          industries: Array.from(e.target.selectedOptions, (o) => o.value)
-                        })}
-                      >
-                        {industryOptions.map((industry) => (
-                          <option key={industry} value={industry}>
-                            {industry}
-                          </option>
-                        ))}
-                      </select>
-                      <small className="form-hint">Hold Ctrl/Cmd to select multiple industries</small>
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label">Departments</label>
-                      <select
-                        className="form-select"
-                        multiple
-                        size={6}
-                        value={editFormData.departments}
-                        onChange={(e) => setEditFormData({
-                          ...editFormData,
-                          departments: Array.from(e.target.selectedOptions, (o) => o.value)
-                        })}
-                      >
-                        {departmentOptions.map((dept) => (
-                          <option key={dept} value={dept}>
-                            {dept}
-                          </option>
-                        ))}
-                      </select>
-                      <small className="form-hint">Hold Ctrl/Cmd to select multiple departments</small>
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label">Seniority Level</label>
-                      <select
-                        className="form-select"
-                        multiple
-                        size={5}
-                        value={editFormData.seniority}
-                        onChange={(e) => setEditFormData({
-                          ...editFormData,
-                          seniority: Array.from(e.target.selectedOptions, (o) => o.value)
-                        })}
-                      >
-                        {seniorityOptions.map((level) => (
-                          <option key={level} value={level}>
-                            {level}
-                          </option>
-                        ))}
-                      </select>
-                      <small className="form-hint">Hold Ctrl/Cmd to select multiple levels</small>
+                    <h4 className="mb-3" style={{ fontSize: '14px', fontWeight: 600 }}>Business Profile</h4>
+                    <div className="mb-3" style={{ border: '1px solid var(--tblr-border-color)', borderRadius: '8px', padding: '12px' }}>
+                      {/* Industries chips */}
+                      <div className="mb-3">
+                        <div className="d-flex align-items-center justify-content-between mb-2">
+                          <label className="form-label mb-0" style={{ fontSize: '12px' }}>Industries</label>
+                          {editFormData.industries.length > 0 && (
+                            <span className="text-primary" style={{ fontSize: '11px', cursor: 'pointer', fontWeight: 500 }}
+                              onClick={() => setEditFormData({ ...editFormData, industries: [] })}>
+                              Clear ({editFormData.industries.length})
+                            </span>
+                          )}
+                        </div>
+                        <div className="d-flex flex-wrap gap-1">
+                          {industryOptions.map((item) => {
+                            const sel = editFormData.industries.includes(item);
+                            return (
+                              <span key={item}
+                                onClick={() => setEditFormData({
+                                  ...editFormData,
+                                  industries: sel
+                                    ? editFormData.industries.filter((s) => s !== item)
+                                    : [...editFormData.industries, item]
+                                })}
+                                className="badge d-inline-flex align-items-center gap-1"
+                                style={{
+                                  fontSize: '11px', fontWeight: sel ? 600 : 400, padding: '4px 8px',
+                                  borderRadius: '6px', cursor: 'pointer',
+                                  border: sel ? '1.5px solid rgba(32, 107, 196, 0.5)' : '1.5px solid var(--tblr-border-color)',
+                                  backgroundColor: sel ? 'rgba(32, 107, 196, 0.1)' : 'transparent',
+                                  color: sel ? '#4299e1' : 'var(--tblr-body-color)', transition: 'all 0.15s ease',
+                                }}>
+                                {item}{sel && <IconX size={10} />}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {/* Departments chips */}
+                      <div className="mb-3">
+                        <div className="d-flex align-items-center justify-content-between mb-2">
+                          <label className="form-label mb-0" style={{ fontSize: '12px' }}>Departments</label>
+                          {editFormData.departments.length > 0 && (
+                            <span className="text-primary" style={{ fontSize: '11px', cursor: 'pointer', fontWeight: 500 }}
+                              onClick={() => setEditFormData({ ...editFormData, departments: [] })}>
+                              Clear ({editFormData.departments.length})
+                            </span>
+                          )}
+                        </div>
+                        <div className="d-flex flex-wrap gap-1">
+                          {departmentOptions.map((item) => {
+                            const sel = editFormData.departments.includes(item);
+                            return (
+                              <span key={item}
+                                onClick={() => setEditFormData({
+                                  ...editFormData,
+                                  departments: sel
+                                    ? editFormData.departments.filter((s) => s !== item)
+                                    : [...editFormData.departments, item]
+                                })}
+                                className="badge d-inline-flex align-items-center gap-1"
+                                style={{
+                                  fontSize: '11px', fontWeight: sel ? 600 : 400, padding: '4px 8px',
+                                  borderRadius: '6px', cursor: 'pointer',
+                                  border: sel ? '1.5px solid rgba(32, 107, 196, 0.5)' : '1.5px solid var(--tblr-border-color)',
+                                  backgroundColor: sel ? 'rgba(32, 107, 196, 0.1)' : 'transparent',
+                                  color: sel ? '#4299e1' : 'var(--tblr-body-color)', transition: 'all 0.15s ease',
+                                }}>
+                                {item}{sel && <IconX size={10} />}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {/* Seniority chips */}
+                      <div className="mb-0">
+                        <div className="d-flex align-items-center justify-content-between mb-2">
+                          <label className="form-label mb-0" style={{ fontSize: '12px' }}>Seniority Level</label>
+                          {editFormData.seniority.length > 0 && (
+                            <span className="text-primary" style={{ fontSize: '11px', cursor: 'pointer', fontWeight: 500 }}
+                              onClick={() => setEditFormData({ ...editFormData, seniority: [] })}>
+                              Clear ({editFormData.seniority.length})
+                            </span>
+                          )}
+                        </div>
+                        <div className="d-flex flex-wrap gap-1">
+                          {seniorityOptions.map((item) => {
+                            const sel = editFormData.seniority.includes(item);
+                            return (
+                              <span key={item}
+                                onClick={() => setEditFormData({
+                                  ...editFormData,
+                                  seniority: sel
+                                    ? editFormData.seniority.filter((s) => s !== item)
+                                    : [...editFormData.seniority, item]
+                                })}
+                                className="badge d-inline-flex align-items-center gap-1"
+                                style={{
+                                  fontSize: '11px', fontWeight: sel ? 600 : 400, padding: '4px 8px',
+                                  borderRadius: '6px', cursor: 'pointer',
+                                  border: sel ? '1.5px solid rgba(32, 107, 196, 0.5)' : '1.5px solid var(--tblr-border-color)',
+                                  backgroundColor: sel ? 'rgba(32, 107, 196, 0.1)' : 'transparent',
+                                  color: sel ? '#4299e1' : 'var(--tblr-body-color)', transition: 'all 0.15s ease',
+                                }}>
+                                {item}{sel && <IconX size={10} />}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
 
-                    <h4 className="mb-3">Segments</h4>
-                    <div className="mb-3">
-                      <label className="form-label">Segment IDs</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={editFormData.segments}
-                        onChange={(e) => setEditFormData({ ...editFormData, segments: e.target.value })}
-                        placeholder="e.g., 100073, 100074"
-                      />
-                      <small className="form-hint">Comma-separated</small>
-                    </div>
+                    <IntentFiltersCard
+                      selectedPremades={editFormData.selectedPremades}
+                      onSelectedChange={(premades) => setEditFormData({ ...editFormData, selectedPremades: premades })}
+                      compact
+                    />
                   </>
                 )}
 
