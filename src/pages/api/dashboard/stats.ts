@@ -1,7 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/api-helpers';
 import { cached } from '@/lib/api-cache';
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 // Cache TTL: 30 seconds per user
 const CACHE_TTL = 30_000;
@@ -61,6 +67,8 @@ async function fetchUserStats(supabase: any, userId: string) {
     visitorStatsByDayResult,
     activityCountsResult,
     topEntryPagesResult,
+    ownedAudiencesResult,
+    assignedAudiencesResult,
   ] = await Promise.all([
     // Visitor counts (head-only — no row data transferred)
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId),
@@ -80,6 +88,18 @@ async function fetchUserStats(supabase: any, userId: string) {
     supabase.rpc('get_visitor_activity_counts', { p_pixel_ids: pixelIds, p_days: 7 }),
     // RPC: top entry pages
     supabase.rpc('get_top_entry_pages', { p_pixel_ids: pixelIds, p_days: 7, p_limit: 5 }),
+    // Audience: owned approved requests with manual_audience
+    supabaseAdmin
+      .from('audience_requests')
+      .select('audience_id')
+      .eq('user_id', userId)
+      .eq('status', 'approved')
+      .not('form_data->manual_audience', 'is', null),
+    // Audience: assigned audiences
+    supabaseAdmin
+      .from('audience_assignments')
+      .select('audience_id')
+      .eq('user_id', userId),
   ]);
 
   const totalVisitors = totalVisitorsResult.count || 0;
@@ -136,6 +156,21 @@ async function fetchUserStats(supabase: any, userId: string) {
     ? Math.round((visitorsToday - visitorsYesterday) / visitorsYesterday * 100)
     : 0;
 
+  // Audience stats: combine owned + assigned, deduplicate
+  const ownedIds = (ownedAudiencesResult.data || []).map((r: { audience_id: string }) => r.audience_id);
+  const assignedIds = (assignedAudiencesResult.data || []).map((r: { audience_id: string }) => r.audience_id);
+  const allAudienceIds = Array.from(new Set([...ownedIds, ...assignedIds]));
+  const totalAudiences = allAudienceIds.length;
+
+  let totalContacts = 0;
+  if (allAudienceIds.length > 0) {
+    const { count } = await supabaseAdmin
+      .from('audience_contacts')
+      .select('id', { count: 'exact', head: true })
+      .in('audience_id', allAudienceIds);
+    totalContacts = count || 0;
+  }
+
   return {
     overview: {
       totalVisitors,
@@ -147,6 +182,8 @@ async function fetchUserStats(supabase: any, userId: string) {
       eventsToday,
       activePixels,
       avgLeadScore,
+      totalAudiences,
+      totalContacts,
     },
     charts: {
       visitorsByDay: Object.entries(visitorsByDayMap).map(([date, data]) => ({

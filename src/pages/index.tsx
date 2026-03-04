@@ -17,6 +17,8 @@ import {
   IconUsersGroup,
   IconShieldCheck,
   IconTrophy,
+  IconUsers,
+  IconAddressBook,
 } from '@tabler/icons-react';
 
 interface DashboardStats {
@@ -30,6 +32,8 @@ interface DashboardStats {
     eventsToday: number;
     activePixels: number;
     avgLeadScore: number;
+    totalAudiences: number;
+    totalContacts: number;
     // Admin-only fields
     totalUsers?: number;
     adminCount?: number;
@@ -421,6 +425,50 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Audience Stats Row (non-admin) */}
+      {!isAdmin && (
+        <div className="row row-deck row-cards mb-4">
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <span className="avatar bg-purple-lt me-3">
+                    <IconUsers size={24} />
+                  </span>
+                  <div>
+                    <div className="subheader text-muted">Your Audiences</div>
+                    <div className="h2 mb-0">{stats?.overview.totalAudiences || 0}</div>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <Link href="/audiences" className="btn btn-sm btn-outline-purple w-100">
+                    View Audiences
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <span className="avatar bg-cyan-lt me-3">
+                    <IconAddressBook size={24} />
+                  </span>
+                  <div>
+                    <div className="subheader text-muted">Total Contacts</div>
+                    <div className="h2 mb-0">{stats?.overview.totalContacts?.toLocaleString() || 0}</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-muted small">
+                  Across {stats?.overview.totalAudiences || 0} audience{(stats?.overview.totalAudiences || 0) !== 1 ? 's' : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Row */}
       <div className="row row-deck row-cards mb-4">
