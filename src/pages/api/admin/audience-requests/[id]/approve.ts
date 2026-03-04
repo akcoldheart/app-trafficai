@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Request ID is required' });
   }
 
-  const { admin_notes, edited_name, edited_form_data } = req.body;
+  const { admin_notes, edited_name, edited_form_data, assigned_user_id } = req.body;
   const supabase = createClient(req, res);
 
   try {
@@ -40,10 +40,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Request has already been processed' });
     }
 
-    // Get the requesting user's API key
-    const apiKey = await getUserApiKey(audienceRequest.user_id, req, res);
+    // Determine effective user: use assigned user if provided, otherwise original requester
+    const effectiveUserId = assigned_user_id || audienceRequest.user_id;
+
+    // Get the effective user's API key
+    const apiKey = await getUserApiKey(effectiveUserId, req, res);
     if (!apiKey) {
-      return res.status(400).json({ error: 'User does not have an API key assigned' });
+      return res.status(400).json({ error: 'Assigned user does not have an API key assigned' });
     }
 
     // Use edited data if provided, otherwise use original request data
@@ -107,16 +110,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       audienceId = data.id || data.audienceId;
     }
 
-    // Update the request status
+    // Update the request status (and reassign user_id if changed)
+    const updatePayload: Record<string, unknown> = {
+      status: 'approved',
+      admin_notes: admin_notes || null,
+      reviewed_by: authResult.user.id,
+      reviewed_at: new Date().toISOString(),
+      audience_id: audienceId,
+    };
+    if (assigned_user_id && assigned_user_id !== audienceRequest.user_id) {
+      updatePayload.user_id = assigned_user_id;
+    }
+
     const { data: updatedRequest, error: updateError } = await supabase
       .from('audience_requests')
-      .update({
-        status: 'approved',
-        admin_notes: admin_notes || null,
-        reviewed_by: authResult.user.id,
-        reviewed_at: new Date().toISOString(),
-        audience_id: audienceId,
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();

@@ -18,6 +18,7 @@ import {
   IconEdit,
   IconEye,
   IconLock,
+  IconUserShare,
 } from '@tabler/icons-react';
 import type { AudienceRequest, RequestStatus } from '@/lib/supabase/types';
 import IntentFiltersCard from '@/components/intent-filters/IntentFiltersCard';
@@ -139,6 +140,12 @@ export default function Audiences() {
     description: '',
   });
   const [adminNotes, setAdminNotes] = useState('');
+  const [assignedUserId, setAssignedUserId] = useState('');
+  const [assignableUsers, setAssignableUsers] = useState<{ id: string; email: string; role: string }[]>([]);
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [reassignRequestId, setReassignRequestId] = useState('');
+  const [reassignUserId, setReassignUserId] = useState('');
+  const [reassigning, setReassigning] = useState(false);
 
   // Manual audience creation state
   const [showManualModal, setShowManualModal] = useState(false);
@@ -504,6 +511,8 @@ export default function Audiences() {
                 filters: { manual_upload: true },
                 isManual: true,
                 user_email: userInfo?.email || null,
+                user_id: req.user_id,
+                request_id: req.id,
                 source_url: (manualAudience?.source_url as string) || undefined,
               };
             });
@@ -567,10 +576,16 @@ export default function Audiences() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load attributes for admin modal when admin status is confirmed
+  // Load attributes and assignable users for admin modal when admin status is confirmed
   useEffect(() => {
     if (isAdmin) {
       loadAttributes();
+      fetch('/api/admin/users')
+        .then(r => r.json())
+        .then(data => {
+          if (data.users) setAssignableUsers(data.users.map((u: { id: string; email: string; role: string }) => ({ id: u.id, email: u.email, role: u.role })));
+        })
+        .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
@@ -619,6 +634,27 @@ export default function Audiences() {
       showToast('Error deleting audience: ' + (error as Error).message, 'error');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleReassignUser = async () => {
+    if (!reassignRequestId || !reassignUserId) return;
+    setReassigning(true);
+    try {
+      const response = await fetch(`/api/admin/audience-requests/${reassignRequestId}/reassign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_user_id: reassignUserId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to reassign audience');
+      setShowReassignModal(false);
+      await loadAudiences(currentPage);
+      showToast('Audience reassigned successfully.', 'success');
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setReassigning(false);
     }
   };
 
@@ -767,6 +803,7 @@ export default function Audiences() {
       });
     }
     setAdminNotes('');
+    setAssignedUserId(request.user_id);
     setShowEditModal(true);
   };
 
@@ -830,6 +867,7 @@ export default function Audiences() {
           admin_notes: adminNotes,
           edited_name: editFormData.name,
           edited_form_data: editedFormData,
+          assigned_user_id: assignedUserId || undefined,
         }),
       });
 
@@ -1154,6 +1192,20 @@ export default function Audiences() {
                                         )}
                                       </button>
                                     )}
+                                    {audience.isManual && isAdmin && (
+                                      <button
+                                        className="btn btn-sm btn-outline-info"
+                                        title="Assign to User"
+                                        onClick={() => {
+                                          const a = audience as unknown as { request_id?: string; user_id?: string };
+                                          setReassignRequestId(a.request_id || '');
+                                          setReassignUserId(a.user_id || '');
+                                          setShowReassignModal(true);
+                                        }}
+                                      >
+                                        <IconUserShare className="icon icon-sm" />
+                                      </button>
+                                    )}
                                     <button
                                       className="btn btn-sm btn-outline-danger"
                                       onClick={() => {
@@ -1393,6 +1445,60 @@ export default function Audiences() {
         </>
       )}
 
+      {/* Reassign User Modal */}
+      {showReassignModal && (
+        <>
+          <div
+            className="modal-backdrop fade show"
+            style={{ zIndex: 1040 }}
+            onClick={() => !reassigning && setShowReassignModal(false)}
+          ></div>
+          <div
+            className="modal modal-blur fade show"
+            style={{ display: 'block', zIndex: 1050 }}
+            tabIndex={-1}
+          >
+            <div className="modal-dialog modal-sm modal-dialog-centered">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Assign to User</h5>
+                  <button type="button" className="btn-close" onClick={() => setShowReassignModal(false)} disabled={reassigning} />
+                </div>
+                <div className="modal-body">
+                  <label className="form-label">Select User</label>
+                  <select
+                    className="form-select"
+                    value={reassignUserId}
+                    onChange={(e) => setReassignUserId(e.target.value)}
+                  >
+                    {assignableUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.email} ({u.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="modal-footer">
+                  <button className="btn" onClick={() => setShowReassignModal(false)} disabled={reassigning}>
+                    Cancel
+                  </button>
+                  <button className="btn btn-primary" onClick={handleReassignUser} disabled={reassigning}>
+                    {reassigning ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                        Reassigning...
+                      </>
+                    ) : (
+                      'Assign'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Edit/Review Modal */}
       {showEditModal && editingRequest && (
         <>
@@ -1432,6 +1538,7 @@ export default function Audiences() {
                   <strong>Requester:</strong> {editingRequest.user?.email || 'Unknown'}
                   <span className="ms-3"><strong>Type:</strong> {editingRequest.request_type}</span>
                 </div>
+
 
                 {editingRequest.data_points?.length > 0 && (
                   <div className="mb-3">
