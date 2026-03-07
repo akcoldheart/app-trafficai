@@ -33,6 +33,7 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
 
         return {
           daysRemaining,
+          totalTrialDays: 7,
           isExpired: daysRemaining <= 0,
           isExpiring: daysRemaining <= 2 && daysRemaining > 0,
           trialEndDate: trialEnd,
@@ -45,8 +46,14 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
     const now = new Date();
     const daysRemaining = Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
 
+    // Check if trial was extended beyond the initial 7-day period
+    const createdAt = new Date(userProfile.created_at);
+    const initialTrialEnd = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const wasExtended = trialEnd.getTime() > initialTrialEnd.getTime() + 24 * 60 * 60 * 1000;
+
     return {
       daysRemaining,
+      totalTrialDays: wasExtended ? null : 7,
       isExpired: daysRemaining <= 0,
       isExpiring: daysRemaining <= 2 && daysRemaining > 0,
       trialEndDate: trialEnd,
@@ -56,7 +63,7 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
   // Don't show if no trial status or paid user
   if (!trialStatus) return null;
 
-  const { daysRemaining, isExpired, isExpiring } = trialStatus;
+  const { daysRemaining, totalTrialDays, isExpired, isExpiring } = trialStatus;
 
   // Determine notification style
   const getNotificationConfig = () => {
@@ -115,16 +122,22 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
       {!isExpired && (
         <div className="mt-2">
           <div className="d-flex justify-content-between small mb-1">
-            <span>Trial Progress</span>
-            <span>{7 - daysRemaining} of 7 days used</span>
+            <span>Trial Progress &nbsp;</span>
+            {totalTrialDays ? (
+              <span>{totalTrialDays - daysRemaining} of {totalTrialDays} days used</span>
+            ) : (
+              <span>{daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining</span>
+            )}
           </div>
-          <div className="progress progress-sm">
-            <div
-              className={`progress-bar ${isExpiring ? 'bg-orange' : 'bg-primary'}`}
-              style={{ width: `${((7 - daysRemaining) / 7) * 100}%` }}
-              role="progressbar"
-            />
-          </div>
+          {totalTrialDays && (
+            <div className="progress progress-sm">
+              <div
+                className={`progress-bar ${isExpiring ? 'bg-orange' : 'bg-primary'}`}
+                style={{ width: `${((totalTrialDays - daysRemaining) / totalTrialDays) * 100}%` }}
+                role="progressbar"
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
