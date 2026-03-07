@@ -1,0 +1,195 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { createClient } from '@supabase/supabase-js';
+
+export const config = {
+  maxDuration: 300,
+};
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+interface KlaviyoProfile {
+  type: 'profile';
+  attributes: {
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+    organization?: string;
+    title?: string;
+    phone_number?: string;
+    location?: {
+      city?: string;
+      region?: string;
+      country?: string;
+    };
+    properties?: Record<string, unknown>;
+  };
+}
+
+// Format phone to E.164 format for Klaviyo (e.g. "858-405-7845" -> "+18584057845")
+function formatPhoneE164(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('+')) return phone;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  if (digits.length > 10) return `+${digits}`;
+  return phone; // return as-is if we can't determine format
+}
+
+async function getKlaviyoIntegration(userId: string) {
+  const { data } = await supabaseAdmin
+    .from('klaviyo_integrations')
+    .select('api_key, default_list_id')
+    .eq('user_id', userId)
+    .eq('is_connected', true)
+    .single();
+  return data;
+}
+
+async function addProfilesToKlaviyo(apiKey: string, listId: string, profiles: KlaviyoProfile[]) {
+  // Step 1: Create/update profiles in batches of 100 (Klaviyo limit)
+  const batchSize = 100;
+  const profileIds: string[] = [];
+
+  for (let i = 0; i < profiles.length; i += batchSize) {
+    const batch = profiles.slice(i, i + batchSize);
+
+    const importResponse = await fetch('https://a.klaviyo.com/api/profile-bulk-import-jobs', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Klaviyo-API-Key ${apiKey}`,
+        'accept': 'application/json',
+        'content-type': 'application/json',
+        'revision': '2024-10-15',
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'profile-bulk-import-job',
+          attributes: {
+            profiles: {
+              data: batch,
+            },
+          },
+          relationships: {
+            lists: {
+              data: [{ type: 'list', id: listId }],
+            },
+          },
+        },
+      }),
+    });
+
+    if (!importResponse.ok) {
+      const errorData = await importResponse.json().catch(() => null);
+      console.error('Klaviyo bulk import error:', errorData);
+      throw new Error(errorData?.errors?.[0]?.detail || 'Failed to import profiles to Klaviyo');
+    }
+
+    const importData = await importResponse.json();
+    if (importData.data?.id) {
+      profileIds.push(importData.data.id);
+    }
+  }
+
+  return profileIds;
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const user = await getAuthenticatedUser(req, res);
+  if (!user) return;
+
+  const { pixel_id, list_id } = req.body;
+
+  const integration = await getKlaviyoIntegration(user.id);
+  if (!integration) {
+    return res.status(400).json({ error: 'Klaviyo not connected' });
+  }
+
+  const targetListId = list_id || integration.default_list_id;
+  if (!targetListId) {
+    return res.status(400).json({ error: 'No Klaviyo list selected. Please select a default list or specify a list_id.' });
+  }
+
+  try {
+    // Fetch visitors with email belonging to this user
+    let query = supabaseAdmin
+      .from('visitors')
+      .select('email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata')
+      .eq('user_id', user.id)
+      .not('email', 'is', null);
+
+    if (pixel_id) {
+      query = query.eq('pixel_id', pixel_id);
+    }
+
+    const { data: visitors, error: visitorsError } = await query.limit(10000);
+
+    if (visitorsError) {
+      console.error('Error fetching visitors:', visitorsError);
+      return res.status(500).json({ error: 'Failed to fetch visitors', details: visitorsError.message });
+    }
+
+    if (!visitors || visitors.length === 0) {
+      return res.status(200).json({ success: true, synced: 0, message: 'No visitors with email to sync' });
+    }
+
+    // Transform visitors to Klaviyo profiles
+    const profiles: KlaviyoProfile[] = visitors
+      .filter((v) => v.email)
+      .map((visitor) => {
+        const meta = visitor.metadata as Record<string, unknown> | null;
+        const phone = meta?.phone || meta?.PHONE || meta?.Phone || meta?.phone_number || meta?.MOBILE_PHONE || undefined;
+
+        return {
+          type: 'profile' as const,
+          attributes: {
+            email: visitor.email!,
+            first_name: visitor.first_name || (visitor.full_name ? visitor.full_name.split(' ')[0] : undefined),
+            last_name: visitor.last_name || (visitor.full_name ? visitor.full_name.split(' ').slice(1).join(' ') : undefined),
+            organization: visitor.company || undefined,
+            title: visitor.job_title || undefined,
+            phone_number: phone ? formatPhoneE164(String(phone)) : undefined,
+            location: {
+              city: visitor.city || undefined,
+              region: visitor.state || undefined,
+              country: visitor.country || undefined,
+            },
+            properties: {
+              source: 'Traffic AI',
+              linkedin_url: visitor.linkedin_url || undefined,
+              lead_score: visitor.lead_score || undefined,
+              total_pageviews: visitor.total_pageviews || undefined,
+              total_sessions: visitor.total_sessions || undefined,
+              first_seen_at: visitor.first_seen_at || undefined,
+              last_seen_at: visitor.last_seen_at || undefined,
+            },
+          },
+        };
+      });
+
+    const jobIds = await addProfilesToKlaviyo(integration.api_key, targetListId, profiles);
+
+    // Update last synced timestamp
+    await supabaseAdmin
+      .from('klaviyo_integrations')
+      .update({ last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+
+    return res.status(200).json({
+      success: true,
+      synced: profiles.length,
+      jobs: jobIds,
+      message: `${profiles.length} visitors queued for sync to Klaviyo`,
+    });
+  } catch (error) {
+    console.error('Error syncing visitors to Klaviyo:', error);
+    return res.status(500).json({ error: (error as Error).message || 'Failed to sync visitors to Klaviyo' });
+  }
+}

@@ -22,6 +22,7 @@ import {
   IconUser,
   IconCreditCard,
   IconWebhook,
+  IconPlug,
 } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
@@ -44,6 +45,7 @@ const iconMap: Record<string, IconComponent> = {
   IconLayoutDashboard,
   IconFileDescription,
   IconWebhook,
+  IconPlug,
 };
 
 // Get icon component by name
