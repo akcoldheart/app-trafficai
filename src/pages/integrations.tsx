@@ -406,10 +406,46 @@ export default function Integrations() {
                 <div>
                   <p className="text-muted mb-3">
                     Connect your Klaviyo account to automatically sync visitors and audiences to your Klaviyo lists.
-                    You can find your private API key in Klaviyo under <strong>Settings &rarr; Account &rarr; API Keys</strong>.
                   </p>
+
+                  {/* Step-by-step guide */}
+                  <div className="mb-4 p-3 rounded" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
+                    <h4 className="mb-3">How to get your Klaviyo API Key</h4>
+                    <ol className="mb-0" style={{ paddingLeft: '1.25rem' }}>
+                      <li className="mb-2">
+                        Log in to your <strong>Klaviyo</strong> account
+                      </li>
+                      <li className="mb-2">
+                        Click on <strong>Settings</strong> (gear icon) in the bottom-left corner
+                      </li>
+                      <li className="mb-2">
+                        Go to <strong>Account &rarr; Settings &rarr; API Keys</strong>
+                      </li>
+                      <li className="mb-2">
+                        Click <strong>Create Private API Key</strong>
+                      </li>
+                      <li className="mb-2">
+                        Set the key name (e.g. &quot;Traffic AI&quot;)
+                      </li>
+                      <li className="mb-2">
+                        Under <em>Select Access Level</em>, choose <strong>Custom Key</strong> and set the following scopes to <strong>Full Access</strong>:
+                        <ul className="mt-1 mb-0">
+                          <li><strong>List</strong> &mdash; to read, create, and manage lists</li>
+                          <li><strong>Profiles</strong> &mdash; to create and update contact profiles</li>
+                        </ul>
+                        <div className="text-muted small mt-1">All other scopes can remain &quot;No Access&quot; or &quot;Read Access&quot;.</div>
+                      </li>
+                      <li className="mb-2">
+                        Click <strong>Create</strong> and copy the key (starts with <code>pk_</code>)
+                      </li>
+                      <li>
+                        Paste the key below and click <strong>Connect</strong>
+                      </li>
+                    </ol>
+                  </div>
+
                   <div className="mb-3">
-                    <label className="form-label">Klaviyo Private API Key</label>
+                    <label className="form-label fw-bold">Klaviyo Private API Key</label>
                     <div className="input-group">
                       <input
                         type={showApiKey ? 'text' : 'password'}
@@ -427,7 +463,9 @@ export default function Integrations() {
                         {showApiKey ? <IconEyeOff size={16} /> : <IconEye size={16} />}
                       </button>
                     </div>
-                    <div className="form-hint mt-1">Use a Private API Key with full access. Public keys will not work.</div>
+                    <div className="form-hint mt-1">
+                      Must be a <strong>Private API Key</strong> with Full Access on <strong>List</strong> and <strong>Profiles</strong> scopes. Public API keys will not work.
+                    </div>
                   </div>
                   <button
                     className="btn btn-primary"
@@ -768,7 +806,7 @@ export default function Integrations() {
                   </div>
                   <div>
                     <div className="fw-medium small">Connect your Klaviyo account</div>
-                    <div className="text-muted small">Add your private API key from Klaviyo settings</div>
+                    <div className="text-muted small">Create a Custom Key with List & Profiles access</div>
                   </div>
                 </div>
                 <div className="d-flex gap-3">
