@@ -47,9 +47,9 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
     const daysRemaining = Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
 
     // Check if trial was extended beyond the initial 7-day period
-    const createdAt = new Date(userProfile.created_at);
-    const initialTrialEnd = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const wasExtended = trialEnd.getTime() > initialTrialEnd.getTime() + 24 * 60 * 60 * 1000;
+    const createdAt = userProfile.created_at ? new Date(userProfile.created_at) : null;
+    const initialTrialEnd = createdAt ? new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000) : null;
+    const wasExtended = !initialTrialEnd || trialEnd.getTime() > initialTrialEnd.getTime() + 24 * 60 * 60 * 1000;
 
     return {
       daysRemaining,
