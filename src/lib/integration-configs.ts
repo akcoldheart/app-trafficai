@@ -1,0 +1,242 @@
+import type { PlatformType } from './integrations';
+
+export interface IntegrationConfig {
+  key: PlatformType | 'klaviyo';
+  name: string;
+  description: string;
+  color: string;
+  letterIcon: string;
+  authType: 'api_key' | 'webhook_url' | 'api_key_and_url' | 'triggers';
+  authLabel: string;
+  authPlaceholder: string;
+  authHint: string;
+  secondaryAuthLabel?: string;
+  secondaryAuthPlaceholder?: string;
+  secondaryAuthHint?: string;
+  features: ('sync_visitors' | 'sync_audiences' | 'notifications' | 'webhooks' | 'lists')[];
+  setupSteps: string[];
+  category: 'crm' | 'email_marketing' | 'notifications' | 'automation' | 'ecommerce';
+}
+
+export const INTEGRATION_CONFIGS: Record<string, IntegrationConfig> = {
+  klaviyo: {
+    key: 'klaviyo',
+    name: 'Klaviyo',
+    description: 'Email marketing & SMS automation',
+    color: '#2BD27F',
+    letterIcon: 'K',
+    authType: 'api_key',
+    authLabel: 'Private API Key',
+    authPlaceholder: 'pk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    authHint: 'Must be a Private API Key with Full Access on List and Profiles scopes.',
+    features: ['sync_visitors', 'sync_audiences', 'lists'],
+    setupSteps: [
+      'Log in to your Klaviyo account',
+      'Click on Settings (gear icon) in the bottom-left corner',
+      'Go to Account → Settings → API Keys',
+      'Click Create Private API Key',
+      'Set the key name (e.g. "Traffic AI")',
+      'Under Select Access Level, choose Custom Key and set List and Profiles to Full Access',
+      'Click Create and copy the key (starts with pk_)',
+      'Paste the key below and click Connect',
+    ],
+    category: 'email_marketing',
+  },
+  hubspot: {
+    key: 'hubspot',
+    name: 'HubSpot',
+    description: 'CRM, marketing & sales automation',
+    color: '#FF7A59',
+    letterIcon: 'H',
+    authType: 'api_key',
+    authLabel: 'Private App Access Token',
+    authPlaceholder: 'pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    authHint: 'Create a Private App in HubSpot with crm.objects.contacts.write and crm.objects.contacts.read scopes.',
+    features: ['sync_visitors', 'sync_audiences'],
+    setupSteps: [
+      'Log in to your HubSpot account',
+      'Go to Settings (gear icon in the top nav)',
+      'Navigate to Integrations → Private Apps',
+      'Click Create a private app',
+      'Name it "Traffic AI" and add a description',
+      'Go to the Scopes tab and add: crm.objects.contacts.write, crm.objects.contacts.read',
+      'Click Create app, then Continue creating',
+      'Copy the access token and paste it below',
+    ],
+    category: 'crm',
+  },
+  slack: {
+    key: 'slack',
+    name: 'Slack',
+    description: 'Real-time visitor notifications',
+    color: '#4A154B',
+    letterIcon: 'S',
+    authType: 'webhook_url',
+    authLabel: 'Incoming Webhook URL',
+    authPlaceholder: 'https://hooks.slack.com/services/...',
+    authHint: 'Create an incoming webhook in your Slack workspace to receive notifications.',
+    features: ['notifications'],
+    setupSteps: [
+      'Go to api.slack.com/apps and click Create New App',
+      'Choose From scratch, name it "Traffic AI", and select your workspace',
+      'In the left sidebar, click Incoming Webhooks',
+      'Toggle Activate Incoming Webhooks to On',
+      'Click Add New Webhook to Workspace at the bottom',
+      'Select the channel where you want notifications',
+      'Copy the Webhook URL and paste it below',
+    ],
+    category: 'notifications',
+  },
+  zapier: {
+    key: 'zapier',
+    name: 'Zapier',
+    description: 'Automate workflows with 5,000+ apps',
+    color: '#FF4F00',
+    letterIcon: 'Z',
+    authType: 'triggers',
+    authLabel: 'Trigger Webhooks',
+    authPlaceholder: '',
+    authHint: 'Each trigger fires a separate Zapier webhook — configure them individually.',
+    features: ['webhooks'],
+    setupSteps: [
+      'Go to zapier.com and click Create Zap',
+      'Choose Webhooks by Zapier → Catch Hook as the trigger',
+      'Copy the generated webhook URL',
+      'Paste it into the corresponding trigger below',
+      'Save, then use the Test button to send a sample payload',
+    ],
+    category: 'automation',
+  },
+  salesforce: {
+    key: 'salesforce',
+    name: 'Salesforce',
+    description: 'Enterprise CRM & sales platform',
+    color: '#00A1E0',
+    letterIcon: 'SF',
+    authType: 'api_key_and_url',
+    authLabel: 'Access Token',
+    authPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    authHint: 'Use a Connected App access token with API access enabled.',
+    secondaryAuthLabel: 'Instance URL',
+    secondaryAuthPlaceholder: 'https://yourorg.my.salesforce.com',
+    secondaryAuthHint: 'Your Salesforce instance URL (e.g. https://yourorg.my.salesforce.com)',
+    features: ['sync_visitors', 'sync_audiences'],
+    setupSteps: [
+      'Log in to your Salesforce org',
+      'Go to Setup → Apps → App Manager',
+      'Click New Connected App',
+      'Enable OAuth Settings with scope: Access and manage your data (api)',
+      'Save and wait for activation (up to 10 minutes)',
+      'Use the Consumer Key and Secret to generate an access token',
+      'Or use your personal security token: Reset via Settings → My Personal Information → Reset My Security Token',
+      'Paste the access token and your instance URL below',
+    ],
+    category: 'crm',
+  },
+  shopify: {
+    key: 'shopify',
+    name: 'Shopify',
+    description: 'E-commerce customer sync',
+    color: '#96BF48',
+    letterIcon: 'Sh',
+    authType: 'api_key_and_url',
+    authLabel: 'Admin API Access Token',
+    authPlaceholder: 'shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    authHint: 'Create a custom app in your Shopify admin with write_customers scope.',
+    secondaryAuthLabel: 'Shop Domain',
+    secondaryAuthPlaceholder: 'your-store.myshopify.com',
+    secondaryAuthHint: 'Your Shopify store domain (e.g. your-store.myshopify.com)',
+    features: ['sync_visitors'],
+    setupSteps: [
+      'Log in to your Shopify admin',
+      'Go to Settings → Apps and sales channels',
+      'Click Develop apps (you may need to enable developer preview first)',
+      'Click Create an app and name it "Traffic AI"',
+      'Go to Configuration and add Admin API scope: write_customers',
+      'Click Install app and confirm',
+      'Copy the Admin API access token (starts with shpat_)',
+      'Paste the token and your shop domain below',
+    ],
+    category: 'ecommerce',
+  },
+  mailchimp: {
+    key: 'mailchimp',
+    name: 'Mailchimp',
+    description: 'Email marketing & audiences',
+    color: '#FFE01B',
+    letterIcon: 'M',
+    authType: 'api_key',
+    authLabel: 'API Key',
+    authPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-us21',
+    authHint: 'Your Mailchimp API key includes the data center suffix (e.g. -us21).',
+    features: ['sync_visitors', 'sync_audiences', 'lists'],
+    setupSteps: [
+      'Log in to your Mailchimp account',
+      'Click your profile icon → Account & billing',
+      'Go to Extras → API keys',
+      'Click Create A Key',
+      'Copy the API key (it ends with a data center suffix like -us21)',
+      'Paste it below and click Connect',
+    ],
+    category: 'email_marketing',
+  },
+  pipedrive: {
+    key: 'pipedrive',
+    name: 'Pipedrive',
+    description: 'Sales CRM & pipeline management',
+    color: '#017737',
+    letterIcon: 'P',
+    authType: 'api_key',
+    authLabel: 'API Token',
+    authPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    authHint: 'Find your personal API token in Pipedrive settings.',
+    features: ['sync_visitors', 'sync_audiences'],
+    setupSteps: [
+      'Log in to your Pipedrive account',
+      'Click your profile picture → Personal preferences',
+      'Go to the API tab',
+      'Copy your Personal API token',
+      'Paste it below and click Connect',
+    ],
+    category: 'crm',
+  },
+  activecampaign: {
+    key: 'activecampaign',
+    name: 'ActiveCampaign',
+    description: 'Email marketing & marketing automation',
+    color: '#356AE6',
+    letterIcon: 'AC',
+    authType: 'api_key_and_url',
+    authLabel: 'API Key',
+    authPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    authHint: 'Find your API key in ActiveCampaign settings under Developer.',
+    secondaryAuthLabel: 'API URL',
+    secondaryAuthPlaceholder: 'https://yourname.api-us1.com',
+    secondaryAuthHint: 'Your ActiveCampaign API URL (e.g. https://yourname.api-us1.com)',
+    features: ['sync_visitors', 'sync_audiences', 'lists'],
+    setupSteps: [
+      'Log in to your ActiveCampaign account',
+      'Go to Settings (gear icon in the bottom-left)',
+      'Click Developer',
+      'Copy both the API URL and API Key',
+      'Paste them below and click Connect',
+    ],
+    category: 'email_marketing',
+  },
+};
+
+export const INTEGRATION_ORDER = [
+  'klaviyo',
+  'hubspot',
+  'slack',
+  'zapier',
+  'salesforce',
+  'shopify',
+  'mailchimp',
+  'pipedrive',
+  'activecampaign',
+] as const;
+
+export function getIntegrationConfig(key: string): IntegrationConfig | undefined {
+  return INTEGRATION_CONFIGS[key];
+}
