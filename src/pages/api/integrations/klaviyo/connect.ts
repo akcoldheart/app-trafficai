@@ -41,15 +41,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Save the integration
     const { data, error } = await supabaseAdmin
-      .from('klaviyo_integrations')
+      .from('platform_integrations')
       .upsert(
         {
           user_id: user.id,
+          platform: 'klaviyo',
           api_key,
           is_connected: true,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'user_id' }
+        { onConflict: 'user_id,platform' }
       )
       .select()
       .single();
@@ -59,16 +60,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ error: 'Failed to save integration' });
     }
 
+    const config = (data.config || {}) as Record<string, unknown>;
     return res.status(200).json({
       success: true,
       message: 'Klaviyo connected successfully',
       integration: {
         id: data.id,
         is_connected: data.is_connected,
-        default_list_id: data.default_list_id,
-        default_list_name: data.default_list_name,
-        auto_sync_visitors: data.auto_sync_visitors,
-        auto_sync_pixel_id: data.auto_sync_pixel_id,
+        default_list_id: config.default_list_id || null,
+        default_list_name: config.default_list_name || null,
+        auto_sync_visitors: config.auto_sync_visitors || false,
+        auto_sync_pixel_id: config.auto_sync_pixel_id || null,
         last_synced_at: data.last_synced_at,
         created_at: data.created_at,
       },

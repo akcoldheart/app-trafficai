@@ -41,12 +41,15 @@ function formatPhoneE164(phone: string): string {
 
 async function getKlaviyoIntegration(userId: string) {
   const { data } = await supabaseAdmin
-    .from('klaviyo_integrations')
-    .select('api_key, default_list_id')
+    .from('platform_integrations')
+    .select('api_key, config')
     .eq('user_id', userId)
+    .eq('platform', 'klaviyo')
     .eq('is_connected', true)
     .single();
-  return data;
+  if (!data) return null;
+  const config = (data.config || {}) as Record<string, unknown>;
+  return { api_key: data.api_key, default_list_id: config.default_list_id as string | null };
 }
 
 async function addProfilesToKlaviyo(apiKey: string, listId: string, profiles: KlaviyoProfile[]) {
@@ -178,9 +181,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Update last synced timestamp
     await supabaseAdmin
-      .from('klaviyo_integrations')
+      .from('platform_integrations')
       .update({ last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .eq('platform', 'klaviyo');
 
     return res.status(200).json({
       success: true,

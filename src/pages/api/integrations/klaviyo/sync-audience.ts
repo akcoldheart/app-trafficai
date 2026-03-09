@@ -53,12 +53,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Get Klaviyo integration
-  const { data: integration } = await supabaseAdmin
-    .from('klaviyo_integrations')
-    .select('api_key, default_list_id')
+  const { data: rawIntegration } = await supabaseAdmin
+    .from('platform_integrations')
+    .select('api_key, config')
     .eq('user_id', user.id)
+    .eq('platform', 'klaviyo')
     .eq('is_connected', true)
     .single();
+  const integration = rawIntegration ? {
+    api_key: rawIntegration.api_key,
+    default_list_id: ((rawIntegration.config || {}) as Record<string, unknown>).default_list_id as string | null,
+  } : null;
 
   if (!integration) {
     return res.status(400).json({ error: 'Klaviyo not connected' });
@@ -198,9 +203,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Update last synced
     await supabaseAdmin
-      .from('klaviyo_integrations')
+      .from('platform_integrations')
       .update({ last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .eq('platform', 'klaviyo');
 
     return res.status(200).json({
       success: true,

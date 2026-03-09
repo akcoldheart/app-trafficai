@@ -9,9 +9,10 @@ const supabaseAdmin = createClient(
 
 async function getKlaviyoApiKey(userId: string): Promise<string | null> {
   const { data } = await supabaseAdmin
-    .from('klaviyo_integrations')
+    .from('platform_integrations')
     .select('api_key')
     .eq('user_id', userId)
+    .eq('platform', 'klaviyo')
     .eq('is_connected', true)
     .single();
   return data?.api_key || null;
