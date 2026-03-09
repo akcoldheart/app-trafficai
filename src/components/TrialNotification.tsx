@@ -118,28 +118,6 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
         </div>
       </div>
 
-      {/* Progress bar showing trial progress */}
-      {!isExpired && (
-        <div className="mt-2">
-          <div className="d-flex justify-content-between small mb-1">
-            <span>Trial Progress &nbsp;</span>
-            {totalTrialDays ? (
-              <span>{totalTrialDays - daysRemaining} of {totalTrialDays} days used</span>
-            ) : (
-              <span>{daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining</span>
-            )}
-          </div>
-          {totalTrialDays && (
-            <div className="progress progress-sm">
-              <div
-                className={`progress-bar ${isExpiring ? 'bg-orange' : 'bg-primary'}`}
-                style={{ width: `${((totalTrialDays - daysRemaining) / totalTrialDays) * 100}%` }}
-                role="progressbar"
-              />
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
