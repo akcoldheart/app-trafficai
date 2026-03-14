@@ -393,15 +393,22 @@ export default function Visitors() {
         .then(async (response) => {
           const data = await response.json();
           if (response.ok) {
-            if (data.totalUpserted > 0) {
-              showToast(`Synced ${data.totalUpserted} visitors from API (${data.totalFetched} fetched)`, 'success');
+            if (data.dbErrors?.length > 0) {
+              showToast(
+                `${data.totalFetched} fetched → ${data.uniqueVisitors} unique → ${data.totalUpserted} saved. ${data.dbErrors.length} DB error(s): ${data.dbErrors[0]}`,
+                'error'
+              );
+              console.error('Sync DB errors:', data.dbErrors);
+            } else if (data.totalUpserted > 0) {
+              showToast(`Synced ${data.totalUpserted} visitors from API (${data.totalFetched} fetched, ${data.uniqueVisitors} unique)`, 'success');
             } else if (data.totalFetched > 0) {
-              showToast(`${data.totalFetched} contacts fetched, all already up to date`, 'success');
+              showToast(`${data.totalFetched} contacts fetched (${data.uniqueVisitors} unique), all already up to date`, 'success');
             }
             // Refresh again after sync completes to show new data
             fetchVisitors();
           } else {
-            showToast(data.error || 'Failed to sync visitors from API', 'error');
+            const errDetail = data.dbErrors?.length > 0 ? `: ${data.dbErrors[0]}` : '';
+            showToast(data.error || `Failed to sync visitors from API${errDetail}`, 'error');
             console.error('Sync API error:', data);
           }
         })

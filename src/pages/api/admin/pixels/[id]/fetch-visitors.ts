@@ -57,6 +57,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         error: result.error,
         totalFetched: result.totalFetched,
         totalUpserted: result.totalUpserted,
+        uniqueVisitors: result.uniqueVisitors,
+        newInserted: result.newInserted,
+        existingUpdated: result.existingUpdated,
+        dbErrors: result.dbErrors,
       });
     }
 
@@ -64,6 +68,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       success: true,
       totalFetched: result.totalFetched,
       totalUpserted: result.totalUpserted,
+      uniqueVisitors: result.uniqueVisitors,
+      newInserted: result.newInserted,
+      existingUpdated: result.existingUpdated,
+      dbErrors: result.dbErrors,
     });
   } catch (error) {
     console.error('Fetch visitors API error:', error);

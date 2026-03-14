@@ -134,12 +134,20 @@ function getContactUuid(contact: ApiContact): string | null {
 function aggregateContactEvents(contacts: ApiContact[], pixelId: string, userId: string) {
   // Group all event records by UUID
   const grouped = new Map<string, ApiContact[]>();
+  let skippedNoUuid = 0;
   for (const contact of contacts) {
     const uuid = getContactUuid(contact);
-    if (!uuid) continue;
+    if (!uuid) {
+      skippedNoUuid++;
+      console.warn(`[visitors-api-fetcher] Skipping contact without UUID/EDID. Available keys: ${Object.keys(contact).slice(0, 15).join(', ')}`);
+      continue;
+    }
     const existing = grouped.get(uuid) || [];
     existing.push(contact);
     grouped.set(uuid, existing);
+  }
+  if (skippedNoUuid > 0) {
+    console.warn(`[visitors-api-fetcher] Skipped ${skippedNoUuid}/${contacts.length} contacts without UUID/EDID`);
   }
 
   const now = new Date().toISOString();
@@ -192,7 +200,7 @@ function mapGroupToVisitor(
   for (const event of events) {
     const eventType = (event.EVENT_TYPE as string || '').toLowerCase();
     // Support both old format (ACTIVITY_START_DATE/END_DATE) and new format (EVENT_DATE)
-    const startDate = event.ACTIVITY_START_DATE as string || event.EVENT_DATE as string;
+    const startDate = event.ACTIVITY_START_DATE as string || event.EVENT_DATE as string || event.EVENT_TIMESTAMP as string;
     const endDate = event.ACTIVITY_END_DATE as string;
 
     // Track unique sessions by date
@@ -301,6 +309,10 @@ function mapGroupToVisitor(
 export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
   totalFetched: number;
   totalUpserted: number;
+  uniqueVisitors?: number;
+  newInserted?: number;
+  existingUpdated?: number;
+  dbErrors?: string[];
   error?: string;
 }> {
   let totalFetched = 0;
@@ -383,8 +395,11 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     const toInsert = uniqueRows.filter(r => !existingMap.has(r.visitor_id));
     const toUpdate = uniqueRows.filter(r => existingMap.has(r.visitor_id));
 
+    console.log(`[visitors-api-fetcher] Pixel ${pixel.id}: ${totalFetched} fetched → ${uniqueRows.length} unique visitors → ${toInsert.length} new, ${toUpdate.length} existing`);
+
     // Batch insert new records
     const BATCH_SIZE = 200;
+    const insertErrors: string[] = [];
     for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
       const batch = toInsert.slice(i, i + BATCH_SIZE);
       const { error: insertError } = await supabaseAdmin
@@ -392,7 +407,9 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
         .insert(batch);
 
       if (insertError) {
-        console.error(`[visitors-api-fetcher] Insert error at offset ${i}:`, insertError.message);
+        const errMsg = `Insert error at offset ${i}: ${insertError.message} (code: ${insertError.code}, details: ${insertError.details})`;
+        console.error(`[visitors-api-fetcher] ${errMsg}`);
+        insertErrors.push(errMsg);
       } else {
         totalUpserted += batch.length;
       }
@@ -400,6 +417,7 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     }
 
     // Update existing records in parallel batches of 50
+    const updateErrors: string[] = [];
     for (let i = 0; i < toUpdate.length; i += 50) {
       const batch = toUpdate.slice(i, i + 50);
       const results = await Promise.all(
@@ -436,10 +454,19 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
               updated_at: row.updated_at,
             })
             .eq('id', dbId)
-            .then(({ error }) => !error);
+            .then(({ error }) => {
+              if (error) {
+                updateErrors.push(`Update ${row.visitor_id}: ${error.message} (code: ${error.code})`);
+              }
+              return !error;
+            });
         })
       );
       totalUpserted += results.filter(Boolean).length;
+    }
+
+    if (insertErrors.length > 0 || updateErrors.length > 0) {
+      console.error(`[visitors-api-fetcher] DB errors for pixel ${pixel.id}:`, { insertErrors, updateErrors });
     }
 
     // Update pixel fetch status and events count
@@ -473,7 +500,15 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       user_id: pixel.user_id,
     });
 
-    return { totalFetched, totalUpserted };
+    const allDbErrors = [...insertErrors, ...updateErrors];
+    return {
+      totalFetched,
+      totalUpserted,
+      uniqueVisitors: uniqueRows.length,
+      newInserted: toInsert.length,
+      existingUpdated: toUpdate.length,
+      dbErrors: allDbErrors.length > 0 ? allDbErrors : undefined,
+    };
   } catch (err) {
     const errorMessage = (err as Error).message;
     console.error(`[visitors-api-fetcher] Error for pixel ${pixel.id}:`, errorMessage);
