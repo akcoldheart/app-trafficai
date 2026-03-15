@@ -10,7 +10,7 @@ import {
 
 // Plan limits configuration (identified visitors per month)
 const PLAN_LIMITS: Record<string, { visitors: number; name: string }> = {
-  trial: { visitors: 250, name: 'Trial' },
+  trial: { visitors: Infinity, name: 'Trial' },
   starter: { visitors: 3000, name: 'Starter' },
   growth: { visitors: 5000, name: 'Growth' },
   professional: { visitors: 10000, name: 'Professional' },

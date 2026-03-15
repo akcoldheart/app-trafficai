@@ -116,7 +116,7 @@ const defaultPlans: Plan[] = [
 
 // Plan limits for visitor tracking
 const PLAN_VISITOR_LIMITS: Record<string, number> = {
-  trial: 250,
+  trial: Infinity,
   starter: 3000,
   growth: 5000,
   professional: 10000,
