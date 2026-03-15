@@ -487,17 +487,7 @@ export default function Billing() {
                                 />
                               </div>
                             )}
-                            {trialStatus && (
-                              <div className="mt-2 small">
-                                <span className={trialStatus.isExpired ? 'text-danger' : trialStatus.isExpiring ? 'text-warning' : 'text-muted'}>
-                                  {trialStatus.isExpired ? (
-                                    <>Trial expired</>
-                                  ) : (
-                                    <><IconClock size={14} className="me-1" />{trialStatus.daysRemaining} days left in trial</>
-                                  )}
-                                </span>
-                              </div>
-                            )}
+                            
                           </>
                         );
                       })()}
