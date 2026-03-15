@@ -116,6 +116,31 @@ function buildHeaders(apiUrl: string, apiKey: string): Record<string, string> {
   return headers;
 }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(url, options);
+
+    if (response.status === 429) {
+      if (attempt === maxRetries) return response;
+      // Exponential backoff: 2s, 4s, 8s
+      const backoff = Math.pow(2, attempt + 1) * 1000;
+      console.warn(`[visitors-api-fetcher] Rate limited (429), retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await sleep(backoff);
+      continue;
+    }
+
+    return response;
+  }
+  // Should never reach here, but just in case
+  return fetch(url, options);
+}
+
 function extractContacts(data: Record<string, unknown>): ApiContact[] {
   const raw = data.Data || data.data || data.records || data.contacts || [];
   return (Array.isArray(raw) ? raw : []) as ApiContact[];
@@ -327,7 +352,7 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     const headers = buildHeaders(pixel.visitors_api_url, apiKey);
 
     // Fetch first page
-    const firstResponse = await fetch(pixel.visitors_api_url, { method: 'GET', headers });
+    const firstResponse = await fetchWithRetry(pixel.visitors_api_url, { method: 'GET', headers });
 
     if (!firstResponse.ok) {
       const errorText = await firstResponse.text();
@@ -340,9 +365,9 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
 
     let allContacts: ApiContact[] = extractContacts(firstData);
 
-    // Fetch remaining pages in parallel batches of 5
+    // Fetch remaining pages in batches of 2 with delays to avoid rate limits
     if (totalPages > 1 && currentPage === 1) {
-      const batchSize = 5;
+      const batchSize = 2;
       for (let batchStart = 2; batchStart <= totalPages; batchStart += batchSize) {
         const batchEnd = Math.min(batchStart + batchSize - 1, totalPages);
         const pagePromises = [];
@@ -351,7 +376,7 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
           const nextPageUrl = new URL(pixel.visitors_api_url);
           nextPageUrl.searchParams.set('page', String(page));
           pagePromises.push(
-            fetch(nextPageUrl.toString(), { method: 'GET', headers })
+            fetchWithRetry(nextPageUrl.toString(), { method: 'GET', headers })
               .then(async (r) => r.ok ? extractContacts(await r.json()) : [])
               .catch(() => [] as ApiContact[])
           );
@@ -360,6 +385,11 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
         const batchResults = await Promise.all(pagePromises);
         for (const records of batchResults) {
           allContacts = allContacts.concat(records);
+        }
+
+        // Small delay between page batches to stay under rate limits
+        if (batchStart + batchSize <= totalPages) {
+          await sleep(500);
         }
       }
     }

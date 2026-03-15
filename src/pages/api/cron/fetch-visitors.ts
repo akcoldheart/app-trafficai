@@ -39,7 +39,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const results = [];
 
-    for (const pixel of pixels) {
+    // Stagger pixel syncs with a 3-second delay between each to avoid
+    // overwhelming the AudienceLab API and hitting rate limits (429s)
+    for (let i = 0; i < pixels.length; i++) {
+      const pixel = pixels[i];
+
+      // Wait between pixels (skip delay for the first one)
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
       const result = await fetchVisitorsFromApi({
         id: pixel.id,
         user_id: pixel.user_id,
