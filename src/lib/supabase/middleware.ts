@@ -53,8 +53,10 @@ export async function updateSession(request: NextRequest) {
 
   // Redirect authenticated users away from auth pages
   // Exception: Don't redirect if on login page (allows logout to complete)
+  // Exception: Don't redirect if on impersonate page (admin impersonation flow)
   const isLoginPage = request.nextUrl.pathname === '/auth/login';
-  if (user && isAuthPage && !isLoginPage) {
+  const isImpersonatePage = request.nextUrl.pathname === '/auth/impersonate';
+  if (user && isAuthPage && !isLoginPage && !isImpersonatePage) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);

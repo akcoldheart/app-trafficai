@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/router';
+import { createClient } from '@/lib/supabase/client';
 import {
   IconUsers,
   IconKey,
@@ -20,6 +21,7 @@ import {
   IconEyeOff,
   IconCalendarPlus,
   IconClock,
+  IconUserShare,
 } from '@tabler/icons-react';
 import type { Role } from '@/lib/supabase/types';
 
@@ -72,6 +74,9 @@ export default function AdminUsers() {
 
   // Extend trial state
   const [extendingTrialUserId, setExtendingTrialUserId] = useState<string | null>(null);
+
+  // Impersonate state
+  const [impersonatingUserId, setImpersonatingUserId] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -274,6 +279,46 @@ export default function AdminUsers() {
       alert((err as Error).message);
     } finally {
       setExtendingTrialUserId(null);
+    }
+  };
+
+  const supabaseRef = useRef(createClient());
+
+  const handleImpersonate = async (user: User) => {
+    setImpersonatingUserId(user.id);
+    try {
+      // Save admin session so we can restore it when exiting impersonation
+      const { data: { session } } = await supabaseRef.current.auth.getSession();
+      if (!session) {
+        throw new Error('No active admin session');
+      }
+
+      const response = await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, email: user.email }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to impersonate user');
+      }
+
+      // Store admin session backup and impersonation info in localStorage
+      localStorage.setItem('admin_session_backup', JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      }));
+      localStorage.setItem('impersonating', 'true');
+      localStorage.setItem('impersonator_email', userProfile?.email || '');
+
+      // Navigate to the impersonate callback in the same tab
+      const params = new URLSearchParams({ token_hash: data.token_hash });
+      router.push(`/auth/impersonate?${params.toString()}`);
+    } catch (err) {
+      alert((err as Error).message);
+      setImpersonatingUserId(null);
     }
   };
 
@@ -569,6 +614,20 @@ export default function AdminUsers() {
                     </td>
                     <td>
                       <div className="btn-list flex-nowrap">
+                        {user.role !== 'admin' && (
+                          <button
+                            className="btn btn-sm btn-outline-cyan"
+                            onClick={() => handleImpersonate(user)}
+                            disabled={impersonatingUserId === user.id}
+                            title={`Impersonate ${user.email}`}
+                          >
+                            {impersonatingUserId === user.id ? (
+                              <IconLoader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                            ) : (
+                              <IconUserShare size={16} />
+                            )}
+                          </button>
+                        )}
                         <button
                           className="btn btn-sm btn-primary"
                           onClick={() => handleOpenApiKeyModal(user)}

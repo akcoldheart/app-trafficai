@@ -5,6 +5,7 @@ import PageHeader from './PageHeader';
 import TopBar from './TopBar';
 import TrialNotification from '@/components/TrialNotification';
 import UpgradeNotification from '@/components/UpgradeNotification';
+import ImpersonationBanner from '@/components/ImpersonationBanner';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -27,6 +28,7 @@ export default function Layout({
         <title>TrafficAi</title>
       </Head>
 
+      <ImpersonationBanner />
       <div className="page">
         <Sidebar />
 
