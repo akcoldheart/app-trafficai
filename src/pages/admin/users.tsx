@@ -1,24 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/router';
-import { createClient } from '@/lib/supabase/client';
 import {
   IconUsers,
-  IconKey,
-  IconCheck,
-  IconX,
   IconLoader2,
   IconSearch,
   IconShieldCheck,
   IconUser,
-  IconUserPlus,
   IconRefresh,
-  IconEdit,
   IconTrash,
-  IconCopy,
-  IconEye,
-  IconEyeOff,
   IconCalendarPlus,
   IconClock,
   IconUserShare,
@@ -35,8 +26,6 @@ interface User {
   trial_ends_at: string | null;
   created_at: string;
   updated_at: string;
-  has_api_key?: boolean;
-  api_key?: string;
 }
 
 // Available subscription plans
@@ -57,13 +46,6 @@ export default function AdminUsers() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // API Key modal state
-  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [savingApiKey, setSavingApiKey] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   // Delete modal state
@@ -124,90 +106,6 @@ export default function AdminUsers() {
       fetchRoles();
     }
   }, [authLoading, userRole, router, fetchUsers, fetchRoles]);
-
-  const handleOpenApiKeyModal = async (user: User) => {
-    setSelectedUser(user);
-    setApiKeyInput('');
-    setShowApiKey(false);
-
-    // Fetch current API key if exists
-    try {
-      const response = await fetch(`/api/admin/api-keys/${user.id}`);
-      const data = await response.json();
-      if (data && data.api_key) {
-        setApiKeyInput(data.api_key);
-      }
-    } catch (err) {
-      console.error('Error fetching API key:', err);
-    }
-
-    setShowApiKeyModal(true);
-  };
-
-  const handleSaveApiKey = async () => {
-    if (!selectedUser) return;
-
-    setSavingApiKey(true);
-    try {
-      const response = await fetch(`/api/admin/api-keys/${selectedUser.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: apiKeyInput }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to save API key');
-      }
-
-      // Update local state
-      setUsers(users.map(u =>
-        u.id === selectedUser.id
-          ? { ...u, has_api_key: true, api_key: apiKeyInput }
-          : u
-      ));
-
-      setShowApiKeyModal(false);
-      setSelectedUser(null);
-      setApiKeyInput('');
-    } catch (err) {
-      alert((err as Error).message);
-    } finally {
-      setSavingApiKey(false);
-    }
-  };
-
-  const handleRemoveApiKey = async () => {
-    if (!selectedUser) return;
-    if (!confirm('Are you sure you want to remove this API key?')) return;
-
-    setSavingApiKey(true);
-    try {
-      const response = await fetch(`/api/admin/api-keys/${selectedUser.id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to remove API key');
-      }
-
-      // Update local state
-      setUsers(users.map(u =>
-        u.id === selectedUser.id
-          ? { ...u, has_api_key: false, api_key: undefined }
-          : u
-      ));
-
-      setShowApiKeyModal(false);
-      setSelectedUser(null);
-      setApiKeyInput('');
-    } catch (err) {
-      alert((err as Error).message);
-    } finally {
-      setSavingApiKey(false);
-    }
-  };
 
   const handleRoleChange = async (userId: string, roleId: string) => {
     const selectedRole = roles.find(r => r.id === roleId);
@@ -282,17 +180,9 @@ export default function AdminUsers() {
     }
   };
 
-  const supabaseRef = useRef(createClient());
-
   const handleImpersonate = async (user: User) => {
     setImpersonatingUserId(user.id);
     try {
-      // Save admin session so we can restore it when exiting impersonation
-      const { data: { session } } = await supabaseRef.current.auth.getSession();
-      if (!session) {
-        throw new Error('No active admin session');
-      }
-
       const response = await fetch('/api/admin/impersonate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -305,11 +195,7 @@ export default function AdminUsers() {
         throw new Error(data.error || 'Failed to impersonate user');
       }
 
-      // Store admin session backup and impersonation info in localStorage
-      localStorage.setItem('admin_session_backup', JSON.stringify({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-      }));
+      // Store impersonation info in localStorage
       localStorage.setItem('impersonating', 'true');
       localStorage.setItem('impersonator_email', userProfile?.email || '');
 
@@ -332,12 +218,6 @@ export default function AdminUsers() {
       isExpired: daysLeft <= 0,
       endsAt: trialEnd.toLocaleDateString(),
     };
-  };
-
-  const copyToClipboard = async (text: string, id: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
   };
 
   const handleOpenDeleteModal = (user: User) => {
@@ -485,7 +365,6 @@ export default function AdminUsers() {
                   <th>Role</th>
                   <th>Plan</th>
                   <th>Trial Status</th>
-                  <th>API Key</th>
                   <th>Joined</th>
                   <th className="w-1">Actions</th>
                 </tr>
@@ -596,19 +475,6 @@ export default function AdminUsers() {
                         );
                       })()}
                     </td>
-                    <td>
-                      {user.has_api_key ? (
-                        <span className="badge bg-green-lt text-green">
-                          <IconCheck size={14} className="me-1" />
-                          Assigned
-                        </span>
-                      ) : (
-                        <span className="badge bg-yellow-lt text-yellow">
-                          <IconX size={14} className="me-1" />
-                          Not Assigned
-                        </span>
-                      )}
-                    </td>
                     <td className="text-muted">
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
@@ -628,13 +494,6 @@ export default function AdminUsers() {
                             )}
                           </button>
                         )}
-                        <button
-                          className="btn btn-sm btn-primary"
-                          onClick={() => handleOpenApiKeyModal(user)}
-                        >
-                          <IconKey size={16} className="me-1" />
-                          API Key
-                        </button>
                         {user.role !== 'admin' && (
                           <button
                             className="btn btn-sm btn-outline-danger"
@@ -653,102 +512,6 @@ export default function AdminUsers() {
           </div>
         )}
       </div>
-
-      {/* API Key Modal */}
-      {showApiKeyModal && selectedUser && (
-        <div className="modal modal-blur show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">
-                  <IconKey className="icon me-2" />
-                  Manage API Key
-                </h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowApiKeyModal(false)}
-                />
-              </div>
-              <div className="modal-body">
-                <div className="mb-3">
-                  <label className="form-label">User</label>
-                  <div className="form-control-plaintext">{selectedUser.email}</div>
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Traffic AI API Key</label>
-                  <div className="input-group">
-                    <input
-                      type={showApiKey ? 'text' : 'password'}
-                      className="form-control"
-                      placeholder="Enter API key from Traffic AI service"
-                      value={apiKeyInput}
-                      onChange={(e) => setApiKeyInput(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                    >
-                      {showApiKey ? <IconEyeOff size={16} /> : <IconEye size={16} />}
-                    </button>
-                    {apiKeyInput && (
-                      <button
-                        type="button"
-                        className={`btn ${copiedId === 'apiKey' ? 'btn-success' : 'btn-outline-secondary'}`}
-                        onClick={() => copyToClipboard(apiKeyInput, 'apiKey')}
-                      >
-                        {copiedId === 'apiKey' ? <IconCheck size={16} /> : <IconCopy size={16} />}
-                      </button>
-                    )}
-                  </div>
-                  <small className="form-hint">
-                    This is the API key from the Traffic AI service (v3-api-job-72802495918.us-east1.run.app)
-                  </small>
-                </div>
-              </div>
-              <div className="modal-footer">
-                {selectedUser.has_api_key && (
-                  <button
-                    type="button"
-                    className="btn btn-outline-danger me-auto"
-                    onClick={handleRemoveApiKey}
-                    disabled={savingApiKey}
-                  >
-                    <IconTrash size={16} className="me-1" />
-                    Remove Key
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowApiKeyModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={handleSaveApiKey}
-                  disabled={!apiKeyInput || savingApiKey}
-                >
-                  {savingApiKey ? (
-                    <>
-                      <IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <IconCheck size={16} className="me-1" />
-                      Save API Key
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Delete User Modal */}
       {showDeleteModal && userToDelete && (
