@@ -1237,7 +1237,7 @@ export default function KlaviyoIntegrationPage() {
                   </div>
                   <div>
                     <div className="fw-medium small">Connect your Klaviyo account</div>
-                    <div className="text-muted small">Create a Custom Key with List & Profiles access</div>
+                    <div className="text-muted small">Create a Custom Key with List, Profiles, Events  & Metrics  access</div>
                   </div>
                 </div>
                 <div className="d-flex gap-3">
