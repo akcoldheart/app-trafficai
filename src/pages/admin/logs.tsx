@@ -64,7 +64,7 @@ export default function AdminLogs() {
 
   // Clear logs modal
   const [showClearModal, setShowClearModal] = useState(false);
-  const [clearing, setClearing] = useState(false);
+  const [clearingAction, setClearingAction] = useState<string | null>(null);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -107,22 +107,33 @@ export default function AdminLogs() {
   }, [authLoading, userProfile, router, fetchLogs]);
 
   const handleClearLogs = async (olderThan?: number) => {
-    setClearing(true);
+    const actionKey = olderThan ? `older_${olderThan}` : 'all';
+    setClearingAction(actionKey);
     try {
-      const response = await fetch('/api/admin/logs', {
+      const params = new URLSearchParams();
+      if (olderThan) {
+        params.set('olderThan', String(olderThan));
+      } else {
+        params.set('clearAll', 'true');
+      }
+
+      const response = await fetch(`/api/admin/logs?${params}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(olderThan ? { olderThan } : { clearAll: true }),
       });
 
-      if (response.ok) {
-        fetchLogs();
-        setShowClearModal(false);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to clear logs');
       }
+
+      setShowClearModal(false);
+      fetchLogs();
     } catch (err) {
       console.error('Error clearing logs:', err);
+      alert((err as Error).message);
     } finally {
-      setClearing(false);
+      setClearingAction(null);
     }
   };
 
@@ -535,8 +546,8 @@ export default function AdminLogs() {
 
       {/* Clear Logs Modal */}
       {showClearModal && (
-        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex={-1}>
-          <div className="modal-dialog modal-sm modal-dialog-centered">
+        <div className="modal modal-blur show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => !clearingAction && setShowClearModal(false)}>
+          <div className="modal-dialog modal-sm modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Clear Logs</h5>
@@ -552,25 +563,25 @@ export default function AdminLogs() {
                   <button
                     className="btn btn-outline-warning"
                     onClick={() => handleClearLogs(7)}
-                    disabled={clearing}
+                    disabled={!!clearingAction}
                   >
-                    {clearing && <IconLoader2 size={16} className="me-2 spinner" />}
+                    {clearingAction === 'older_7' && <IconLoader2 size={16} className="me-2 spinner" />}
                     Clear logs older than 7 days
                   </button>
                   <button
                     className="btn btn-outline-warning"
                     onClick={() => handleClearLogs(30)}
-                    disabled={clearing}
+                    disabled={!!clearingAction}
                   >
-                    {clearing && <IconLoader2 size={16} className="me-2 spinner" />}
+                    {clearingAction === 'older_30' && <IconLoader2 size={16} className="me-2 spinner" />}
                     Clear logs older than 30 days
                   </button>
                   <button
                     className="btn btn-danger"
                     onClick={() => handleClearLogs()}
-                    disabled={clearing}
+                    disabled={!!clearingAction}
                   >
-                    {clearing && <IconLoader2 size={16} className="me-2 spinner" />}
+                    {clearingAction === 'all' && <IconLoader2 size={16} className="me-2 spinner" />}
                     Clear ALL logs
                   </button>
                 </div>
@@ -585,7 +596,6 @@ export default function AdminLogs() {
               </div>
             </div>
           </div>
-          <div className="modal-backdrop fade show" onClick={() => setShowClearModal(false)} />
         </div>
       )}
 

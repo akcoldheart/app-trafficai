@@ -76,14 +76,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'DELETE') {
-      const { id, clearAll, olderThan } = req.body;
+      const { id, clearAll, olderThan } = req.query as Record<string, string | undefined>;
 
-      if (clearAll) {
+      if (clearAll === 'true') {
         // Clear all logs
         const { error } = await supabase
           .from('system_logs')
           .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+          .gte('created_at', '1970-01-01T00:00:00.000Z');
 
         if (error) {
           console.error('Error clearing logs:', error);
@@ -96,7 +96,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (olderThan) {
         // Clear logs older than specified days
         const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - parseInt(olderThan));
+        cutoffDate.setDate(cutoffDate.getDate() - Number(olderThan));
 
         const { error } = await supabase
           .from('system_logs')
