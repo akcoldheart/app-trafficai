@@ -510,6 +510,7 @@ export default function Audiences() {
                 name: req.name,
                 total_records: (manualAudience?.total_records as number) || 0,
                 created_at: req.created_at,
+                updated_at: req.updated_at,
                 filters: { manual_upload: true },
                 isManual: true,
                 user_email: userInfo?.email || null,
@@ -1068,6 +1069,7 @@ export default function Audiences() {
                           <th>Total Records</th>
                           <th>Status</th>
                           <th>Created</th>
+                          <th>Updated</th>
                           <th className="w-1">Actions</th>
                         </tr>
                       </thead>
@@ -1133,20 +1135,21 @@ export default function Audiences() {
                           <th>Total Records</th>
                           <th>Status</th>
                           <th>Created</th>
+                          <th>Updated</th>
                           <th className="w-1">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {loading ? (
                           <tr>
-                            <td colSpan={isAdmin ? 6 : 5} className="text-center py-4">
+                            <td colSpan={isAdmin ? 7 : 6} className="text-center py-4">
                               <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                               Loading audiences...
                             </td>
                           </tr>
                         ) : audiences.length === 0 ? (
                           <tr>
-                            <td colSpan={isAdmin ? 6 : 5} className="text-center text-muted py-4">
+                            <td colSpan={isAdmin ? 7 : 6} className="text-center text-muted py-4">
                               No audiences found. <Link href="/audiences/create">{isAdmin ? 'Create your first audience' : 'Request your first audience'}</Link>
                             </td>
                           </tr>
@@ -1192,6 +1195,9 @@ export default function Audiences() {
                                 </td>
                                 <td className="text-muted">
                                   {audience.created_at ? new Date(audience.created_at).toLocaleDateString() : '-'}
+                                </td>
+                                <td className="text-muted">
+                                  {audience.updated_at ? new Date(audience.updated_at).toLocaleDateString() : '-'}
                                 </td>
                                 <td>
                                   <div className="btn-list flex-nowrap">

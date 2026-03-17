@@ -13,6 +13,7 @@ export interface Audience {
   name: string;
   total_records?: number;
   created_at?: string;
+  updated_at?: string;
   filters?: Record<string, unknown>;
   segment?: string;
   days_back?: number;
