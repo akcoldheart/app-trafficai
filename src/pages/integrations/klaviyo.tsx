@@ -19,6 +19,10 @@ import {
   IconAlertCircle,
   IconCircleCheck,
   IconArrowLeft,
+  IconChartBar,
+  IconBolt,
+  IconSettings,
+  IconChevronLeft,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 
@@ -58,6 +62,30 @@ interface Toast {
   type: 'success' | 'error' | 'info';
 }
 
+interface KlaviyoMetric {
+  id: string;
+  name: string;
+  integration_name: string;
+  integration_category: string;
+}
+
+interface MetricDataPoint {
+  date: string;
+  value: number;
+}
+
+interface PushEventResult {
+  pushed: number;
+  errors: number;
+}
+
+const EVENT_TYPE_INFO: Record<string, { label: string; description: string }> = {
+  identified_visitor: { label: 'Identified Visitors', description: 'Visitors identified with an email address' },
+  high_intent: { label: 'High Intent Visitors', description: 'Visitors with a lead score of 75 or higher' },
+  pricing_page: { label: 'Pricing Page Visits', description: 'Visitors who viewed a pricing page' },
+  returning_visitor: { label: 'Returning Visitors', description: 'Visitors with 2 or more sessions' },
+};
+
 export default function KlaviyoIntegrationPage() {
   const { userProfile } = useAuth();
 
@@ -91,6 +119,26 @@ export default function KlaviyoIntegrationPage() {
 
   // Settings saving
   const [savingSettings, setSavingSettings] = useState(false);
+
+  // Tabs
+  const [activeTab, setActiveTab] = useState<'sync' | 'metrics' | 'push-events'>('sync');
+
+  // Metrics
+  const [metricsData, setMetricsData] = useState<KlaviyoMetric[]>([]);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [selectedMetric, setSelectedMetric] = useState<KlaviyoMetric | null>(null);
+  const [metricAggregates, setMetricAggregates] = useState<MetricDataPoint[]>([]);
+  const [aggregatesLoading, setAggregatesLoading] = useState(false);
+  const [metricTimeframe, setMetricTimeframe] = useState('last_7_days');
+  const [metricMeasurement, setMetricMeasurement] = useState<'count' | 'unique'>('count');
+  const [showAllMetrics, setShowAllMetrics] = useState(false);
+
+  // Push Events
+  const [pushEventsEnabled, setPushEventsEnabled] = useState<Record<string, boolean>>({});
+  const [pushEventsLastPushed, setPushEventsLastPushed] = useState<Record<string, string>>({});
+  const [pushEventsConfigLoading, setPushEventsConfigLoading] = useState(false);
+  const [pushingEvents, setPushingEvents] = useState(false);
+  const [pushResults, setPushResults] = useState<{ results: Record<string, PushEventResult>; total_pushed: number } | null>(null);
 
   // Toast
   const [toast, setToast] = useState<Toast | null>(null);
@@ -192,6 +240,99 @@ export default function KlaviyoIntegrationPage() {
     }
   }, []);
 
+  const fetchMetrics = useCallback(async () => {
+    try {
+      setMetricsLoading(true);
+      const response = await fetch('/api/integrations/klaviyo/metrics');
+      const data = await response.json();
+      if (response.ok) {
+        setMetricsData(data.metrics || []);
+      }
+    } catch (error) {
+      console.error('Error fetching metrics:', error);
+    } finally {
+      setMetricsLoading(false);
+    }
+  }, []);
+
+  const fetchMetricAggregates = useCallback(async (metricId: string, timeframe: string, measurement: string) => {
+    try {
+      setAggregatesLoading(true);
+      const response = await fetch('/api/integrations/klaviyo/metric-aggregates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ metric_id: metricId, timeframe, measurement }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMetricAggregates(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching metric aggregates:', error);
+    } finally {
+      setAggregatesLoading(false);
+    }
+  }, []);
+
+  const fetchPushEventsConfig = useCallback(async () => {
+    try {
+      setPushEventsConfigLoading(true);
+      const response = await fetch('/api/integrations/klaviyo/push-events-config');
+      const data = await response.json();
+      if (response.ok) {
+        setPushEventsEnabled(data.push_events_enabled || {});
+        setPushEventsLastPushed(data.push_events_last_pushed || {});
+      }
+    } catch (error) {
+      console.error('Error fetching push events config:', error);
+    } finally {
+      setPushEventsConfigLoading(false);
+    }
+  }, []);
+
+  const handleTogglePushEvent = async (type: string, enabled: boolean) => {
+    const updated = { ...pushEventsEnabled, [type]: enabled };
+    setPushEventsEnabled(updated);
+    try {
+      await fetch('/api/integrations/klaviyo/push-events-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ push_events_enabled: updated }),
+      });
+    } catch (error) {
+      console.error('Error saving push event config:', error);
+      setPushEventsEnabled(prev => ({ ...prev, [type]: !enabled }));
+      showToast('Failed to save setting', 'error');
+    }
+  };
+
+  const handlePushEvents = async () => {
+    const enabledTypes = Object.entries(pushEventsEnabled)
+      .filter(([, enabled]) => enabled)
+      .map(([type]) => type);
+
+    if (enabledTypes.length === 0) return;
+
+    setPushingEvents(true);
+    setPushResults(null);
+    try {
+      const response = await fetch('/api/integrations/klaviyo/push-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_types: enabledTypes }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to push events');
+      setPushResults(data);
+      showToast(`${data.total_pushed} events pushed to Klaviyo`, 'success');
+      fetchPushEventsConfig();
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setPushingEvents(false);
+    }
+  };
+
   useEffect(() => {
     fetchIntegration();
   }, [fetchIntegration]);
@@ -201,8 +342,17 @@ export default function KlaviyoIntegrationPage() {
       fetchLists();
       fetchPixels();
       fetchAudiences();
+      fetchMetrics();
+      fetchPushEventsConfig();
     }
-  }, [integration?.is_connected, fetchLists, fetchPixels, fetchAudiences]);
+  }, [integration?.is_connected, fetchLists, fetchPixels, fetchAudiences, fetchMetrics, fetchPushEventsConfig]);
+
+  // Fetch aggregates when metric or controls change
+  useEffect(() => {
+    if (selectedMetric) {
+      fetchMetricAggregates(selectedMetric.id, metricTimeframe, metricMeasurement);
+    }
+  }, [selectedMetric, metricTimeframe, metricMeasurement, fetchMetricAggregates]);
 
   const handleConnect = async () => {
     if (!apiKey.trim()) return;
@@ -345,6 +495,10 @@ export default function KlaviyoIntegrationPage() {
     }
   };
 
+  const filteredMetrics = showAllMetrics
+    ? metricsData
+    : metricsData.filter(m => m.name.toLowerCase().startsWith('trafficai'));
+
   if (loading) {
     return (
       <Layout title="Klaviyo Integration" pageTitle="Klaviyo">
@@ -428,8 +582,10 @@ export default function KlaviyoIntegrationPage() {
                         <ul className="mt-1 mb-0">
                           <li><strong>List</strong> &mdash; to read, create, and manage lists</li>
                           <li><strong>Profiles</strong> &mdash; to create and update contact profiles</li>
+                          <li><strong>Events</strong> &mdash; to push visitor events and trigger flows</li>
+                          <li><strong>Metrics</strong> &mdash; to view metric data (Read Access is sufficient)</li>
                         </ul>
-                        <div className="text-muted small mt-1">All other scopes can remain &quot;No Access&quot; or &quot;Read Access&quot;.</div>
+                        <div className="text-muted small mt-1">All other scopes can remain &quot;No Access&quot;.</div>
                       </li>
                       <li className="mb-2">Click <strong>Create</strong> and copy the key (starts with <code>pk_</code>)</li>
                       <li>Paste the key below and click <strong>Connect</strong></li>
@@ -480,6 +636,40 @@ export default function KlaviyoIntegrationPage() {
               ) : (
                 /* Connected State */
                 <div>
+                  {/* Tab Navigation */}
+                  <ul className="nav nav-tabs mb-4">
+                    <li className="nav-item">
+                      <button
+                        className={`nav-link ${activeTab === 'sync' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('sync')}
+                      >
+                        <IconSettings size={16} className="me-1" />
+                        Sync & Settings
+                      </button>
+                    </li>
+                    <li className="nav-item">
+                      <button
+                        className={`nav-link ${activeTab === 'metrics' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('metrics')}
+                      >
+                        <IconChartBar size={16} className="me-1" />
+                        Metrics
+                      </button>
+                    </li>
+                    <li className="nav-item">
+                      <button
+                        className={`nav-link ${activeTab === 'push-events' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('push-events')}
+                      >
+                        <IconBolt size={16} className="me-1" />
+                        Push Events
+                      </button>
+                    </li>
+                  </ul>
+
+                  {/* Sync & Settings Tab */}
+                  {activeTab === 'sync' && (
+                  <div>
                   {/* Default List Selection */}
                   <div className="mb-4">
                     <label className="form-label fw-bold">Default Klaviyo List</label>
@@ -735,6 +925,256 @@ export default function KlaviyoIntegrationPage() {
                       Disconnect Klaviyo
                     </button>
                   </div>
+                  </div>
+                  )}
+
+                  {/* Metrics Tab */}
+                  {activeTab === 'metrics' && (
+                    <div>
+                      {selectedMetric ? (
+                        /* Metric Detail View */
+                        <div>
+                          <button
+                            className="btn btn-ghost-primary btn-sm mb-3"
+                            onClick={() => { setSelectedMetric(null); setMetricAggregates([]); }}
+                          >
+                            <IconChevronLeft size={16} className="me-1" />
+                            Back to Metrics
+                          </button>
+
+                          <h4 className="mb-3">{selectedMetric.name}</h4>
+                          <div className="text-muted small mb-3">
+                            {selectedMetric.integration_name} &middot; {selectedMetric.integration_category}
+                          </div>
+
+                          <div className="d-flex gap-3 mb-3">
+                            <div>
+                              <label className="form-label small">Timeframe</label>
+                              <select
+                                className="form-select form-select-sm"
+                                value={metricTimeframe}
+                                onChange={(e) => setMetricTimeframe(e.target.value)}
+                                disabled={aggregatesLoading}
+                              >
+                                <option value="last_7_days">Last 7 days</option>
+                                <option value="last_30_days">Last 30 days</option>
+                                <option value="last_90_days">Last 90 days</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label small">Measurement</label>
+                              <select
+                                className="form-select form-select-sm"
+                                value={metricMeasurement}
+                                onChange={(e) => setMetricMeasurement(e.target.value as 'count' | 'unique')}
+                                disabled={aggregatesLoading}
+                              >
+                                <option value="count">Count</option>
+                                <option value="unique">Unique</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {aggregatesLoading ? (
+                            <div className="d-flex justify-content-center py-4">
+                              <IconLoader2 size={24} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+                            </div>
+                          ) : metricAggregates.length === 0 ? (
+                            <div className="text-muted text-center py-4">No data for this timeframe</div>
+                          ) : (
+                            <div className="table-responsive">
+                              <table className="table table-vcenter">
+                                <thead>
+                                  <tr>
+                                    <th>Date</th>
+                                    <th>Value</th>
+                                    <th style={{ width: '50%' }}></th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(() => {
+                                    const maxVal = Math.max(...metricAggregates.map(d => d.value), 1);
+                                    return metricAggregates.map((point) => (
+                                      <tr key={point.date}>
+                                        <td className="text-nowrap">
+                                          {new Date(point.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                        </td>
+                                        <td className="fw-medium">{point.value.toLocaleString()}</td>
+                                        <td>
+                                          <div
+                                            style={{
+                                              height: 18,
+                                              width: `${(point.value / maxVal) * 100}%`,
+                                              backgroundColor: 'var(--tblr-primary)',
+                                              borderRadius: 3,
+                                              minWidth: point.value > 0 ? 4 : 0,
+                                              opacity: 0.7,
+                                            }}
+                                          />
+                                        </td>
+                                      </tr>
+                                    ));
+                                  })()}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Metrics List View */
+                        <div>
+                          <div className="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                              <h4 className="mb-1">Klaviyo Metrics</h4>
+                              <p className="text-muted small mb-0">Click a metric to view aggregate data</p>
+                            </div>
+                            <div className="d-flex gap-2 align-items-center">
+                              <label className="form-check form-switch mb-0 small">
+                                <input
+                                  className="form-check-input"
+                                  type="checkbox"
+                                  checked={showAllMetrics}
+                                  onChange={(e) => setShowAllMetrics(e.target.checked)}
+                                />
+                                <span className="form-check-label">Show all</span>
+                              </label>
+                              <button
+                                className="btn btn-outline-secondary btn-sm"
+                                onClick={fetchMetrics}
+                                disabled={metricsLoading}
+                              >
+                                <IconRefresh size={14} className={metricsLoading ? 'spinning' : ''} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {metricsLoading ? (
+                            <div className="d-flex justify-content-center py-4">
+                              <IconLoader2 size={24} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+                            </div>
+                          ) : filteredMetrics.length === 0 ? (
+                            <div className="text-muted text-center py-4">
+                              {showAllMetrics ? 'No metrics found' : 'No TrafficAI metrics found. Push events first, then metrics will appear here.'}
+                            </div>
+                          ) : (
+                            <div className="table-responsive">
+                              <table className="table table-vcenter table-hover">
+                                <thead>
+                                  <tr>
+                                    <th>Metric Name</th>
+                                    <th>Integration</th>
+                                    <th>Category</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {filteredMetrics.map((metric) => (
+                                    <tr
+                                      key={metric.id}
+                                      style={{ cursor: 'pointer' }}
+                                      onClick={() => setSelectedMetric(metric)}
+                                    >
+                                      <td className="fw-medium">{metric.name}</td>
+                                      <td className="text-muted">{metric.integration_name}</td>
+                                      <td>
+                                        {metric.integration_category && (
+                                          <span className="badge bg-azure-lt">{metric.integration_category}</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Push Events Tab */}
+                  {activeTab === 'push-events' && (
+                    <div>
+                      <h4 className="mb-1">Push Events to Klaviyo</h4>
+                      <p className="text-muted small mb-3">
+                        Send TrafficAI visitor events to Klaviyo to trigger flows and automations.
+                      </p>
+
+                      {pushEventsConfigLoading ? (
+                        <div className="d-flex justify-content-center py-4">
+                          <IconLoader2 size={24} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+                        </div>
+                      ) : (
+                        <>
+                          <div className="row row-cards mb-3">
+                            {Object.entries(EVENT_TYPE_INFO).map(([type, info]) => (
+                              <div key={type} className="col-md-6 mb-3">
+                                <div className="card">
+                                  <div className="card-body p-3">
+                                    <div className="d-flex justify-content-between align-items-start">
+                                      <div>
+                                        <div className="fw-medium">{info.label}</div>
+                                        <div className="text-muted small">{info.description}</div>
+                                        {pushEventsLastPushed[type] && (
+                                          <div className="text-muted small mt-1">
+                                            Last pushed: {new Date(pushEventsLastPushed[type]).toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <label className="form-check form-switch mb-0">
+                                        <input
+                                          className="form-check-input"
+                                          type="checkbox"
+                                          checked={pushEventsEnabled[type] || false}
+                                          onChange={(e) => handleTogglePushEvent(type, e.target.checked)}
+                                          disabled={pushingEvents}
+                                        />
+                                      </label>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <button
+                            className="btn btn-primary"
+                            onClick={handlePushEvents}
+                            disabled={pushingEvents || !Object.values(pushEventsEnabled).some(Boolean)}
+                          >
+                            {pushingEvents ? (
+                              <>
+                                <IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                                Pushing Events...
+                              </>
+                            ) : (
+                              <>
+                                <IconBolt size={16} className="me-1" />
+                                Push Events Now
+                              </>
+                            )}
+                          </button>
+
+                          {pushResults && (
+                            <div className="mt-3 p-3 rounded" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
+                              <div className="fw-medium mb-2">
+                                <IconCircleCheck size={16} className="me-1 text-green" />
+                                {pushResults.total_pushed} total events pushed
+                              </div>
+                              {Object.entries(pushResults.results).map(([type, result]) => (
+                                <div key={type} className="d-flex justify-content-between small text-muted">
+                                  <span>{EVENT_TYPE_INFO[type]?.label || type}</span>
+                                  <span>
+                                    {result.pushed} pushed
+                                    {result.errors > 0 && <span className="text-danger ms-2">{result.errors} errors</span>}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -830,6 +1270,61 @@ export default function KlaviyoIntegrationPage() {
               </div>
             </div>
           </div>
+
+          {/* Push Events Tip */}
+          {integration?.is_connected && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">
+                  <IconBolt size={18} className="me-2" />
+                  Push Events
+                </h3>
+              </div>
+              <div className="card-body">
+                <div className="space-y-3">
+                  <div className="d-flex gap-3">
+                    <div className="flex-shrink-0">
+                      <span className="avatar avatar-sm bg-pink-lt"><IconUsers size={16} /></span>
+                    </div>
+                    <div>
+                      <div className="fw-medium small">Identified Visitors</div>
+                      <div className="text-muted small">Visitors with a known email</div>
+                    </div>
+                  </div>
+                  <div className="d-flex gap-3">
+                    <div className="flex-shrink-0">
+                      <span className="avatar avatar-sm bg-orange-lt"><IconChartBar size={16} /></span>
+                    </div>
+                    <div>
+                      <div className="fw-medium small">High Intent Visitors</div>
+                      <div className="text-muted small">Lead score 75+</div>
+                    </div>
+                  </div>
+                  <div className="d-flex gap-3">
+                    <div className="flex-shrink-0">
+                      <span className="avatar avatar-sm bg-cyan-lt"><IconClick size={16} /></span>
+                    </div>
+                    <div>
+                      <div className="fw-medium small">Pricing Page Visits</div>
+                      <div className="text-muted small">Viewed a pricing page</div>
+                    </div>
+                  </div>
+                  <div className="d-flex gap-3">
+                    <div className="flex-shrink-0">
+                      <span className="avatar avatar-sm bg-green-lt"><IconRefresh size={16} /></span>
+                    </div>
+                    <div>
+                      <div className="fw-medium small">Returning Visitors</div>
+                      <div className="text-muted small">2+ sessions</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-muted small mt-3 pt-3" style={{ borderTop: '1px solid var(--tblr-border-color)' }}>
+                  Requires <strong>Events: Full Access</strong> scope on your Klaviyo API key.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
