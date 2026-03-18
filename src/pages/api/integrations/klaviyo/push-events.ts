@@ -35,89 +35,92 @@ async function getKlaviyoIntegration(userId: string) {
 }
 
 /**
- * Send events using Klaviyo's Bulk Create Events API.
- * Accepts up to 10,000 events per request — much faster than one-by-one.
+ * Send a single event to Klaviyo. Returns true on success, false on failure.
  */
-async function sendBulkKlaviyoEvents(
+async function sendSingleEvent(
   apiKey: string,
-  events: Array<{ email: string; metricName: string; properties: Record<string, unknown> }>
-): Promise<{ success: boolean; error?: string }> {
-  if (events.length === 0) return { success: true };
-
-  const eventData = events.map(e => ({
-    type: 'event-bulk-create' as const,
-    attributes: {
-      profile: { data: { type: 'profile' as const, attributes: { email: e.email } } },
-      metric: { data: { type: 'metric' as const, attributes: { name: e.metricName } } },
-      properties: e.properties,
-      time: new Date().toISOString(),
-    },
-  }));
-
-  const response = await fetch('https://a.klaviyo.com/api/event-bulk-create-jobs', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Klaviyo-API-Key ${apiKey}`,
-      'accept': 'application/json',
-      'content-type': 'application/json',
-      'revision': '2024-10-15',
-    },
-    body: JSON.stringify({
-      data: {
-        type: 'event-bulk-create-job',
-        attributes: {
-          'events-bulk-create': {
-            data: eventData,
-          },
-        },
+  email: string,
+  metricName: string,
+  properties: Record<string, unknown>
+): Promise<boolean> {
+  const body = JSON.stringify({
+    data: {
+      type: 'event',
+      attributes: {
+        metric: { data: { type: 'metric', attributes: { name: metricName } } },
+        profile: { data: { type: 'profile', attributes: { email } } },
+        properties,
+        time: new Date().toISOString(),
       },
-    }),
+    },
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    let detail = `Klaviyo bulk API error ${response.status}`;
-    try {
-      const errJson = JSON.parse(errText);
-      detail = errJson?.errors?.[0]?.detail || detail;
-    } catch {
-      // use default detail
-    }
-    console.error('Klaviyo bulk event error:', response.status, detail);
+  const headers = {
+    'Authorization': `Klaviyo-API-Key ${apiKey}`,
+    'accept': 'application/json',
+    'content-type': 'application/json',
+    'revision': '2024-10-15',
+  };
 
-    // Retry once on rate limit
-    if (response.status === 429) {
-      await sleep(5000);
-      const retry = await fetch('https://a.klaviyo.com/api/event-bulk-create-jobs', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Klaviyo-API-Key ${apiKey}`,
-          'accept': 'application/json',
-          'content-type': 'application/json',
-          'revision': '2024-10-15',
-        },
-        body: JSON.stringify({
-          data: {
-            type: 'event-bulk-create-job',
-            attributes: {
-              'events-bulk-create': {
-                data: eventData,
-              },
-            },
-          },
-        }),
-      });
-      if (!retry.ok) {
-        const retryErr = await retry.text();
-        return { success: false, error: `Rate limited, retry failed: ${retryErr.slice(0, 200)}` };
-      }
-      return { success: true };
-    }
+  const response = await fetch('https://a.klaviyo.com/api/events', {
+    method: 'POST',
+    headers,
+    body,
+  });
 
-    return { success: false, error: detail };
+  if (response.ok) return true;
+
+  // Retry once on rate limit
+  if (response.status === 429) {
+    const retryAfter = parseInt(response.headers.get('retry-after') || '3', 10);
+    await sleep(retryAfter * 1000);
+    const retry = await fetch('https://a.klaviyo.com/api/events', {
+      method: 'POST',
+      headers,
+      body,
+    });
+    return retry.ok;
   }
 
-  return { success: true };
+  return false;
+}
+
+/**
+ * Send events in parallel batches of CONCURRENCY.
+ * Much faster than sequential, stays within Klaviyo rate limits.
+ */
+const CONCURRENCY = 10;
+const BATCH_DELAY_MS = 500;
+
+async function sendEventsParallel(
+  apiKey: string,
+  events: Array<{ email: string; metricName: string; properties: Record<string, unknown> }>
+): Promise<{ pushed: number; errors: number }> {
+  let pushed = 0;
+  let errors = 0;
+
+  for (let i = 0; i < events.length; i += CONCURRENCY) {
+    const batch = events.slice(i, i + CONCURRENCY);
+
+    const results = await Promise.allSettled(
+      batch.map(e => sendSingleEvent(apiKey, e.email, e.metricName, e.properties))
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) {
+        pushed++;
+      } else {
+        errors++;
+      }
+    }
+
+    // Small delay between batches to respect rate limits
+    if (i + CONCURRENCY < events.length) {
+      await sleep(BATCH_DELAY_MS);
+    }
+  }
+
+  return { pushed, errors };
 }
 
 async function getVisitorsForType(userId: string, type: string, pixelIds: string[], since: string | null) {
@@ -239,38 +242,17 @@ export async function pushEventsForUser(
       continue;
     }
 
-    // Build bulk events payload
-    const bulkEvents = visitors.map(visitor => ({
+    // Build events payload
+    const events = visitors.map(visitor => ({
       email: visitor.email!,
       metricName: EVENT_TYPES[type].metricName,
       properties: buildVisitorProperties(visitor),
     }));
 
-    // Klaviyo bulk API supports up to 10,000 events per request.
-    // Send in chunks of 5,000 to stay well within limits.
-    const CHUNK_SIZE = 5000;
-    let pushed = 0;
-    let errors = 0;
-
-    for (let i = 0; i < bulkEvents.length; i += CHUNK_SIZE) {
-      const chunk = bulkEvents.slice(i, i + CHUNK_SIZE);
-      const result = await sendBulkKlaviyoEvents(integration.api_key, chunk);
-
-      if (result.success) {
-        pushed += chunk.length;
-      } else {
-        console.error(`Bulk push error for ${type} chunk ${i}:`, result.error);
-        errors += chunk.length;
-      }
-
-      // Small delay between chunks
-      if (i + CHUNK_SIZE < bulkEvents.length) {
-        await sleep(1000);
-      }
-    }
-
-    results[type] = { pushed, errors };
-    totalPushed += pushed;
+    // Send in parallel batches (10 concurrent requests at a time)
+    const result = await sendEventsParallel(integration.api_key, events);
+    results[type] = result;
+    totalPushed += result.pushed;
   }
 
   // Update last pushed timestamps
