@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthenticatedUser } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
+import { logEvent } from '@/lib/webhook-logger';
 
 export const config = {
   maxDuration: 300,
@@ -186,6 +187,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq('user_id', user.id)
       .eq('platform', 'klaviyo');
 
+    await logEvent({
+      type: 'api',
+      event_name: 'klaviyo_sync_visitors',
+      status: 'success',
+      message: `Synced ${profiles.length} visitors to Klaviyo list`,
+      user_id: user.id,
+      ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || undefined,
+      request_data: { pixel_id: pixel_id || 'all', list_id: targetListId },
+      response_data: { synced: profiles.length, jobs: jobIds },
+    });
+
     return res.status(200).json({
       success: true,
       synced: profiles.length,
@@ -194,6 +206,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (error) {
     console.error('Error syncing visitors to Klaviyo:', error);
+
+    await logEvent({
+      type: 'api',
+      event_name: 'klaviyo_sync_visitors',
+      status: 'error',
+      message: 'Failed to sync visitors to Klaviyo',
+      user_id: user.id,
+      ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || undefined,
+      request_data: { pixel_id: pixel_id || 'all' },
+      error_details: (error as Error).message,
+    });
+
     return res.status(500).json({ error: (error as Error).message || 'Failed to sync visitors to Klaviyo' });
   }
 }

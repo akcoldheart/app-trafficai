@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthenticatedUser } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
+import { logEvent } from '@/lib/webhook-logger';
 
 export const config = {
   maxDuration: 300,
@@ -302,9 +303,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const result = await pushEventsForUser(user.id, event_types, integration);
+
+    const totalErrors = Object.values(result.results).reduce((sum, r) => sum + r.errors, 0);
+    await logEvent({
+      type: 'api',
+      event_name: 'klaviyo_push_events',
+      status: totalErrors > 0 ? 'warning' : 'success',
+      message: `Pushed ${result.total_pushed} events to Klaviyo (${event_types.join(', ')})${totalErrors > 0 ? `, ${totalErrors} errors` : ''}`,
+      user_id: user.id,
+      ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || undefined,
+      request_data: { event_types },
+      response_data: result.results as Record<string, unknown>,
+    });
+
     return res.status(200).json(result);
   } catch (error) {
     console.error('Push events error:', error);
+
+    await logEvent({
+      type: 'api',
+      event_name: 'klaviyo_push_events',
+      status: 'error',
+      message: 'Failed to push events to Klaviyo',
+      user_id: user.id,
+      ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || undefined,
+      request_data: { event_types },
+      error_details: (error as Error).message,
+    });
+
     return res.status(500).json({ error: 'Failed to push events to Klaviyo' });
   }
 }

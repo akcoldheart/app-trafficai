@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { pushEventsForUser } from '@/pages/api/integrations/klaviyo/push-events';
+import { logEvent } from '@/lib/webhook-logger';
 
 export const config = { maxDuration: 300 };
 
@@ -56,9 +57,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           { api_key: integration.api_key, config }
         );
         results.push({ user_id: integration.user_id, total_pushed: result.total_pushed });
+
+        if (result.total_pushed > 0) {
+          await logEvent({
+            type: 'api',
+            event_name: 'klaviyo_auto_push_events',
+            status: 'success',
+            message: `Auto-pushed ${result.total_pushed} events to Klaviyo (${enabledTypes.join(', ')})`,
+            user_id: integration.user_id,
+            response_data: result.results as Record<string, unknown>,
+          });
+        }
       } catch (err) {
         console.error(`Cron push events error for user ${integration.user_id}:`, err);
         results.push({ user_id: integration.user_id, total_pushed: 0, error: (err as Error).message });
+
+        await logEvent({
+          type: 'api',
+          event_name: 'klaviyo_auto_push_events',
+          status: 'error',
+          message: 'Auto-push events to Klaviyo failed',
+          user_id: integration.user_id,
+          error_details: (err as Error).message,
+        });
       }
     }
 
