@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/push-klaviyo-events",
-      "schedule": "30 * * * *"
+      "schedule": "*/30 * * * *"
     }
   ]
 }

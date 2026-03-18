@@ -1197,7 +1197,7 @@ export default function KlaviyoIntegrationPage() {
                                     Auto-Push New Visitors
                                   </div>
                                   <div className="text-muted small">
-                                    Automatically push events for new visitors every hour. Only enabled event types above will be pushed.
+                                    Automatically push events for new visitors when identified.
                                   </div>
                                 </div>
                                 <label className="form-check form-switch mb-0">
