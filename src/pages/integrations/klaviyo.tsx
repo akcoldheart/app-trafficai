@@ -139,6 +139,7 @@ export default function KlaviyoIntegrationPage() {
   const [pushEventsConfigLoading, setPushEventsConfigLoading] = useState(false);
   const [pushingEvents, setPushingEvents] = useState(false);
   const [pushResults, setPushResults] = useState<{ results: Record<string, PushEventResult>; total_pushed: number } | null>(null);
+  const [autoPushEvents, setAutoPushEvents] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<Toast | null>(null);
@@ -282,6 +283,7 @@ export default function KlaviyoIntegrationPage() {
       if (response.ok) {
         setPushEventsEnabled(data.push_events_enabled || {});
         setPushEventsLastPushed(data.push_events_last_pushed || {});
+        setAutoPushEvents(data.auto_push_events || false);
       }
     } catch (error) {
       console.error('Error fetching push events config:', error);
@@ -302,6 +304,22 @@ export default function KlaviyoIntegrationPage() {
     } catch (error) {
       console.error('Error saving push event config:', error);
       setPushEventsEnabled(prev => ({ ...prev, [type]: !enabled }));
+      showToast('Failed to save setting', 'error');
+    }
+  };
+
+  const handleToggleAutoPush = async (enabled: boolean) => {
+    setAutoPushEvents(enabled);
+    try {
+      await fetch('/api/integrations/klaviyo/push-events-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auto_push_events: enabled }),
+      });
+      showToast(enabled ? 'Auto-push enabled — new visitors will be pushed hourly' : 'Auto-push disabled', 'success');
+    } catch (error) {
+      console.error('Error saving auto-push config:', error);
+      setAutoPushEvents(!enabled);
       showToast('Failed to save setting', 'error');
     }
   };
@@ -1134,6 +1152,32 @@ export default function KlaviyoIntegrationPage() {
                                 </div>
                               </div>
                             ))}
+                          </div>
+
+                          {/* Auto-push toggle */}
+                          <div className="card mb-3">
+                            <div className="card-body p-3">
+                              <div className="d-flex justify-content-between align-items-center">
+                                <div>
+                                  <div className="fw-medium">
+                                    <IconRefresh size={16} className="me-1" />
+                                    Auto-Push New Visitors
+                                  </div>
+                                  <div className="text-muted small">
+                                    Automatically push events for new visitors every hour. Only enabled event types above will be pushed.
+                                  </div>
+                                </div>
+                                <label className="form-check form-switch mb-0">
+                                  <input
+                                    className="form-check-input"
+                                    type="checkbox"
+                                    checked={autoPushEvents}
+                                    onChange={(e) => handleToggleAutoPush(e.target.checked)}
+                                    disabled={!Object.values(pushEventsEnabled).some(Boolean)}
+                                  />
+                                </label>
+                              </div>
+                            </div>
                           </div>
 
                           <button

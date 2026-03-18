@@ -28,11 +28,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       push_events_enabled: config.push_events_enabled || {},
       push_events_last_pushed: config.push_events_last_pushed || {},
+      auto_push_events: config.auto_push_events || false,
     });
   }
 
   if (req.method === 'PUT') {
-    const { push_events_enabled } = req.body;
+    const { push_events_enabled, auto_push_events } = req.body;
 
     const { data: existing } = await supabaseAdmin
       .from('platform_integrations')
@@ -46,6 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const updatedConfig = {
       ...existingConfig,
       push_events_enabled: push_events_enabled !== undefined ? push_events_enabled : existingConfig.push_events_enabled,
+      auto_push_events: auto_push_events !== undefined ? auto_push_events : existingConfig.auto_push_events,
     };
 
     const { error } = await supabaseAdmin

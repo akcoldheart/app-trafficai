@@ -34,8 +34,27 @@ async function getKlaviyoIntegration(userId: string) {
   return { api_key: data.api_key, config: (data.config || {}) as Record<string, unknown> };
 }
 
-async function sendKlaviyoEvent(apiKey: string, email: string, metricName: string, properties: Record<string, unknown>) {
-  const response = await fetch('https://a.klaviyo.com/api/events', {
+/**
+ * Send events using Klaviyo's Bulk Create Events API.
+ * Accepts up to 10,000 events per request — much faster than one-by-one.
+ */
+async function sendBulkKlaviyoEvents(
+  apiKey: string,
+  events: Array<{ email: string; metricName: string; properties: Record<string, unknown> }>
+): Promise<{ success: boolean; error?: string }> {
+  if (events.length === 0) return { success: true };
+
+  const eventData = events.map(e => ({
+    type: 'event-bulk-create' as const,
+    attributes: {
+      profile: { data: { type: 'profile' as const, attributes: { email: e.email } } },
+      metric: { data: { type: 'metric' as const, attributes: { name: e.metricName } } },
+      properties: e.properties,
+      time: new Date().toISOString(),
+    },
+  }));
+
+  const response = await fetch('https://a.klaviyo.com/api/event-bulk-create-jobs', {
     method: 'POST',
     headers: {
       'Authorization': `Klaviyo-API-Key ${apiKey}`,
@@ -45,26 +64,31 @@ async function sendKlaviyoEvent(apiKey: string, email: string, metricName: strin
     },
     body: JSON.stringify({
       data: {
-        type: 'event',
+        type: 'event-bulk-create-job',
         attributes: {
-          metric: { data: { type: 'metric', attributes: { name: metricName } } },
-          profile: { data: { type: 'profile', attributes: { email } } },
-          properties,
-          time: new Date().toISOString(),
+          'events-bulk-create': {
+            data: eventData,
+          },
         },
       },
     }),
   });
 
   if (!response.ok) {
-    const err = await response.json().catch(() => null);
-    const detail = err?.errors?.[0]?.detail || `Klaviyo API error ${response.status}`;
-    console.error('Klaviyo event error:', response.status, detail, 'email:', email, 'metric:', metricName);
+    const errText = await response.text();
+    let detail = `Klaviyo bulk API error ${response.status}`;
+    try {
+      const errJson = JSON.parse(errText);
+      detail = errJson?.errors?.[0]?.detail || detail;
+    } catch {
+      // use default detail
+    }
+    console.error('Klaviyo bulk event error:', response.status, detail);
 
-    // If rate limited, wait and retry once
+    // Retry once on rate limit
     if (response.status === 429) {
       await sleep(5000);
-      const retry = await fetch('https://a.klaviyo.com/api/events', {
+      const retry = await fetch('https://a.klaviyo.com/api/event-bulk-create-jobs', {
         method: 'POST',
         headers: {
           'Authorization': `Klaviyo-API-Key ${apiKey}`,
@@ -74,25 +98,26 @@ async function sendKlaviyoEvent(apiKey: string, email: string, metricName: strin
         },
         body: JSON.stringify({
           data: {
-            type: 'event',
+            type: 'event-bulk-create-job',
             attributes: {
-              metric: { data: { type: 'metric', attributes: { name: metricName } } },
-              profile: { data: { type: 'profile', attributes: { email } } },
-              properties,
-              time: new Date().toISOString(),
+              'events-bulk-create': {
+                data: eventData,
+              },
             },
           },
         }),
       });
       if (!retry.ok) {
-        const retryErr = await retry.json().catch(() => null);
-        throw new Error(retryErr?.errors?.[0]?.detail || `Klaviyo API error ${retry.status} (after retry)`);
+        const retryErr = await retry.text();
+        return { success: false, error: `Rate limited, retry failed: ${retryErr.slice(0, 200)}` };
       }
-      return;
+      return { success: true };
     }
 
-    throw new Error(detail);
+    return { success: false, error: detail };
   }
+
+  return { success: true };
 }
 
 async function getVisitorsForType(userId: string, type: string, pixelIds: string[], since: string | null) {
@@ -118,7 +143,7 @@ async function getVisitorsForType(userId: string, type: string, pixelIds: string
       query = query.gte('total_sessions', 2);
       break;
     case 'pricing_page':
-      // For pricing page, we need a different approach - join with pixel_events
+      // Handled separately
       break;
   }
 
@@ -128,7 +153,6 @@ async function getVisitorsForType(userId: string, type: string, pixelIds: string
 }
 
 async function getPricingPageVisitors(userId: string, pixelIds: string[], since: string | null) {
-  // Get visitor IDs who have pricing page events
   let eventsQuery = supabaseAdmin
     .from('pixel_events')
     .select('visitor_id')
@@ -144,7 +168,6 @@ async function getPricingPageVisitors(userId: string, pixelIds: string[], since:
 
   const visitorIds = Array.from(new Set(events.map(e => e.visitor_id)));
 
-  // Fetch those visitors
   const { data: visitors } = await supabaseAdmin
     .from('visitors')
     .select('email, first_name, last_name, full_name, company, job_title, lead_score, total_sessions, total_pageviews, last_seen_at, city, state, country')
@@ -154,6 +177,123 @@ async function getPricingPageVisitors(userId: string, pixelIds: string[], since:
     .limit(10000);
 
   return visitors || [];
+}
+
+function buildVisitorProperties(visitor: Record<string, unknown>) {
+  return {
+    source: 'Traffic AI',
+    lead_score: visitor.lead_score,
+    company: visitor.company,
+    job_title: visitor.job_title,
+    city: visitor.city,
+    state: visitor.state,
+    country: visitor.country,
+    total_sessions: visitor.total_sessions,
+    total_pageviews: visitor.total_pageviews,
+    first_name: visitor.first_name || (visitor.full_name ? (visitor.full_name as string).split(' ')[0] : null),
+    last_name: visitor.last_name || (visitor.full_name ? (visitor.full_name as string).split(' ').slice(1).join(' ') : null),
+  };
+}
+
+/**
+ * Core push events logic — used by both the manual endpoint and the cron job.
+ */
+export async function pushEventsForUser(
+  userId: string,
+  eventTypes: string[],
+  integration: { api_key: string; config: Record<string, unknown> }
+) {
+  // Get user's pixel IDs
+  const { data: pixels } = await supabaseAdmin
+    .from('pixels')
+    .select('id')
+    .eq('user_id', userId);
+
+  if (!pixels || pixels.length === 0) {
+    return { results: {}, total_pushed: 0 };
+  }
+
+  const pixelIds = pixels.map(p => p.id);
+  const lastPushed = (integration.config.push_events_last_pushed || {}) as Record<string, string>;
+  const results: Record<string, { pushed: number; errors: number }> = {};
+  let totalPushed = 0;
+
+  for (const type of eventTypes) {
+    if (!EVENT_TYPES[type]) continue;
+
+    let visitors;
+    try {
+      if (type === 'pricing_page') {
+        visitors = await getPricingPageVisitors(userId, pixelIds, lastPushed[type] || null);
+      } else {
+        visitors = await getVisitorsForType(userId, type, pixelIds, lastPushed[type] || null);
+      }
+    } catch (error) {
+      console.error(`Error fetching visitors for ${type}:`, error);
+      results[type] = { pushed: 0, errors: 1 };
+      continue;
+    }
+
+    if (visitors.length === 0) {
+      results[type] = { pushed: 0, errors: 0 };
+      continue;
+    }
+
+    // Build bulk events payload
+    const bulkEvents = visitors.map(visitor => ({
+      email: visitor.email!,
+      metricName: EVENT_TYPES[type].metricName,
+      properties: buildVisitorProperties(visitor),
+    }));
+
+    // Klaviyo bulk API supports up to 10,000 events per request.
+    // Send in chunks of 5,000 to stay well within limits.
+    const CHUNK_SIZE = 5000;
+    let pushed = 0;
+    let errors = 0;
+
+    for (let i = 0; i < bulkEvents.length; i += CHUNK_SIZE) {
+      const chunk = bulkEvents.slice(i, i + CHUNK_SIZE);
+      const result = await sendBulkKlaviyoEvents(integration.api_key, chunk);
+
+      if (result.success) {
+        pushed += chunk.length;
+      } else {
+        console.error(`Bulk push error for ${type} chunk ${i}:`, result.error);
+        errors += chunk.length;
+      }
+
+      // Small delay between chunks
+      if (i + CHUNK_SIZE < bulkEvents.length) {
+        await sleep(1000);
+      }
+    }
+
+    results[type] = { pushed, errors };
+    totalPushed += pushed;
+  }
+
+  // Update last pushed timestamps
+  const newLastPushed = { ...lastPushed };
+  const now = new Date().toISOString();
+  for (const type of eventTypes) {
+    if (EVENT_TYPES[type] && results[type]?.pushed > 0) {
+      newLastPushed[type] = now;
+    }
+  }
+
+  const updatedConfig = {
+    ...integration.config,
+    push_events_last_pushed: newLastPushed,
+  };
+
+  await supabaseAdmin
+    .from('platform_integrations')
+    .update({ config: updatedConfig, updated_at: now })
+    .eq('user_id', userId)
+    .eq('platform', 'klaviyo');
+
+  return { results, total_pushed: totalPushed };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -174,99 +314,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'event_types array is required' });
   }
 
-  // Get user's pixel IDs
-  const { data: pixels } = await supabaseAdmin
-    .from('pixels')
-    .select('id')
-    .eq('user_id', user.id);
-
-  if (!pixels || pixels.length === 0) {
-    return res.status(400).json({ error: 'No pixels found' });
+  try {
+    const result = await pushEventsForUser(user.id, event_types, integration);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Push events error:', error);
+    return res.status(500).json({ error: 'Failed to push events to Klaviyo' });
   }
-
-  const pixelIds = pixels.map(p => p.id);
-  const lastPushed = (integration.config.push_events_last_pushed || {}) as Record<string, string>;
-  const results: Record<string, { pushed: number; errors: number }> = {};
-  let totalPushed = 0;
-
-  for (const type of event_types) {
-    if (!EVENT_TYPES[type]) continue;
-
-    const since = lastPushed[type] || null;
-    let visitors;
-
-    try {
-      if (type === 'pricing_page') {
-        visitors = await getPricingPageVisitors(user.id, pixelIds, since);
-      } else {
-        visitors = await getVisitorsForType(user.id, type, pixelIds, since);
-      }
-    } catch (error) {
-      console.error(`Error fetching visitors for ${type}:`, error);
-      results[type] = { pushed: 0, errors: 1 };
-      continue;
-    }
-
-    let pushed = 0;
-    let errors = 0;
-
-    // Send in batches of 10 with delays to respect Klaviyo rate limits
-    for (let i = 0; i < visitors.length; i += 10) {
-      const batch = visitors.slice(i, i + 10);
-
-      for (const visitor of batch) {
-        try {
-          await sendKlaviyoEvent(integration.api_key, visitor.email!, EVENT_TYPES[type].metricName, {
-            source: 'Traffic AI',
-            lead_score: visitor.lead_score,
-            company: visitor.company,
-            job_title: visitor.job_title,
-            city: visitor.city,
-            state: visitor.state,
-            country: visitor.country,
-            total_sessions: visitor.total_sessions,
-            total_pageviews: visitor.total_pageviews,
-            first_name: visitor.first_name || (visitor.full_name ? visitor.full_name.split(' ')[0] : null),
-            last_name: visitor.last_name || (visitor.full_name ? visitor.full_name.split(' ').slice(1).join(' ') : null),
-          });
-          pushed++;
-        } catch (error) {
-          console.error(`Error pushing event for ${visitor.email}:`, error);
-          errors++;
-        }
-        // Small delay between individual requests to avoid burst rate limiting
-        await sleep(100);
-      }
-
-      // Longer delay between batches
-      if (i + 10 < visitors.length) {
-        await sleep(2000);
-      }
-    }
-
-    results[type] = { pushed, errors };
-    totalPushed += pushed;
-  }
-
-  // Update last pushed timestamps
-  const newLastPushed = { ...lastPushed };
-  const now = new Date().toISOString();
-  for (const type of event_types) {
-    if (EVENT_TYPES[type] && results[type]?.pushed > 0) {
-      newLastPushed[type] = now;
-    }
-  }
-
-  const updatedConfig = {
-    ...integration.config,
-    push_events_last_pushed: newLastPushed,
-  };
-
-  await supabaseAdmin
-    .from('platform_integrations')
-    .update({ config: updatedConfig, updated_at: now })
-    .eq('user_id', user.id)
-    .eq('platform', 'klaviyo');
-
-  return res.status(200).json({ results, total_pushed: totalPushed });
 }
