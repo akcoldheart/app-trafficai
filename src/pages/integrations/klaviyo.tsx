@@ -515,7 +515,7 @@ export default function KlaviyoIntegrationPage() {
 
   const filteredMetrics = showAllMetrics
     ? metricsData
-    : metricsData.filter(m => m.name.toLowerCase().startsWith('trafficai'));
+    : metricsData.filter(m => m.name?.toLowerCase().startsWith('trafficai'));
 
   if (loading) {
     return (
@@ -1091,8 +1091,8 @@ export default function KlaviyoIntegrationPage() {
                                       style={{ cursor: 'pointer' }}
                                       onClick={() => setSelectedMetric(metric)}
                                     >
-                                      <td className="fw-medium">{metric.name}</td>
-                                      <td className="text-muted">{metric.integration_name}</td>
+                                      <td className="fw-medium">{metric.name || 'Unnamed'}</td>
+                                      <td className="text-muted">{metric.integration_name || ''}</td>
                                       <td>
                                         {metric.integration_category && (
                                           <span className="badge bg-azure-lt">{metric.integration_category}</span>

@@ -18,6 +18,14 @@ async function getKlaviyoApiKey(userId: string): Promise<string | null> {
   return data?.api_key || null;
 }
 
+interface KlaviyoMetricItem {
+  id?: string;
+  attributes?: {
+    name?: string;
+    integration?: { name?: string; category?: string } | null;
+  };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -32,25 +40,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const response = await fetch('https://a.klaviyo.com/api/metrics', {
-      headers: {
-        'Authorization': `Klaviyo-API-Key ${apiKey}`,
-        'accept': 'application/json',
-        'revision': '2024-10-15',
-      },
-    });
+    const allMetrics: KlaviyoMetricItem[] = [];
+    let nextUrl: string | null = 'https://a.klaviyo.com/api/metrics?page[size]=50';
 
-    if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch Klaviyo metrics' });
+    // Paginate through all metrics (Klaviyo returns max 50 per page)
+    while (nextUrl) {
+      const pageResponse: Response = await fetch(nextUrl, {
+        headers: {
+          'Authorization': `Klaviyo-API-Key ${apiKey}`,
+          'accept': 'application/json',
+          'revision': '2024-10-15',
+        },
+      });
+
+      if (!pageResponse.ok) {
+        return res.status(pageResponse.status).json({ error: 'Failed to fetch Klaviyo metrics' });
+      }
+
+      const pageData: { data?: KlaviyoMetricItem[]; links?: { next?: string } } = await pageResponse.json();
+      allMetrics.push(...(pageData.data || []));
+      nextUrl = pageData.links?.next || null;
+
+      // Safety limit — avoid infinite loops
+      if (allMetrics.length > 1000) break;
     }
 
-    const data = await response.json();
-    const metrics = (data.data || []).map((m: { id: string; attributes: { name: string; integration: { name: string; category: string } } }) => ({
-      id: m.id,
-      name: m.attributes.name,
-      integration_name: m.attributes.integration?.name || '',
-      integration_category: m.attributes.integration?.category || '',
-    }));
+    const metrics = allMetrics
+      .filter((m) => m?.id && m?.attributes?.name)
+      .map((m) => ({
+        id: m.id!,
+        name: m.attributes!.name!,
+        integration_name: m.attributes?.integration?.name || '',
+        integration_category: m.attributes?.integration?.category || '',
+      }));
 
     return res.status(200).json({ metrics });
   } catch (error) {
