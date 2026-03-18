@@ -73,10 +73,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const metrics = allMetrics
       .filter((m) => m?.id && m?.attributes?.name)
       .map((m) => ({
-        id: m.id!,
-        name: m.attributes!.name!,
-        integration_name: m.attributes?.integration?.name || '',
-        integration_category: m.attributes?.integration?.category || '',
+        id: String(m.id),
+        name: String(m.attributes!.name),
+        integration_name: typeof m.attributes?.integration?.name === 'string' ? m.attributes.integration.name : '',
+        integration_category: typeof m.attributes?.integration?.category === 'string' ? m.attributes.integration.category : '',
       }));
 
     return res.status(200).json({ metrics });

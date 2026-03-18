@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -25,6 +25,29 @@ import {
   IconChevronLeft,
 } from '@tabler/icons-react';
 import Link from 'next/link';
+
+class MetricsErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: string }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: '' };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="alert alert-warning py-2 small">
+          Something went wrong loading metrics. <button className="btn btn-sm btn-outline-secondary ms-2" onClick={() => this.setState({ hasError: false, error: '' })}>Try again</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface KlaviyoIntegration {
   id: string;
@@ -953,7 +976,7 @@ export default function KlaviyoIntegrationPage() {
 
                   {/* Metrics Tab */}
                   {activeTab === 'metrics' && (
-                    <div>
+                    <MetricsErrorBoundary><div>
                       {selectedMetric ? (
                         /* Metric Detail View */
                         <div>
@@ -1095,17 +1118,17 @@ export default function KlaviyoIntegrationPage() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {filteredMetrics.map((metric) => (
+                                  {filteredMetrics.map((metric, idx) => (
                                     <tr
-                                      key={metric.id}
+                                      key={metric.id || idx}
                                       style={{ cursor: 'pointer' }}
                                       onClick={() => setSelectedMetric(metric)}
                                     >
-                                      <td className="fw-medium">{metric.name || 'Unnamed'}</td>
-                                      <td className="text-muted">{metric.integration_name || ''}</td>
+                                      <td className="fw-medium">{String(metric.name || 'Unnamed')}</td>
+                                      <td className="text-muted">{String(metric.integration_name || '')}</td>
                                       <td>
                                         {metric.integration_category && (
-                                          <span className="badge bg-azure-lt">{metric.integration_category}</span>
+                                          <span className="badge bg-azure-lt">{String(metric.integration_category)}</span>
                                         )}
                                       </td>
                                     </tr>
@@ -1116,7 +1139,7 @@ export default function KlaviyoIntegrationPage() {
                           )}
                         </div>
                       )}
-                    </div>
+                    </div></MetricsErrorBoundary>
                   )}
 
                   {/* Push Events Tab */}
