@@ -41,7 +41,8 @@ async function sendSingleEvent(
   apiKey: string,
   email: string,
   metricName: string,
-  properties: Record<string, unknown>
+  properties: Record<string, unknown>,
+  uniqueId: string
 ): Promise<boolean> {
   const body = JSON.stringify({
     data: {
@@ -50,6 +51,7 @@ async function sendSingleEvent(
         metric: { data: { type: 'metric', attributes: { name: metricName } } },
         profile: { data: { type: 'profile', attributes: { email } } },
         properties,
+        unique_id: uniqueId,
         time: new Date().toISOString(),
       },
     },
@@ -94,7 +96,7 @@ const BATCH_DELAY_MS = 500;
 
 async function sendEventsParallel(
   apiKey: string,
-  events: Array<{ email: string; metricName: string; properties: Record<string, unknown> }>
+  events: Array<{ email: string; metricName: string; properties: Record<string, unknown>; uniqueId: string }>
 ): Promise<{ pushed: number; errors: number }> {
   let pushed = 0;
   let errors = 0;
@@ -103,7 +105,7 @@ async function sendEventsParallel(
     const batch = events.slice(i, i + CONCURRENCY);
 
     const results = await Promise.allSettled(
-      batch.map(e => sendSingleEvent(apiKey, e.email, e.metricName, e.properties))
+      batch.map(e => sendSingleEvent(apiKey, e.email, e.metricName, e.properties, e.uniqueId))
     );
 
     for (const result of results) {
@@ -242,11 +244,13 @@ export async function pushEventsForUser(
       continue;
     }
 
-    // Build events payload
+    // Build events payload with unique_id to prevent duplicates on re-push.
+    // unique_id = email + event type — Klaviyo deduplicates events with the same unique_id.
     const events = visitors.map(visitor => ({
       email: visitor.email!,
       metricName: EVENT_TYPES[type].metricName,
       properties: buildVisitorProperties(visitor),
+      uniqueId: `trafficai_${type}_${visitor.email}`,
     }));
 
     // Send in parallel batches (10 concurrent requests at a time)
