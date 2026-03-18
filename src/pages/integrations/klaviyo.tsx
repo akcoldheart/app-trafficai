@@ -126,6 +126,7 @@ export default function KlaviyoIntegrationPage() {
   // Metrics
   const [metricsData, setMetricsData] = useState<KlaviyoMetric[]>([]);
   const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<KlaviyoMetric | null>(null);
   const [metricAggregates, setMetricAggregates] = useState<MetricDataPoint[]>([]);
   const [aggregatesLoading, setAggregatesLoading] = useState(false);
@@ -244,13 +245,17 @@ export default function KlaviyoIntegrationPage() {
   const fetchMetrics = useCallback(async () => {
     try {
       setMetricsLoading(true);
+      setMetricsError(null);
       const response = await fetch('/api/integrations/klaviyo/metrics');
       const data = await response.json();
       if (response.ok) {
         setMetricsData(data.metrics || []);
+      } else {
+        setMetricsError(data.detail || data.error || 'Failed to load metrics');
       }
     } catch (error) {
       console.error('Error fetching metrics:', error);
+      setMetricsError('Failed to load metrics');
     } finally {
       setMetricsLoading(false);
     }
@@ -1069,6 +1074,11 @@ export default function KlaviyoIntegrationPage() {
                           {metricsLoading ? (
                             <div className="d-flex justify-content-center py-4">
                               <IconLoader2 size={24} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+                            </div>
+                          ) : metricsError ? (
+                            <div className="alert alert-warning py-2 small">
+                              <IconAlertCircle size={16} className="me-1" />
+                              {metricsError}. Make sure your Klaviyo API key has <strong>Metrics</strong> read access enabled.
                             </div>
                           ) : filteredMetrics.length === 0 ? (
                             <div className="text-muted text-center py-4">

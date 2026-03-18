@@ -41,9 +41,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const allMetrics: KlaviyoMetricItem[] = [];
-    let nextUrl: string | null = 'https://a.klaviyo.com/api/metrics?page[size]=50';
+    let nextUrl: string | null = 'https://a.klaviyo.com/api/metrics';
 
-    // Paginate through all metrics (Klaviyo returns max 50 per page)
+    // Paginate through all metrics
     while (nextUrl) {
       const pageResponse: Response = await fetch(nextUrl, {
         headers: {
@@ -54,14 +54,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
 
       if (!pageResponse.ok) {
-        return res.status(pageResponse.status).json({ error: 'Failed to fetch Klaviyo metrics' });
+        const errBody = await pageResponse.text().catch(() => 'unknown');
+        console.error('Klaviyo metrics API error:', pageResponse.status, errBody);
+        return res.status(500).json({
+          error: 'Failed to fetch Klaviyo metrics',
+          detail: `Klaviyo API returned ${pageResponse.status}`,
+        });
       }
 
       const pageData: { data?: KlaviyoMetricItem[]; links?: { next?: string } } = await pageResponse.json();
       allMetrics.push(...(pageData.data || []));
       nextUrl = pageData.links?.next || null;
 
-      // Safety limit — avoid infinite loops
+      // Safety limit
       if (allMetrics.length > 1000) break;
     }
 
