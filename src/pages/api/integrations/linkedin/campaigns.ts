@@ -98,7 +98,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const linkedinContacts = contacts.filter(c => c.linkedin_url);
 
       if (linkedinContacts.length === 0) {
-        return res.status(400).json({ error: 'No contacts with LinkedIn URLs found in the selected source' });
+        return res.status(400).json({
+          error: 'No contacts with LinkedIn URLs found in the selected source',
+          debug: {
+            total_contacts: contacts.length,
+            sample_linkedin_urls: contacts.slice(0, 5).map(c => c.linkedin_url || null),
+            source_pixel_id: source_pixel_id || null,
+            source_audience_id: source_audience_id || null,
+          },
+        });
       }
 
       // Create campaign

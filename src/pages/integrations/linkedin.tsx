@@ -309,7 +309,10 @@ export default function LinkedInIntegrationPage() {
         body: JSON.stringify(body),
       });
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to create campaign');
+      if (!resp.ok) {
+        const debugInfo = data.debug ? ` (${data.debug.total_contacts} contacts fetched, sample linkedin_urls: ${JSON.stringify(data.debug.sample_linkedin_urls)})` : '';
+        throw new Error((data.error || 'Failed to create campaign') + debugInfo);
+      }
 
       showToast(data.message || 'Campaign created', 'success');
       setShowNewCampaign(false);
