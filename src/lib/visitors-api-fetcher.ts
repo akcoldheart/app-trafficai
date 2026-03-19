@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
+import { syncVisitorsForUser } from '@/pages/api/integrations/klaviyo/sync-visitors';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -529,6 +530,52 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       },
       user_id: pixel.user_id,
     });
+
+    // Auto-sync new visitors to Klaviyo list if enabled
+    if (toInsert.length > 0) {
+      try {
+        const { data: klaviyoIntegration } = await supabaseAdmin
+          .from('platform_integrations')
+          .select('api_key, config')
+          .eq('user_id', pixel.user_id)
+          .eq('platform', 'klaviyo')
+          .eq('is_connected', true)
+          .single();
+
+        if (klaviyoIntegration) {
+          const kConfig = (klaviyoIntegration.config || {}) as Record<string, unknown>;
+          const autoSyncEnabled = kConfig.auto_sync_visitors === true;
+          const defaultListId = kConfig.default_list_id as string | undefined;
+
+          if (autoSyncEnabled && defaultListId) {
+            const autoSyncPixelId = kConfig.auto_sync_pixel_id as string | undefined;
+            // Only sync if this pixel matches the configured auto-sync pixel (or no specific pixel set)
+            if (!autoSyncPixelId || autoSyncPixelId === pixel.id) {
+              const syncResult = await syncVisitorsForUser(
+                pixel.user_id,
+                klaviyoIntegration.api_key,
+                defaultListId,
+                autoSyncPixelId || null
+              );
+
+              if (syncResult.synced > 0) {
+                await logEvent({
+                  type: 'api',
+                  event_name: 'klaviyo_auto_sync_visitors',
+                  status: 'success',
+                  message: `Auto-synced ${syncResult.synced} visitors to Klaviyo list (triggered by ${toInsert.length} new visitors)`,
+                  user_id: pixel.user_id,
+                  response_data: { synced: syncResult.synced, triggered_by_new: toInsert.length },
+                });
+              }
+            }
+          }
+        }
+      } catch (syncErr) {
+        // Don't fail the visitor fetch if Klaviyo sync fails
+        console.error(`[visitors-api-fetcher] Klaviyo auto-sync error for pixel ${pixel.id}:`, (syncErr as Error).message);
+      }
+    }
 
     const allDbErrors = [...insertErrors, ...updateErrors];
     return {

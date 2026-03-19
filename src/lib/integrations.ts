@@ -120,31 +120,56 @@ export async function getAllIntegrationStatuses(userId: string) {
 // Shared data fetching for sync operations
 
 export async function getVisitorsForSync(userId: string, pixelId?: string) {
-  let query = supabaseAdmin
-    .from('visitors')
-    .select('email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata, phone')
-    .eq('user_id', userId)
-    .not('email', 'is', null);
+  // Paginate to fetch ALL visitors (Supabase caps at 1000 rows per request)
+  const PAGE_SIZE = 1000;
+  let allData: any[] = [];
+  let from = 0;
 
-  if (pixelId) {
-    query = query.eq('pixel_id', pixelId);
+  while (true) {
+    let query = supabaseAdmin
+      .from('visitors')
+      .select('email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata, phone')
+      .eq('user_id', userId)
+      .not('email', 'is', null);
+
+    if (pixelId) {
+      query = query.eq('pixel_id', pixelId);
+    }
+
+    const { data: page, error } = await query.range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!page || page.length === 0) break;
+
+    allData = allData.concat(page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
   }
 
-  const { data, error } = await query.limit(10000);
-  if (error) throw error;
-  return data || [];
+  return allData;
 }
 
 export async function getAudienceContactsForSync(audienceId: string) {
-  const { data, error } = await supabaseAdmin
-    .from('audience_contacts')
-    .select('email, first_name, last_name, full_name, company, job_title, phone, city, state, country, linkedin_url, seniority, department, data')
-    .eq('audience_id', audienceId)
-    .not('email', 'is', null)
-    .limit(10000);
+  const PAGE_SIZE = 1000;
+  let allData: any[] = [];
+  let from = 0;
 
-  if (error) throw error;
-  return data || [];
+  while (true) {
+    const { data: page, error } = await supabaseAdmin
+      .from('audience_contacts')
+      .select('email, first_name, last_name, full_name, company, job_title, phone, city, state, country, linkedin_url, seniority, department, data')
+      .eq('audience_id', audienceId)
+      .not('email', 'is', null)
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw error;
+    if (!page || page.length === 0) break;
+
+    allData = allData.concat(page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return allData;
 }
 
 // Shared utilities

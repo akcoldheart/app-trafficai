@@ -110,20 +110,35 @@ export async function syncVisitorsForUser(
   listId: string,
   pixelId?: string | null
 ): Promise<{ synced: number; jobs: string[] }> {
-  let query = supabaseAdmin
-    .from('visitors')
-    .select('email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata')
-    .eq('user_id', userId)
-    .not('email', 'is', null);
+  // Paginate to fetch ALL visitors (Supabase caps at 1000 rows per request)
+  const PAGE_SIZE = 1000;
+  let allVisitors: any[] = [];
+  let from = 0;
 
-  if (pixelId) {
-    query = query.eq('pixel_id', pixelId);
+  while (true) {
+    let query = supabaseAdmin
+      .from('visitors')
+      .select('email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata')
+      .eq('user_id', userId)
+      .not('email', 'is', null);
+
+    if (pixelId) {
+      query = query.eq('pixel_id', pixelId);
+    }
+
+    const { data: page, error: visitorsError } = await query
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (visitorsError) throw visitorsError;
+    if (!page || page.length === 0) break;
+
+    allVisitors = allVisitors.concat(page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
   }
 
-  const { data: visitors, error: visitorsError } = await query.limit(10000);
-
-  if (visitorsError) throw visitorsError;
-  if (!visitors || visitors.length === 0) return { synced: 0, jobs: [] };
+  const visitors = allVisitors;
+  if (visitors.length === 0) return { synced: 0, jobs: [] };
 
   const profiles: KlaviyoProfile[] = visitors
     .filter((v) => v.email)
