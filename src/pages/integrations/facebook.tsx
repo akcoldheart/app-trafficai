@@ -345,10 +345,18 @@ export default function FacebookIntegrationPage() {
                     <h4 className="mb-3">How to get your Facebook App credentials</h4>
                     <ol className="mb-0" style={{ paddingLeft: '1.25rem' }}>
                       <li className="mb-2">Go to <strong>developers.facebook.com</strong> and create an app (type: Business)</li>
-                      <li className="mb-2">In your app dashboard, go to <strong>Settings &rarr; Basic</strong></li>
-                      <li className="mb-2">Copy your <strong>App ID</strong> and <strong>App Secret</strong></li>
-                      <li className="mb-2">Under <strong>Facebook Login &rarr; Settings</strong>, add your callback URL</li>
-                      <li className="mb-2">Paste your credentials below and click Connect</li>
+                      <li className='mb-2'>Click "my apps" in the <strong>top right</strong> corner</li>
+                      <li className='mb-2'> Click "create app" on the  <strong>right side</strong> </li>
+                      <li className="mb-2">Fill in app details "App name" and "Contact email" click next</li>
+                      <li className='mb-2'>Select the "All" radial button then "measure ad performance data with marketing API" click next</li>
+                      <li className='mb-2'>Select the business portfolio you would like to connect this app to, click next</li>
+                      <li className='mb-2'>In your app dashboard, go to Settings → Basic</li>
+                      <li className='mb-2'>Click next, verify data is correct and click next</li>
+                      <li className='mb-2'>Copy your App ID and App Secret</li>
+                      <li className='mb-2'>Go to Facebook Login → Settings.</li>
+                      <li className='mb-2'>Turn on: (Client OAuth Login) (Web OAuth Login)</li>
+                      <li className='mb-2'>In Valid OAuth Redirect URIs, paste https://app.trafficai.io/api/integrations/facebook/callback and click enter</li>
+                      
                     </ol>
                   </div>
 
