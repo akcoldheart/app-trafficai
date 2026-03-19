@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
-import { syncVisitorsForUser } from '@/pages/api/integrations/klaviyo/sync-visitors';
+import { addProfilesToKlaviyo, formatPhoneE164 as formatPhoneKlaviyo } from '@/pages/api/integrations/klaviyo/sync-visitors';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -531,12 +531,12 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       user_id: pixel.user_id,
     });
 
-    // Auto-sync new visitors to Klaviyo list if enabled
+    // Auto-sync ONLY new visitors to Klaviyo list if enabled
     if (toInsert.length > 0) {
       try {
         const { data: klaviyoIntegration } = await supabaseAdmin
           .from('platform_integrations')
-          .select('api_key, config, last_synced_at')
+          .select('api_key, config')
           .eq('user_id', pixel.user_id)
           .eq('platform', 'klaviyo')
           .eq('is_connected', true)
@@ -549,24 +549,57 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
 
           if (autoSyncEnabled && defaultListId) {
             const autoSyncPixelId = kConfig.auto_sync_pixel_id as string | undefined;
-            // Only sync if this pixel matches the configured auto-sync pixel (or no specific pixel set)
             if (!autoSyncPixelId || autoSyncPixelId === pixel.id) {
-              const syncResult = await syncVisitorsForUser(
-                pixel.user_id,
-                klaviyoIntegration.api_key,
-                defaultListId,
-                autoSyncPixelId || null,
-                klaviyoIntegration.last_synced_at || null // incremental: only new/updated since last sync
-              );
+              // Build Klaviyo profiles directly from the newly inserted records — no DB re-query
+              const newProfiles = toInsert
+                .filter(v => v.email)
+                .map(visitor => {
+                  const meta = (visitor.metadata || {}) as Record<string, unknown>;
+                  const phone = meta?.phone || meta?.PHONE || meta?.Phone || meta?.phone_number || meta?.MOBILE_PHONE || undefined;
+                  return {
+                    type: 'profile' as const,
+                    attributes: {
+                      email: visitor.email!,
+                      first_name: visitor.first_name || (visitor.full_name ? visitor.full_name.split(' ')[0] : undefined),
+                      last_name: visitor.last_name || (visitor.full_name ? visitor.full_name.split(' ').slice(1).join(' ') : undefined),
+                      organization: visitor.company || undefined,
+                      title: visitor.job_title || undefined,
+                      phone_number: phone ? formatPhoneKlaviyo(String(phone)) : undefined,
+                      location: {
+                        city: visitor.city || undefined,
+                        region: visitor.state || undefined,
+                        country: visitor.country || undefined,
+                      },
+                      properties: {
+                        source: 'Traffic AI',
+                        linkedin_url: visitor.linkedin_url || undefined,
+                        lead_score: visitor.lead_score || undefined,
+                        total_pageviews: visitor.total_pageviews || undefined,
+                        total_sessions: visitor.total_sessions || undefined,
+                        first_seen_at: visitor.first_seen_at || undefined,
+                        last_seen_at: visitor.last_seen_at || undefined,
+                      },
+                    },
+                  };
+                });
 
-              if (syncResult.synced > 0) {
+              if (newProfiles.length > 0) {
+                await addProfilesToKlaviyo(klaviyoIntegration.api_key, defaultListId, newProfiles);
+
+                // Update last synced timestamp
+                await supabaseAdmin
+                  .from('platform_integrations')
+                  .update({ last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+                  .eq('user_id', pixel.user_id)
+                  .eq('platform', 'klaviyo');
+
                 await logEvent({
                   type: 'api',
                   event_name: 'klaviyo_auto_sync_visitors',
                   status: 'success',
-                  message: `Auto-synced ${syncResult.synced} visitors to Klaviyo list (triggered by ${toInsert.length} new visitors)`,
+                  message: `Auto-synced ${newProfiles.length} new visitors to Klaviyo list`,
                   user_id: pixel.user_id,
-                  response_data: { synced: syncResult.synced, triggered_by_new: toInsert.length },
+                  response_data: { synced: newProfiles.length, triggered_by_new: toInsert.length },
                 });
               }
             }

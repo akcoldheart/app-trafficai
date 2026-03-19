@@ -31,7 +31,7 @@ interface KlaviyoProfile {
 }
 
 // Format phone to E.164 format for Klaviyo (e.g. "858-405-7845" -> "+18584057845")
-function formatPhoneE164(phone: string): string {
+export function formatPhoneE164(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('+')) return phone;
   if (digits.length === 10) return `+1${digits}`;
@@ -53,7 +53,7 @@ async function getKlaviyoIntegration(userId: string) {
   return { api_key: data.api_key, default_list_id: config.default_list_id as string | null };
 }
 
-async function addProfilesToKlaviyo(apiKey: string, listId: string, profiles: KlaviyoProfile[]) {
+export async function addProfilesToKlaviyo(apiKey: string, listId: string, profiles: KlaviyoProfile[]) {
   // Step 1: Create/update profiles in batches of 100 (Klaviyo limit)
   const batchSize = 100;
   const profileIds: string[] = [];
@@ -129,9 +129,13 @@ export async function syncVisitorsForUser(
       query = query.eq('pixel_id', pixelId);
     }
 
-    // Incremental: only fetch visitors added or updated since last sync
+    // Incremental: only fetch visitors created since last sync
+    // Note: we use created_at (not updated_at) because the visitor API fetcher
+    // updates all existing visitors' updated_at on every run, which would cause
+    // a full re-sync every time. New visitors from the fetcher trigger an immediate
+    // sync directly, so the cron only needs to catch any that were missed.
     if (since) {
-      query = query.or(`created_at.gt.${since},updated_at.gt.${since}`);
+      query = query.gt('created_at', since);
     }
 
     const { data: page, error: visitorsError } = await query
