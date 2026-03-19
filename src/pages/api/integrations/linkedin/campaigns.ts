@@ -88,23 +88,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Fetch contacts with LinkedIn URLs
-      let contacts: { email?: string | null; linkedin_url?: string | null; full_name?: string | null; first_name?: string | null; last_name?: string | null }[];
+      // For pixels, visitors are stored with the pixel owner's user_id (which may differ
+      // from the logged-in user if they have access to shared/team pixels)
+      let contacts: any[];
       if (source_pixel_id) {
-        contacts = await getVisitorsForSync(user.id, source_pixel_id);
+        const { data: pixelData } = await supabaseAdmin
+          .from('pixels')
+          .select('user_id')
+          .eq('id', source_pixel_id)
+          .single();
+        const pixelOwnerId = pixelData?.user_id || user.id;
+        contacts = await getVisitorsForSync(pixelOwnerId, source_pixel_id);
       } else {
         contacts = await getAudienceContactsForSync(source_audience_id);
       }
 
-      const linkedinContacts = contacts.filter(c => c.linkedin_url);
+      const linkedinContacts = contacts.filter((c: any) => c.linkedin_url && c.linkedin_url.trim() !== '');
 
       if (linkedinContacts.length === 0) {
         return res.status(400).json({
           error: 'No contacts with LinkedIn URLs found in the selected source',
           debug: {
             total_contacts: contacts.length,
-            sample_linkedin_urls: contacts.slice(0, 5).map(c => c.linkedin_url || null),
+            sample_linkedin_urls: contacts.slice(0, 5).map((c: any) => c.linkedin_url || null),
             source_pixel_id: source_pixel_id || null,
             source_audience_id: source_audience_id || null,
+            user_id: user.id,
           },
         });
       }
