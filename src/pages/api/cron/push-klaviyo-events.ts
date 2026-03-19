@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Find all connected Klaviyo integrations that have push events enabled
     const { data: integrations, error } = await supabaseAdmin
       .from('platform_integrations')
-      .select('user_id, api_key, config')
+      .select('user_id, api_key, config, last_synced_at')
       .eq('platform', 'klaviyo')
       .eq('is_connected', true);
 
@@ -51,7 +51,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             integration.user_id,
             integration.api_key,
             defaultListId,
-            autoSyncPixelId || null
+            autoSyncPixelId || null,
+            integration.last_synced_at || null // incremental: only new/updated since last sync
           );
 
           if (syncResult.synced > 0) {

@@ -103,14 +103,17 @@ async function addProfilesToKlaviyo(apiKey: string, listId: string, profiles: Kl
 
 /**
  * Core sync logic — used by both the manual endpoint and the cron auto-sync.
+ * When `since` is provided, only visitors created or updated after that timestamp are synced (incremental).
+ * When `since` is null (manual sync), all visitors are synced (full sync).
  */
 export async function syncVisitorsForUser(
   userId: string,
   apiKey: string,
   listId: string,
-  pixelId?: string | null
+  pixelId?: string | null,
+  since?: string | null
 ): Promise<{ synced: number; jobs: string[] }> {
-  // Paginate to fetch ALL visitors (Supabase caps at 1000 rows per request)
+  // Paginate to fetch visitors (Supabase caps at 1000 rows per request)
   const PAGE_SIZE = 1000;
   let allVisitors: any[] = [];
   let from = 0;
@@ -124,6 +127,11 @@ export async function syncVisitorsForUser(
 
     if (pixelId) {
       query = query.eq('pixel_id', pixelId);
+    }
+
+    // Incremental: only fetch visitors added or updated since last sync
+    if (since) {
+      query = query.or(`created_at.gt.${since},updated_at.gt.${since}`);
     }
 
     const { data: page, error: visitorsError } = await query

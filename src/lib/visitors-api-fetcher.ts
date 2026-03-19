@@ -536,7 +536,7 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       try {
         const { data: klaviyoIntegration } = await supabaseAdmin
           .from('platform_integrations')
-          .select('api_key, config')
+          .select('api_key, config, last_synced_at')
           .eq('user_id', pixel.user_id)
           .eq('platform', 'klaviyo')
           .eq('is_connected', true)
@@ -555,7 +555,8 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
                 pixel.user_id,
                 klaviyoIntegration.api_key,
                 defaultListId,
-                autoSyncPixelId || null
+                autoSyncPixelId || null,
+                klaviyoIntegration.last_synced_at || null // incremental: only new/updated since last sync
               );
 
               if (syncResult.synced > 0) {
