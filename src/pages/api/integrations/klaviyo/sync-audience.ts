@@ -27,6 +27,10 @@ interface KlaviyoProfile {
       country?: string;
     };
     properties?: Record<string, unknown>;
+    subscriptions?: {
+      email?: { marketing: { consent: 'SUBSCRIBED' | 'UNSUBSCRIBED' } };
+      sms?: { marketing: { consent: 'SUBSCRIBED' | 'UNSUBSCRIBED' } };
+    };
   };
 }
 
@@ -133,6 +137,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
       .map((contact) => {
         const email = contact.email!.split(',')[0].trim();
+        const formattedPhone = contact.phone ? formatPhoneE164(contact.phone) : undefined;
         return {
         type: 'profile' as const,
         attributes: {
@@ -141,7 +146,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           last_name: contact.last_name || (contact.full_name ? contact.full_name.split(' ').slice(1).join(' ') : undefined),
           organization: contact.company || undefined,
           title: contact.job_title || undefined,
-          phone_number: contact.phone ? formatPhoneE164(contact.phone) : undefined,
+          phone_number: formattedPhone,
           location: {
             city: contact.city || undefined,
             region: contact.state || undefined,
@@ -153,6 +158,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             linkedin_url: contact.linkedin_url || undefined,
             seniority: contact.seniority || undefined,
             department: contact.department || undefined,
+          },
+          subscriptions: {
+            email: { marketing: { consent: 'SUBSCRIBED' as const } },
+            ...(formattedPhone ? { sms: { marketing: { consent: 'SUBSCRIBED' as const } } } : {}),
           },
         },
       };

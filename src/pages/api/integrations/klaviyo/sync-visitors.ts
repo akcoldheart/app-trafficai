@@ -12,7 +12,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-interface KlaviyoProfile {
+export interface KlaviyoProfile {
   type: 'profile';
   attributes: {
     email?: string;
@@ -27,6 +27,10 @@ interface KlaviyoProfile {
       country?: string;
     };
     properties?: Record<string, unknown>;
+    subscriptions?: {
+      email?: { marketing: { consent: 'SUBSCRIBED' | 'UNSUBSCRIBED' } };
+      sms?: { marketing: { consent: 'SUBSCRIBED' | 'UNSUBSCRIBED' } };
+    };
   };
 }
 
@@ -158,6 +162,8 @@ export async function syncVisitorsForUser(
       const meta = visitor.metadata as Record<string, unknown> | null;
       const phone = meta?.phone || meta?.PHONE || meta?.Phone || meta?.phone_number || meta?.MOBILE_PHONE || undefined;
 
+      const formattedPhone = phone ? formatPhoneE164(String(phone)) : undefined;
+
       return {
         type: 'profile' as const,
         attributes: {
@@ -166,7 +172,7 @@ export async function syncVisitorsForUser(
           last_name: visitor.last_name || (visitor.full_name ? visitor.full_name.split(' ').slice(1).join(' ') : undefined),
           organization: visitor.company || undefined,
           title: visitor.job_title || undefined,
-          phone_number: phone ? formatPhoneE164(String(phone)) : undefined,
+          phone_number: formattedPhone,
           location: {
             city: visitor.city || undefined,
             region: visitor.state || undefined,
@@ -180,6 +186,10 @@ export async function syncVisitorsForUser(
             total_sessions: visitor.total_sessions || undefined,
             first_seen_at: visitor.first_seen_at || undefined,
             last_seen_at: visitor.last_seen_at || undefined,
+          },
+          subscriptions: {
+            email: { marketing: { consent: 'SUBSCRIBED' as const } },
+            ...(formattedPhone ? { sms: { marketing: { consent: 'SUBSCRIBED' as const } } } : {}),
           },
         },
       };
