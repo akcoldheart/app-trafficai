@@ -58,27 +58,34 @@ async function getKlaviyoIntegration(userId: string) {
 }
 
 export async function addProfilesToKlaviyo(apiKey: string, listId: string, profiles: KlaviyoProfile[]) {
-  // Step 1: Create/update profiles in batches of 100 (Klaviyo limit)
   const batchSize = 100;
   const profileIds: string[] = [];
+  const headers = {
+    'Authorization': `Klaviyo-API-Key ${apiKey}`,
+    'accept': 'application/json',
+    'content-type': 'application/json',
+    'revision': '2024-10-15',
+  };
 
+  // Step 1: Import profiles (without subscriptions — Klaviyo doesn't allow it in bulk import)
   for (let i = 0; i < profiles.length; i += batchSize) {
     const batch = profiles.slice(i, i + batchSize);
 
+    // Strip subscriptions from profile attributes before sending
+    const cleanBatch = batch.map(p => ({
+      ...p,
+      attributes: { ...p.attributes, subscriptions: undefined },
+    }));
+
     const importResponse = await fetch('https://a.klaviyo.com/api/profile-bulk-import-jobs', {
       method: 'POST',
-      headers: {
-        'Authorization': `Klaviyo-API-Key ${apiKey}`,
-        'accept': 'application/json',
-        'content-type': 'application/json',
-        'revision': '2024-10-15',
-      },
+      headers,
       body: JSON.stringify({
         data: {
           type: 'profile-bulk-import-job',
           attributes: {
             profiles: {
-              data: batch,
+              data: cleanBatch,
             },
           },
           relationships: {
@@ -99,6 +106,86 @@ export async function addProfilesToKlaviyo(apiKey: string, listId: string, profi
     const importData = await importResponse.json();
     if (importData.data?.id) {
       profileIds.push(importData.data.id);
+    }
+  }
+
+  // Step 2: Subscribe profiles to email/SMS via the subscription bulk create endpoint
+  const emailProfiles = profiles.filter(p => p.attributes.email);
+  const smsProfiles = profiles.filter(p => p.attributes.phone_number);
+
+  // Subscribe emails in batches
+  for (let i = 0; i < emailProfiles.length; i += batchSize) {
+    const batch = emailProfiles.slice(i, i + batchSize);
+    try {
+      await fetch('https://a.klaviyo.com/api/profile-subscription-bulk-create-jobs', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          data: {
+            type: 'profile-subscription-bulk-create-job',
+            attributes: {
+              custom_source: 'Traffic AI',
+              profiles: {
+                data: batch.map(p => ({
+                  type: 'profile',
+                  attributes: {
+                    email: p.attributes.email,
+                    subscriptions: {
+                      email: { marketing: { consent: 'SUBSCRIBED' } },
+                    },
+                  },
+                })),
+              },
+            },
+            relationships: {
+              list: {
+                data: { type: 'list', id: listId },
+              },
+            },
+          },
+        }),
+      });
+    } catch (err) {
+      console.error('Klaviyo email subscription error:', err);
+    }
+  }
+
+  // Subscribe SMS in batches (only profiles with phone numbers)
+  if (smsProfiles.length > 0) {
+    for (let i = 0; i < smsProfiles.length; i += batchSize) {
+      const batch = smsProfiles.slice(i, i + batchSize);
+      try {
+        await fetch('https://a.klaviyo.com/api/profile-subscription-bulk-create-jobs', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            data: {
+              type: 'profile-subscription-bulk-create-job',
+              attributes: {
+                custom_source: 'Traffic AI',
+                profiles: {
+                  data: batch.map(p => ({
+                    type: 'profile',
+                    attributes: {
+                      phone_number: p.attributes.phone_number,
+                      subscriptions: {
+                        sms: { marketing: { consent: 'SUBSCRIBED' } },
+                      },
+                    },
+                  })),
+                },
+              },
+              relationships: {
+                list: {
+                  data: { type: 'list', id: listId },
+                },
+              },
+            },
+          }),
+        });
+      } catch (err) {
+        console.error('Klaviyo SMS subscription error:', err);
+      }
     }
   }
 
