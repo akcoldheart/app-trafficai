@@ -101,6 +101,75 @@ async function addProfilesToKlaviyo(apiKey: string, listId: string, profiles: Kl
   return profileIds;
 }
 
+/**
+ * Core sync logic — used by both the manual endpoint and the cron auto-sync.
+ */
+export async function syncVisitorsForUser(
+  userId: string,
+  apiKey: string,
+  listId: string,
+  pixelId?: string | null
+): Promise<{ synced: number; jobs: string[] }> {
+  let query = supabaseAdmin
+    .from('visitors')
+    .select('email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata')
+    .eq('user_id', userId)
+    .not('email', 'is', null);
+
+  if (pixelId) {
+    query = query.eq('pixel_id', pixelId);
+  }
+
+  const { data: visitors, error: visitorsError } = await query.limit(10000);
+
+  if (visitorsError) throw visitorsError;
+  if (!visitors || visitors.length === 0) return { synced: 0, jobs: [] };
+
+  const profiles: KlaviyoProfile[] = visitors
+    .filter((v) => v.email)
+    .map((visitor) => {
+      const meta = visitor.metadata as Record<string, unknown> | null;
+      const phone = meta?.phone || meta?.PHONE || meta?.Phone || meta?.phone_number || meta?.MOBILE_PHONE || undefined;
+
+      return {
+        type: 'profile' as const,
+        attributes: {
+          email: visitor.email!,
+          first_name: visitor.first_name || (visitor.full_name ? visitor.full_name.split(' ')[0] : undefined),
+          last_name: visitor.last_name || (visitor.full_name ? visitor.full_name.split(' ').slice(1).join(' ') : undefined),
+          organization: visitor.company || undefined,
+          title: visitor.job_title || undefined,
+          phone_number: phone ? formatPhoneE164(String(phone)) : undefined,
+          location: {
+            city: visitor.city || undefined,
+            region: visitor.state || undefined,
+            country: visitor.country || undefined,
+          },
+          properties: {
+            source: 'Traffic AI',
+            linkedin_url: visitor.linkedin_url || undefined,
+            lead_score: visitor.lead_score || undefined,
+            total_pageviews: visitor.total_pageviews || undefined,
+            total_sessions: visitor.total_sessions || undefined,
+            first_seen_at: visitor.first_seen_at || undefined,
+            last_seen_at: visitor.last_seen_at || undefined,
+          },
+        },
+      };
+    });
+
+  const jobIds = await addProfilesToKlaviyo(apiKey, listId, profiles);
+
+  // Update last synced timestamp
+  await supabaseAdmin
+    .from('platform_integrations')
+    .update({ last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('platform', 'klaviyo');
+
+  return { synced: profiles.length, jobs: jobIds };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -122,87 +191,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Fetch visitors with email belonging to this user
-    let query = supabaseAdmin
-      .from('visitors')
-      .select('email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata')
-      .eq('user_id', user.id)
-      .not('email', 'is', null);
-
-    if (pixel_id) {
-      query = query.eq('pixel_id', pixel_id);
-    }
-
-    const { data: visitors, error: visitorsError } = await query.limit(10000);
-
-    if (visitorsError) {
-      console.error('Error fetching visitors:', visitorsError);
-      return res.status(500).json({ error: 'Failed to fetch visitors', details: visitorsError.message });
-    }
-
-    if (!visitors || visitors.length === 0) {
-      return res.status(200).json({ success: true, synced: 0, message: 'No visitors with email to sync' });
-    }
-
-    // Transform visitors to Klaviyo profiles
-    const profiles: KlaviyoProfile[] = visitors
-      .filter((v) => v.email)
-      .map((visitor) => {
-        const meta = visitor.metadata as Record<string, unknown> | null;
-        const phone = meta?.phone || meta?.PHONE || meta?.Phone || meta?.phone_number || meta?.MOBILE_PHONE || undefined;
-
-        return {
-          type: 'profile' as const,
-          attributes: {
-            email: visitor.email!,
-            first_name: visitor.first_name || (visitor.full_name ? visitor.full_name.split(' ')[0] : undefined),
-            last_name: visitor.last_name || (visitor.full_name ? visitor.full_name.split(' ').slice(1).join(' ') : undefined),
-            organization: visitor.company || undefined,
-            title: visitor.job_title || undefined,
-            phone_number: phone ? formatPhoneE164(String(phone)) : undefined,
-            location: {
-              city: visitor.city || undefined,
-              region: visitor.state || undefined,
-              country: visitor.country || undefined,
-            },
-            properties: {
-              source: 'Traffic AI',
-              linkedin_url: visitor.linkedin_url || undefined,
-              lead_score: visitor.lead_score || undefined,
-              total_pageviews: visitor.total_pageviews || undefined,
-              total_sessions: visitor.total_sessions || undefined,
-              first_seen_at: visitor.first_seen_at || undefined,
-              last_seen_at: visitor.last_seen_at || undefined,
-            },
-          },
-        };
-      });
-
-    const jobIds = await addProfilesToKlaviyo(integration.api_key, targetListId, profiles);
-
-    // Update last synced timestamp
-    await supabaseAdmin
-      .from('platform_integrations')
-      .update({ last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('user_id', user.id)
-      .eq('platform', 'klaviyo');
+    const result = await syncVisitorsForUser(user.id, integration.api_key, targetListId, pixel_id);
 
     await logEvent({
       type: 'api',
       event_name: 'klaviyo_sync_visitors',
       status: 'success',
-      message: `Synced ${profiles.length} visitors to Klaviyo list`,
+      message: `Synced ${result.synced} visitors to Klaviyo list`,
       user_id: user.id,
       ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || undefined,
       request_data: { pixel_id: pixel_id || 'all', list_id: targetListId },
-      response_data: { synced: profiles.length, jobs: jobIds },
+      response_data: { synced: result.synced, jobs: result.jobs },
     });
 
     return res.status(200).json({
       success: true,
-      synced: profiles.length,
-      jobs: jobIds,
-      message: `${profiles.length} visitors queued for sync to Klaviyo`,
+      synced: result.synced,
+      jobs: result.jobs,
+      message: `${result.synced} visitors queued for sync to Klaviyo`,
     });
   } catch (error) {
     console.error('Error syncing visitors to Klaviyo:', error);

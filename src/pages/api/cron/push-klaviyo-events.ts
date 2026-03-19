@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { pushEventsForUser } from '@/pages/api/integrations/klaviyo/push-events';
+import { syncVisitorsForUser } from '@/pages/api/integrations/klaviyo/sync-visitors';
 import { logEvent } from '@/lib/webhook-logger';
 
 export const config = { maxDuration: 300 };
@@ -34,14 +35,54 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ message: 'No connected Klaviyo integrations', processed: 0 });
     }
 
-    const results: Array<{ user_id: string; total_pushed: number; error?: string }> = [];
+    const results: Array<{ user_id: string; total_pushed: number; synced?: number; error?: string }> = [];
 
     for (const integration of integrations) {
       const config = (integration.config || {}) as Record<string, unknown>;
+
+      // --- Auto-sync visitors to list ---
+      const autoSyncEnabled = config.auto_sync_visitors === true;
+      const defaultListId = config.default_list_id as string | undefined;
+
+      if (autoSyncEnabled && defaultListId) {
+        const autoSyncPixelId = config.auto_sync_pixel_id as string | undefined;
+        try {
+          const syncResult = await syncVisitorsForUser(
+            integration.user_id,
+            integration.api_key,
+            defaultListId,
+            autoSyncPixelId || null
+          );
+
+          if (syncResult.synced > 0) {
+            await logEvent({
+              type: 'api',
+              event_name: 'klaviyo_auto_sync_visitors',
+              status: 'success',
+              message: `Auto-synced ${syncResult.synced} visitors to Klaviyo list`,
+              user_id: integration.user_id,
+              response_data: { synced: syncResult.synced, jobs: syncResult.jobs },
+            });
+          }
+
+          results.push({ user_id: integration.user_id, total_pushed: 0, synced: syncResult.synced });
+        } catch (err) {
+          console.error(`Cron auto-sync error for user ${integration.user_id}:`, err);
+          await logEvent({
+            type: 'api',
+            event_name: 'klaviyo_auto_sync_visitors',
+            status: 'error',
+            message: 'Auto-sync visitors to Klaviyo list failed',
+            user_id: integration.user_id,
+            error_details: (err as Error).message,
+          });
+        }
+      }
+
+      // --- Auto-push events ---
       const pushEventsEnabled = (config.push_events_enabled || {}) as Record<string, boolean>;
       const autoPushEnabled = config.auto_push_events === true;
 
-      // Only process users who have auto-push enabled AND have at least one event type enabled
       if (!autoPushEnabled) continue;
 
       const enabledTypes = Object.entries(pushEventsEnabled)
@@ -56,7 +97,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           enabledTypes,
           { api_key: integration.api_key, config }
         );
-        results.push({ user_id: integration.user_id, total_pushed: result.total_pushed });
+
+        // Find existing result for this user (from auto-sync) or create new
+        const existing = results.find(r => r.user_id === integration.user_id);
+        if (existing) {
+          existing.total_pushed = result.total_pushed;
+        } else {
+          results.push({ user_id: integration.user_id, total_pushed: result.total_pushed });
+        }
 
         if (result.total_pushed > 0) {
           await logEvent({
@@ -70,7 +118,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       } catch (err) {
         console.error(`Cron push events error for user ${integration.user_id}:`, err);
-        results.push({ user_id: integration.user_id, total_pushed: 0, error: (err as Error).message });
+        const existing = results.find(r => r.user_id === integration.user_id);
+        if (existing) {
+          existing.error = (err as Error).message;
+        } else {
+          results.push({ user_id: integration.user_id, total_pushed: 0, error: (err as Error).message });
+        }
 
         await logEvent({
           type: 'api',
