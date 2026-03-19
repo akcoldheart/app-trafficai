@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS facebook_audience_imports (
   audience_id text, -- FB custom audience ID
   audience_name text NOT NULL,
   source_pixel_id uuid REFERENCES pixels(id) ON DELETE SET NULL,
-  source_audience_id uuid,
+  source_audience_id text,
   contact_count integer NOT NULL DEFAULT 0,
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   error_message text,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS linkedin_campaigns (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   pixel_id uuid REFERENCES pixels(id) ON DELETE SET NULL,
-  audience_id uuid,
+  audience_id text,
   name text NOT NULL,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed')),
   operating_hours_start text NOT NULL DEFAULT '09:00',

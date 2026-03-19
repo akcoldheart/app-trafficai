@@ -143,7 +143,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     } catch (error) {
       console.error('Error creating LinkedIn campaign:', error);
-      return res.status(500).json({ error: 'Failed to create campaign' });
+      const errMsg = (error as any)?.message || (error as any)?.details || 'Failed to create campaign';
+      return res.status(500).json({ error: errMsg });
     }
   }
 
