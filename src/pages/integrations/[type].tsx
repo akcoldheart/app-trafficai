@@ -107,10 +107,10 @@ export default function IntegrationDetailPage() {
   useEffect(() => {
     if (type && typeof type === 'string') {
       const cfg = INTEGRATION_CONFIGS[type];
-      if (cfg && cfg.key !== 'klaviyo') {
+      if (cfg && !['klaviyo', 'facebook', 'linkedin'].includes(cfg.key)) {
         setConfig(cfg);
-      } else if (type === 'klaviyo') {
-        router.replace('/integrations/klaviyo');
+      } else if (['klaviyo', 'facebook', 'linkedin'].includes(type)) {
+        router.replace(`/integrations/${type}`);
       } else {
         router.replace('/integrations');
       }

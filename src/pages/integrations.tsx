@@ -24,6 +24,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   notifications: 'Notifications',
   automation: 'Automation',
   ecommerce: 'E-Commerce',
+  advertising: 'Advertising',
+  outreach: 'Outreach',
 };
 
 function hex(color: string, alpha: number): string {
@@ -74,7 +76,7 @@ export default function IntegrationsHub() {
     return acc;
   }, {} as Record<string, number>);
 
-  const categories = ['all', 'crm', 'email_marketing', 'notifications', 'automation', 'ecommerce']
+  const categories = ['all', 'crm', 'email_marketing', 'notifications', 'automation', 'ecommerce', 'advertising', 'outreach']
     .map(id => ({
       id,
       label: CATEGORY_LABELS[id],

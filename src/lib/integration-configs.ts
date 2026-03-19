@@ -6,16 +6,16 @@ export interface IntegrationConfig {
   description: string;
   color: string;
   letterIcon: string;
-  authType: 'api_key' | 'webhook_url' | 'api_key_and_url' | 'triggers';
+  authType: 'api_key' | 'webhook_url' | 'api_key_and_url' | 'triggers' | 'oauth' | 'credentials';
   authLabel: string;
   authPlaceholder: string;
   authHint: string;
   secondaryAuthLabel?: string;
   secondaryAuthPlaceholder?: string;
   secondaryAuthHint?: string;
-  features: ('sync_visitors' | 'sync_audiences' | 'notifications' | 'webhooks' | 'lists')[];
+  features: ('sync_visitors' | 'sync_audiences' | 'notifications' | 'webhooks' | 'lists' | 'campaigns')[];
   setupSteps: string[];
-  category: 'crm' | 'email_marketing' | 'notifications' | 'automation' | 'ecommerce';
+  category: 'crm' | 'email_marketing' | 'notifications' | 'automation' | 'ecommerce' | 'advertising' | 'outreach';
 }
 
 export const INTEGRATION_CONFIGS: Record<string, IntegrationConfig> = {
@@ -223,6 +223,53 @@ export const INTEGRATION_CONFIGS: Record<string, IntegrationConfig> = {
     ],
     category: 'email_marketing',
   },
+  facebook: {
+    key: 'facebook',
+    name: 'Facebook',
+    description: 'Custom Audiences for ad targeting',
+    color: '#1877F2',
+    letterIcon: 'f',
+    authType: 'oauth',
+    authLabel: 'Facebook App ID',
+    authPlaceholder: '123456789012345',
+    authHint: 'Enter your Facebook App credentials from developers.facebook.com.',
+    secondaryAuthLabel: 'Facebook App Secret',
+    secondaryAuthPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    secondaryAuthHint: 'Found in your Facebook App Dashboard under Settings > Basic.',
+    features: ['sync_audiences'],
+    setupSteps: [
+      'Go to developers.facebook.com and create an app (type: Business)',
+      'In your app dashboard, go to Settings > Basic',
+      'Copy your App ID and App Secret',
+      'Paste them below and click Connect',
+      'Authorize Traffic AI to manage your ad audiences',
+      'Select your Ad Account and start importing audiences',
+    ],
+    category: 'advertising',
+  },
+  linkedin: {
+    key: 'linkedin',
+    name: 'LinkedIn',
+    description: 'Automated outreach & connection requests',
+    color: '#0A66C2',
+    letterIcon: 'in',
+    authType: 'credentials',
+    authLabel: 'LinkedIn Email',
+    authPlaceholder: 'your@email.com',
+    authHint: 'Your LinkedIn login credentials are encrypted and only used to send connection requests on your behalf.',
+    secondaryAuthLabel: 'LinkedIn Password',
+    secondaryAuthPlaceholder: '',
+    secondaryAuthHint: 'Your password is encrypted at rest and never shared.',
+    features: ['sync_visitors', 'campaigns'],
+    setupSteps: [
+      'Enter your LinkedIn email and password below',
+      'Your credentials are encrypted and stored securely',
+      'Create a campaign from a pixel or audience source',
+      'Set operating hours and daily connection request limits',
+      'Traffic AI will drip connection requests during your set hours',
+    ],
+    category: 'outreach',
+  },
 };
 
 export const INTEGRATION_ORDER = [
@@ -235,6 +282,8 @@ export const INTEGRATION_ORDER = [
   'mailchimp',
   'pipedrive',
   'activecampaign',
+  'facebook',
+  'linkedin',
 ] as const;
 
 export function getIntegrationConfig(key: string): IntegrationConfig | undefined {
