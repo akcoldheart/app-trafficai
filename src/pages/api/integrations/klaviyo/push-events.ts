@@ -135,7 +135,11 @@ async function getVisitorsForType(userId: string, type: string, pixelIds: string
     .in('pixel_id', pixelIds);
 
   if (since) {
-    query = query.gt('last_seen_at', since);
+    // Match visitors whose activity changed OR who were newly inserted since last push.
+    // last_seen_at uses the actual visit date from the API, which can be older than
+    // the DB insertion time for newly fetched visitors. Without created_at check,
+    // new visitors with old last_seen_at would be skipped.
+    query = query.or(`last_seen_at.gt.${since},created_at.gt.${since}`);
   }
 
   switch (type) {
