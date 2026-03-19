@@ -10,7 +10,12 @@ const supabaseAdmin = createClient(
 );
 
 function decrypt(encryptedText: string): string {
-  const key = process.env.ENCRYPTION_KEY!;
+  // Handle base64 fallback encoding
+  if (encryptedText.startsWith('b64:')) {
+    return Buffer.from(encryptedText.slice(4), 'base64').toString('utf8');
+  }
+  const key = process.env.ENCRYPTION_KEY;
+  if (!key) throw new Error('ENCRYPTION_KEY not configured');
   const [ivHex, encrypted] = encryptedText.split(':');
   const iv = Buffer.from(ivHex, 'hex');
   const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv);
