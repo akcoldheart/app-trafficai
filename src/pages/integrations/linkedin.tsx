@@ -464,17 +464,17 @@ export default function LinkedInIntegrationPage() {
               {!integration?.is_connected ? (
                 <div>
                   <p className="text-muted mb-3">
-                    Connect your LinkedIn account to automatically send connection requests to your Traffic AI visitors.
+                    Connect your LinkedIn account and use our Chrome extension to send connection requests safely from your browser.
                   </p>
 
                   <div className="mb-4 p-3 rounded" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
                     <h4 className="mb-3">How it works</h4>
                     <ol className="mb-0" style={{ paddingLeft: '1.25rem' }}>
-                      <li className="mb-2">Enter your LinkedIn login credentials below</li>
-                      <li className="mb-2">Your credentials are encrypted and stored securely</li>
-                      <li className="mb-2">Create a campaign from a pixel or audience source</li>
-                      <li className="mb-2">Set operating hours and daily connection request limits</li>
-                      <li className="mb-2">Traffic AI will drip connection requests during your set hours</li>
+                      <li className="mb-2">Enter your LinkedIn email below to link your account</li>
+                      <li className="mb-2">Create a campaign and select contacts with LinkedIn URLs</li>
+                      <li className="mb-2">Generate an extension token and install the Chrome extension</li>
+                      <li className="mb-2">The extension sends connection requests from your real browser session</li>
+                      <li className="mb-2">Requests are paced organically during your set operating hours</li>
                     </ol>
                   </div>
 
@@ -483,9 +483,9 @@ export default function LinkedInIntegrationPage() {
                     <div className="d-flex align-items-start gap-2">
                       <IconShieldLock size={20} className="flex-shrink-0 mt-1" />
                       <div>
-                        <strong>Your credentials are secure</strong>
+                        <strong>Safe &amp; secure outreach</strong>
                         <div className="small mt-1">
-                          Your LinkedIn email and password are encrypted at rest using AES-256 encryption and are only used to perform actions on your behalf. We never share your credentials with third parties.
+                          Connection requests are sent via the Chrome extension using your real browser session — not from our servers. This is the safest approach and minimizes any risk to your LinkedIn account.
                         </div>
                       </div>
                     </div>
@@ -953,8 +953,8 @@ export default function LinkedInIntegrationPage() {
                     <span className="avatar avatar-sm bg-primary-lt">1</span>
                   </div>
                   <div>
-                    <div className="fw-medium small">Connect LinkedIn</div>
-                    <div className="text-muted small">Enter your LinkedIn credentials (encrypted)</div>
+                    <div className="fw-medium small">Link Your Account</div>
+                    <div className="text-muted small">Enter your LinkedIn email to get started</div>
                   </div>
                 </div>
                 <div className="d-flex gap-3">
@@ -971,8 +971,8 @@ export default function LinkedInIntegrationPage() {
                     <span className="avatar avatar-sm bg-primary-lt">3</span>
                   </div>
                   <div>
-                    <div className="fw-medium small">Set Schedule</div>
-                    <div className="text-muted small">Configure operating hours and daily limits</div>
+                    <div className="fw-medium small">Install Extension</div>
+                    <div className="text-muted small">Generate a token and install the Chrome extension</div>
                   </div>
                 </div>
                 <div className="d-flex gap-3">
@@ -980,8 +980,8 @@ export default function LinkedInIntegrationPage() {
                     <span className="avatar avatar-sm bg-primary-lt">4</span>
                   </div>
                   <div>
-                    <div className="fw-medium small">Automatic Drip</div>
-                    <div className="text-muted small">Requests are sent organically during your set hours</div>
+                    <div className="fw-medium small">Auto Send</div>
+                    <div className="text-muted small">Extension sends requests from your browser during set hours</div>
                   </div>
                 </div>
               </div>
