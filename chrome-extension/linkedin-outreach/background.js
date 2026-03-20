@@ -79,53 +79,102 @@ async function executeInLinkedInTab(tabId, func, args) {
 
 // Functions to inject into LinkedIn tab
 function injectedResolveProfile(profileSlug) {
-  return fetch(`/voyager/api/identity/profiles/${profileSlug}`, {
-    headers: {
-      'Accept': 'application/vnd.linkedin.normalized+json+2.1',
-      'X-Restli-Protocol-Version': '2.0.0',
-      'csrf-token': document.cookie.match(/JSESSIONID="?([^";]+)/)?.[1] || '',
-    },
+  console.log('[TrafficAI Injected] Resolving profile:', profileSlug);
+
+  // Navigate to the profile page in a hidden iframe or fetch the HTML
+  // to extract the member ID from the page's embedded data
+  return fetch(`/in/${profileSlug}/`, {
     credentials: 'same-origin',
+    headers: { 'Accept': 'text/html' },
   })
-    .then(r => r.ok ? r.json() : null)
-    .then(data => {
-      if (!data) return null;
-      const urn = data?.data?.entityUrn || data?.entityUrn || '';
-      return urn.split(':').pop() || null;
+    .then(r => {
+      console.log('[TrafficAI Injected] Profile page status:', r.status);
+      if (!r.ok) return null;
+      return r.text();
     })
-    .catch(() => null);
+    .then(html => {
+      if (!html) return null;
+
+      // LinkedIn embeds profile data in the page HTML as JSON-LD or in code tags
+      // Look for the member URN pattern: "urn:li:fsd_profile:ACoAAxxxxxxx"
+      const fsdMatch = html.match(/urn:li:fsd_profile:([A-Za-z0-9_-]+)/);
+      if (fsdMatch) {
+        console.log('[TrafficAI Injected] Found fsd_profile ID:', fsdMatch[1]);
+        return fsdMatch[1];
+      }
+
+      // Try miniProfile URN
+      const miniMatch = html.match(/urn:li:fs_miniProfile:([A-Za-z0-9_-]+)/);
+      if (miniMatch) {
+        console.log('[TrafficAI Injected] Found miniProfile ID:', miniMatch[1]);
+        return miniMatch[1];
+      }
+
+      // Try memberUrn
+      const memberMatch = html.match(/urn:li:member:(\d+)/);
+      if (memberMatch) {
+        console.log('[TrafficAI Injected] Found member ID:', memberMatch[1]);
+        return memberMatch[1];
+      }
+
+      console.log('[TrafficAI Injected] No member ID found in HTML (length:', html.length, ')');
+      return null;
+    })
+    .catch(err => {
+      console.error('[TrafficAI Injected] Profile resolve error:', err.message);
+      return null;
+    });
 }
 
 function injectedSendConnection(memberId, message) {
+  console.log('[TrafficAI Injected] Sending connection to:', memberId, 'message:', message?.slice(0, 50));
   const csrfToken = document.cookie.match(/JSESSIONID="?([^";]+)/)?.[1] || '';
+  console.log('[TrafficAI Injected] CSRF token:', csrfToken ? 'found' : 'NOT FOUND');
+
+  const trackingId = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+
+  // LinkedIn's current invitation format
   const body = {
-    trackingId: Array.from(crypto.getRandomValues(new Uint8Array(8)))
-      .map(b => b.toString(16).padStart(2, '0')).join(''),
+    inviterProfileUrn: undefined, // LinkedIn fills this automatically
     inviteeProfileUrn: `urn:li:fsd_profile:${memberId}`,
+    trackingId: trackingId,
   };
   if (message && message.trim()) {
     body.message = message.trim().slice(0, 300);
   }
 
+  console.log('[TrafficAI Injected] Request body:', JSON.stringify(body));
+
   return fetch('/voyager/api/growth/normInvitations', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=UTF-8',
       'Accept': 'application/vnd.linkedin.normalized+json+2.1',
       'X-Restli-Protocol-Version': '2.0.0',
       'csrf-token': csrfToken,
+      'X-Li-Lang': 'en_US',
+      'X-Li-Page-Instance': 'urn:li:page:d_flagship3_profile_view_base;' + trackingId,
     },
     credentials: 'same-origin',
     body: JSON.stringify(body),
   })
-    .then(r => {
+    .then(async r => {
+      console.log('[TrafficAI Injected] Response status:', r.status);
       if (r.ok || r.status === 201) return { success: true };
-      return r.json().catch(() => ({})).then(d => ({
-        success: false,
-        error: d?.message || d?.status || `HTTP ${r.status}`,
-      }));
+      const text = await r.text().catch(() => '');
+      console.log('[TrafficAI Injected] Error response:', text.slice(0, 500));
+      try {
+        const d = JSON.parse(text);
+        return { success: false, error: d?.message || d?.status || `HTTP ${r.status}` };
+      } catch {
+        return { success: false, error: `HTTP ${r.status}: ${text.slice(0, 200)}` };
+      }
     })
-    .catch(err => ({ success: false, error: err.message }));
+    .catch(err => {
+      console.error('[TrafficAI Injected] Send error:', err);
+      return { success: false, error: err.message };
+    });
 }
 
 // ─── High-level send function ───────────────────────────────────────────────
@@ -133,8 +182,14 @@ function injectedSendConnection(memberId, message) {
 function extractProfileSlug(url) {
   try {
     const parsed = new URL(url.startsWith('http') ? url : `https://${url}`);
+    // Only personal profiles (/in/slug) can receive connection requests
+    // Skip company pages (/company/), school pages (/school/), etc.
     const match = parsed.pathname.match(/\/in\/([^\/]+)/);
-    return match ? match[1] : null;
+    if (!match) {
+      console.log(`[TrafficAI] Skipping non-profile URL: ${url}`);
+      return null;
+    }
+    return match[1];
   } catch {
     return null;
   }
@@ -190,10 +245,13 @@ async function processQueue() {
     }
 
     // Get or open a LinkedIn tab
+    console.log('[TrafficAI] Getting LinkedIn tab...');
     const tab = await getLinkedInTab();
     if (!tab?.id) {
+      console.error('[TrafficAI] Could not open LinkedIn tab');
       return { status: 'error', message: 'Could not open LinkedIn tab' };
     }
+    console.log('[TrafficAI] Using LinkedIn tab:', tab.id, tab.url);
 
     const results = [];
     let sentCount = 0;
@@ -205,8 +263,10 @@ async function processQueue() {
         await new Promise(r => setTimeout(r, jitter));
       }
 
+      console.log(`[TrafficAI] Sending to: ${contact.full_name} (${contact.linkedin_url})`);
       const message = personalizeMessage(data.campaign?.connection_message, contact);
       const result = await sendConnectionRequest(tab.id, contact.linkedin_url, message);
+      console.log(`[TrafficAI] Result:`, JSON.stringify(result));
 
       // Report result to API
       try {

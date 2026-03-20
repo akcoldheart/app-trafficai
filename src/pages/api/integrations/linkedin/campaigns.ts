@@ -104,7 +104,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         contacts = await getAudienceContactsForSync(source_audience_id);
       }
 
-      const linkedinContacts = contacts.filter((c: any) => c.linkedin_url && c.linkedin_url.trim() !== '');
+      // Only include personal LinkedIn profiles (/in/), not company pages (/company/)
+      const linkedinContacts = contacts.filter((c: any) =>
+        c.linkedin_url && c.linkedin_url.trim() !== '' && c.linkedin_url.includes('/in/')
+      );
 
       if (linkedinContacts.length === 0) {
         return res.status(400).json({

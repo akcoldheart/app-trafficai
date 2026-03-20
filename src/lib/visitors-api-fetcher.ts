@@ -205,10 +205,16 @@ function mapGroupToVisitor(
   const firstName = get('FIRST_NAME');
   const lastName = get('LAST_NAME');
   const fullName = [firstName, lastName].filter(Boolean).join(' ') || null;
-  const linkedinRaw = get('INDIVIDUAL_LINKEDIN_URL') || get('LINKEDIN_URL') || get('COMPANY_LINKEDIN_URL');
-  const linkedinUrl = linkedinRaw
-    ? (linkedinRaw.startsWith('http') ? linkedinRaw : `https://${linkedinRaw}`)
-    : null;
+  // Only use individual LinkedIn URLs — company pages can't receive connection requests
+  const linkedinRaw = get('INDIVIDUAL_LINKEDIN_URL') || get('LINKEDIN_URL') || null;
+  let linkedinUrl: string | null = null;
+  if (linkedinRaw) {
+    const normalized = linkedinRaw.startsWith('http') ? linkedinRaw : `https://${linkedinRaw}`;
+    // Only store personal profile URLs (/in/), not company pages (/company/)
+    if (normalized.includes('/in/')) {
+      linkedinUrl = normalized;
+    }
+  }
   const city = get('PERSONAL_CITY') || get('CITY');
   const state = get('PERSONAL_STATE') || get('STATE');
   const country = get('COUNTRY') || (state ? 'US' : null);
