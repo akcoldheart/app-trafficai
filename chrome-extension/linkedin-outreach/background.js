@@ -80,50 +80,83 @@ async function executeInLinkedInTab(tabId, func, args) {
 // Functions to inject into LinkedIn tab
 function injectedResolveProfile(profileSlug) {
   console.log('[TrafficAI Injected] Resolving profile:', profileSlug);
+  const csrfToken = document.cookie.match(/JSESSIONID="?([^";]+)/)?.[1] || '';
 
-  // Navigate to the profile page in a hidden iframe or fetch the HTML
-  // to extract the member ID from the page's embedded data
-  return fetch(`/in/${profileSlug}/`, {
+  // Use the Voyager API to resolve the profile slug to a member URN
+  // This returns the target profile's data, not the viewer's
+  return fetch(`/voyager/api/identity/profiles/${profileSlug}/networkinfo`, {
+    headers: {
+      'Accept': 'application/vnd.linkedin.normalized+json+2.1',
+      'csrf-token': csrfToken,
+    },
     credentials: 'same-origin',
-    headers: { 'Accept': 'text/html' },
   })
-    .then(r => {
-      console.log('[TrafficAI Injected] Profile page status:', r.status);
-      if (!r.ok) return null;
-      return r.text();
-    })
-    .then(html => {
-      if (!html) return null;
+    .then(async r => {
+      console.log('[TrafficAI Injected] networkinfo status:', r.status);
 
-      // LinkedIn embeds profile data in the page HTML
-      // Look for different URN patterns and return with type info
-
-      const fsdMatch = html.match(/urn:li:fsd_profile:([A-Za-z0-9_-]+)/);
-      if (fsdMatch) {
-        console.log('[TrafficAI Injected] Found fsd_profile ID:', fsdMatch[1]);
-        return { id: fsdMatch[1], type: 'fsd_profile' };
+      if (r.ok) {
+        const data = await r.json();
+        // Look for the profile's entityUrn in included
+        const included = data?.included || [];
+        for (const item of included) {
+          const urn = item?.entityUrn || '';
+          // Find the miniProfile for this specific slug
+          if (item?.publicIdentifier === profileSlug && urn.includes('fs_miniProfile:')) {
+            const id = urn.split(':').pop();
+            console.log('[TrafficAI Injected] Found target miniProfile:', id);
+            return { id, type: 'fs_miniProfile' };
+          }
+        }
+        // Broader search in included
+        for (const item of included) {
+          if (item?.publicIdentifier === profileSlug) {
+            const urn = item?.entityUrn || item?.objectUrn || '';
+            const id = urn.split(':').pop();
+            if (id) {
+              console.log('[TrafficAI Injected] Found target profile:', id, 'from', urn);
+              return { id, type: urn.includes('miniProfile') ? 'fs_miniProfile' : 'fsd_profile' };
+            }
+          }
+        }
+        console.log('[TrafficAI Injected] Slug not found in included. Items:', included.length);
       }
 
-      const miniMatch = html.match(/urn:li:fs_miniProfile:([A-Za-z0-9_-]+)/);
-      if (miniMatch) {
-        console.log('[TrafficAI Injected] Found miniProfile ID:', miniMatch[1]);
-        return { id: miniMatch[1], type: 'fs_miniProfile' };
+      // Fallback: try the profile contacts API
+      const r2 = await fetch(`/voyager/api/identity/profiles/${profileSlug}`, {
+        headers: {
+          'Accept': 'application/vnd.linkedin.normalized+json+2.1',
+          'csrf-token': csrfToken,
+        },
+        credentials: 'same-origin',
+      });
+      console.log('[TrafficAI Injected] profiles/ status:', r2.status);
+
+      if (r2.ok) {
+        const data2 = await r2.json();
+        const urn = data2?.data?.entityUrn || '';
+        if (urn) {
+          const id = urn.split(':').pop();
+          console.log('[TrafficAI Injected] Found from profiles/:', id, urn);
+          return { id, type: urn.includes('miniProfile') ? 'fs_miniProfile' : 'fsd_profile' };
+        }
+        // Check included
+        for (const item of (data2?.included || [])) {
+          if (item?.publicIdentifier === profileSlug) {
+            const iurn = item?.entityUrn || '';
+            const id = iurn.split(':').pop();
+            if (id) {
+              console.log('[TrafficAI Injected] Found in profiles/ included:', id);
+              return { id, type: 'fs_miniProfile' };
+            }
+          }
+        }
       }
 
-      const memberMatch = html.match(/urn:li:member:(\d+)/);
-      if (memberMatch) {
-        console.log('[TrafficAI Injected] Found member ID:', memberMatch[1]);
-        return { id: memberMatch[1], type: 'member' };
-      }
-
-      console.log('[TrafficAI Injected] No member ID found in HTML (length:', html.length, ')');
-      // Log a sample of the HTML to debug
-      const urnSamples = html.match(/urn:li:[a-z_]+:[A-Za-z0-9_-]+/g);
-      console.log('[TrafficAI Injected] URN samples found:', urnSamples?.slice(0, 5));
+      console.log('[TrafficAI Injected] Could not resolve profile');
       return null;
     })
     .catch(err => {
-      console.error('[TrafficAI Injected] Profile resolve error:', err.message);
+      console.error('[TrafficAI Injected] Resolve error:', err.message);
       return null;
     });
 }
