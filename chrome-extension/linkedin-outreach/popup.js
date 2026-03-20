@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       lastRunSection.style.display = 'block';
       lastRunInfo.textContent = `${result.sent} of ${result.total} sent \u00b7 just now`;
     } else if (result.status === 'no_pending') {
-      lastRunInfo.textContent = 'No pending contacts \u00b7 just now';
+      lastRunInfo.textContent = (result.message || 'No pending contacts') + ' \u00b7 just now';
       lastRunSection.style.display = 'block';
     } else if (result.status === 'no_linkedin_session') {
       linkedinStatus.className = 'status-dot red';

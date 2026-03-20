@@ -61,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq('status', 'active');
 
     if (!campaigns || campaigns.length === 0) {
-      return res.status(200).json({ contacts: [], message: 'No active campaigns' });
+      return res.status(200).json({ contacts: [], message: `No active campaigns for user ${integration.user_id}` });
     }
 
     for (const campaign of campaigns) {
@@ -112,7 +112,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    return res.status(200).json({ contacts: [], message: 'No campaigns ready (outside operating hours or daily limit reached)' });
+    // Collect skip reasons for debugging
+    const skipReasons = campaigns.map(c => {
+      const inHours = isWithinOperatingHours(c.operating_hours_start, c.operating_hours_end, c.operating_timezone);
+      return `${c.name}: ${!inHours ? `outside hours (${c.operating_hours_start}-${c.operating_hours_end} ${c.operating_timezone})` : 'daily limit reached or no pending contacts'}`;
+    });
+    return res.status(200).json({ contacts: [], message: `Campaigns skipped: ${skipReasons.join('; ')}` });
   } catch (error) {
     console.error('Extension pending error:', error);
     return res.status(500).json({ error: 'Failed to fetch pending contacts' });
