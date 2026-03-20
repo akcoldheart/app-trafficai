@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Traffic AI - LinkedIn Outreach",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automate LinkedIn connection requests from your Traffic AI campaigns",
   "permissions": [
     "cookies",
     "storage",
-    "alarms"
+    "alarms",
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",

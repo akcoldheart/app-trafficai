@@ -1,15 +1,15 @@
 // Traffic AI LinkedIn Outreach - Background Service Worker
+// Uses chrome.scripting.executeScript to run LinkedIn API calls in a LinkedIn tab context
+// so cookies are automatically included by the browser.
 
 const TRAFFICAI_DEFAULT_URL = 'https://app.trafficai.io';
-const LINKEDIN_BASE = 'https://www.linkedin.com';
 
-// ─── LinkedIn Session ───────────────────────────────────────────────────────
+// ─── LinkedIn Session Check ─────────────────────────────────────────────────
 
 async function getLinkedInSession() {
   const cookies = await chrome.cookies.getAll({ domain: '.linkedin.com' });
   const li_at = cookies.find(c => c.name === 'li_at')?.value;
   const jsessionid = cookies.find(c => c.name === 'JSESSIONID')?.value?.replace(/"/g, '');
-
   if (!li_at || !jsessionid) return null;
   return { li_at, jsessionid, csrf_token: jsessionid };
 }
@@ -45,27 +45,90 @@ async function apiFetch(path, options = {}) {
   return resp.json();
 }
 
-// ─── LinkedIn Voyager API ───────────────────────────────────────────────────
+// ─── Find or create a LinkedIn tab for executing API calls ──────────────────
 
-async function resolveProfileSlug(session, profileSlug) {
-  const resp = await fetch(
-    `${LINKEDIN_BASE}/voyager/api/identity/profiles/${profileSlug}`,
-    {
-      headers: {
-        'User-Agent': navigator.userAgent,
-        'Cookie': `li_at=${session.li_at}; JSESSIONID="${session.jsessionid}"`,
-        'csrf-token': session.csrf_token,
-        'Accept': 'application/vnd.linkedin.normalized+json+2.1',
-        'X-Restli-Protocol-Version': '2.0.0',
-      },
-    }
-  );
+async function getLinkedInTab() {
+  const tabs = await chrome.tabs.query({ url: 'https://www.linkedin.com/*' });
+  if (tabs.length > 0) return tabs[0];
 
-  if (!resp.ok) return null;
-  const data = await resp.json();
-  const entityUrn = data?.data?.entityUrn || data?.entityUrn || '';
-  return entityUrn.split(':').pop() || null;
+  // Open LinkedIn in background
+  const tab = await chrome.tabs.create({ url: 'https://www.linkedin.com/feed/', active: false });
+  // Wait for it to load
+  await new Promise(resolve => {
+    const listener = (tabId, info) => {
+      if (tabId === tab.id && info.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+  return tab;
 }
+
+// ─── Execute LinkedIn API call in tab context ───────────────────────────────
+
+async function executeInLinkedInTab(tabId, func, args) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func,
+    args,
+  });
+  return results[0]?.result;
+}
+
+// Functions to inject into LinkedIn tab
+function injectedResolveProfile(profileSlug) {
+  return fetch(`/voyager/api/identity/profiles/${profileSlug}`, {
+    headers: {
+      'Accept': 'application/vnd.linkedin.normalized+json+2.1',
+      'X-Restli-Protocol-Version': '2.0.0',
+      'csrf-token': document.cookie.match(/JSESSIONID="?([^";]+)/)?.[1] || '',
+    },
+    credentials: 'same-origin',
+  })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (!data) return null;
+      const urn = data?.data?.entityUrn || data?.entityUrn || '';
+      return urn.split(':').pop() || null;
+    })
+    .catch(() => null);
+}
+
+function injectedSendConnection(memberId, message) {
+  const csrfToken = document.cookie.match(/JSESSIONID="?([^";]+)/)?.[1] || '';
+  const body = {
+    trackingId: Array.from(crypto.getRandomValues(new Uint8Array(8)))
+      .map(b => b.toString(16).padStart(2, '0')).join(''),
+    inviteeProfileUrn: `urn:li:fsd_profile:${memberId}`,
+  };
+  if (message && message.trim()) {
+    body.message = message.trim().slice(0, 300);
+  }
+
+  return fetch('/voyager/api/growth/normInvitations', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/vnd.linkedin.normalized+json+2.1',
+      'X-Restli-Protocol-Version': '2.0.0',
+      'csrf-token': csrfToken,
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify(body),
+  })
+    .then(r => {
+      if (r.ok || r.status === 201) return { success: true };
+      return r.json().catch(() => ({})).then(d => ({
+        success: false,
+        error: d?.message || d?.status || `HTTP ${r.status}`,
+      }));
+    })
+    .catch(err => ({ success: false, error: err.message }));
+}
+
+// ─── High-level send function ───────────────────────────────────────────────
 
 function extractProfileSlug(url) {
   try {
@@ -76,48 +139,6 @@ function extractProfileSlug(url) {
     return null;
   }
 }
-
-async function sendConnectionRequest(session, linkedinUrl, message) {
-  const slug = extractProfileSlug(linkedinUrl);
-  if (!slug) return { success: false, error: 'Invalid LinkedIn URL' };
-
-  const memberId = await resolveProfileSlug(session, slug);
-  if (!memberId) return { success: false, error: `Could not resolve profile: ${slug}` };
-
-  const body = {
-    trackingId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
-    inviteeProfileUrn: `urn:li:fsd_profile:${memberId}`,
-  };
-
-  if (message && message.trim()) {
-    body.message = message.trim().slice(0, 300);
-  }
-
-  const resp = await fetch(
-    `${LINKEDIN_BASE}/voyager/api/growth/normInvitations`,
-    {
-      method: 'POST',
-      headers: {
-        'User-Agent': navigator.userAgent,
-        'Content-Type': 'application/json',
-        'Cookie': `li_at=${session.li_at}; JSESSIONID="${session.jsessionid}"`,
-        'csrf-token': session.csrf_token,
-        'Accept': 'application/vnd.linkedin.normalized+json+2.1',
-        'X-Restli-Protocol-Version': '2.0.0',
-      },
-      body: JSON.stringify(body),
-    }
-  );
-
-  if (resp.ok || resp.status === 201) {
-    return { success: true };
-  }
-
-  const errorData = await resp.json().catch(() => null);
-  return { success: false, error: errorData?.message || `HTTP ${resp.status}` };
-}
-
-// ─── Message personalization ────────────────────────────────────────────────
 
 function personalizeMessage(template, contact) {
   if (!template) return null;
@@ -132,6 +153,19 @@ function personalizeMessage(template, contact) {
     .slice(0, 300);
 }
 
+async function sendConnectionRequest(tabId, linkedinUrl, message) {
+  const slug = extractProfileSlug(linkedinUrl);
+  if (!slug) return { success: false, error: 'Invalid LinkedIn URL' };
+
+  // Resolve profile in LinkedIn tab context
+  const memberId = await executeInLinkedInTab(tabId, injectedResolveProfile, [slug]);
+  if (!memberId) return { success: false, error: `Could not resolve profile: ${slug}` };
+
+  // Send connection request in LinkedIn tab context
+  const result = await executeInLinkedInTab(tabId, injectedSendConnection, [memberId, message]);
+  return result || { success: false, error: 'No result from injection' };
+}
+
 // ─── Main processing loop ───────────────────────────────────────────────────
 
 async function processQueue() {
@@ -141,7 +175,6 @@ async function processQueue() {
     return { status: 'not_authenticated' };
   }
 
-  // Check LinkedIn session
   const session = await getLinkedInSession();
   if (!session) {
     updateBadge('!', '#FF8800');
@@ -149,12 +182,17 @@ async function processQueue() {
   }
 
   try {
-    // Fetch pending contacts from API
     const data = await apiFetch('/api/integrations/linkedin/extension/pending');
 
     if (!data.contacts || data.contacts.length === 0) {
       updateBadge('', '#2FCB72');
       return { status: 'no_pending', message: data.message || 'No pending contacts' };
+    }
+
+    // Get or open a LinkedIn tab
+    const tab = await getLinkedInTab();
+    if (!tab?.id) {
+      return { status: 'error', message: 'Could not open LinkedIn tab' };
     }
 
     const results = [];
@@ -167,11 +205,8 @@ async function processQueue() {
         await new Promise(r => setTimeout(r, jitter));
       }
 
-      // Personalize message
       const message = personalizeMessage(data.campaign?.connection_message, contact);
-
-      // Send connection request
-      const result = await sendConnectionRequest(session, contact.linkedin_url, message);
+      const result = await sendConnectionRequest(tab.id, contact.linkedin_url, message);
 
       // Report result to API
       try {
@@ -188,21 +223,14 @@ async function processQueue() {
         console.error('Failed to report result:', reportErr);
       }
 
-      if (result.success) {
-        sentCount++;
-      }
-
+      if (result.success) sentCount++;
       results.push({ contact_id: contact.id, ...result });
 
-      // Stop on auth errors
-      if (result.error?.includes('401') || result.error?.includes('403')) {
-        break;
-      }
+      if (result.error?.includes('401') || result.error?.includes('403')) break;
     }
 
     updateBadge(sentCount > 0 ? String(sentCount) : '', sentCount > 0 ? '#0A66C2' : '#2FCB72');
 
-    // Store last run info
     await chrome.storage.local.set({
       lastRun: new Date().toISOString(),
       lastResult: { sent: sentCount, total: data.contacts.length, results },
@@ -229,7 +257,6 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 });
 
-// Set up alarm (every 30 minutes)
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('processQueue', { periodInMinutes: 30 });
   updateBadge('', '#666666');
