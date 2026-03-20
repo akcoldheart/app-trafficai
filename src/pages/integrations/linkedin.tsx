@@ -21,6 +21,9 @@ import {
   IconShieldLock,
   IconPlug,
   IconRefresh,
+  IconSearch,
+  IconChevronLeft,
+  IconChevronRight,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 
@@ -140,6 +143,10 @@ export default function LinkedInIntegrationPage() {
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const [campaignContacts, setCampaignContacts] = useState<Record<string, CampaignContact[]>>({});
   const [contactsLoading, setContactsLoading] = useState<string | null>(null);
+  const [contactsPagination, setContactsPagination] = useState<Record<string, { page: number; total_pages: number; total: number }>>({});
+  const [contactsStatusFilter, setContactsStatusFilter] = useState<Record<string, string>>({});
+  const [contactsSearch, setContactsSearch] = useState<Record<string, string>>({});
+  const [contactsSearchInput, setContactsSearchInput] = useState<Record<string, string>>({});
 
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -365,26 +372,33 @@ export default function LinkedInIntegrationPage() {
     }
   };
 
+  const fetchCampaignContacts = useCallback(async (campaignId: string, page = 1, status = '', search = '') => {
+    setContactsLoading(campaignId);
+    try {
+      const params = new URLSearchParams({ page: String(page), page_size: '50' });
+      if (status) params.set('status', status);
+      if (search) params.set('search', search);
+      const resp = await fetch(`/api/integrations/linkedin/campaigns/${campaignId}?${params}`);
+      const data = await resp.json();
+      if (resp.ok) {
+        setCampaignContacts(prev => ({ ...prev, [campaignId]: data.contacts || [] }));
+        setContactsPagination(prev => ({ ...prev, [campaignId]: data.pagination }));
+      }
+    } catch (error) {
+      console.error('Error fetching contacts:', error);
+    } finally {
+      setContactsLoading(null);
+    }
+  }, []);
+
   const toggleCampaignExpand = async (campaignId: string) => {
     if (expandedCampaign === campaignId) {
       setExpandedCampaign(null);
       return;
     }
     setExpandedCampaign(campaignId);
-
     if (!campaignContacts[campaignId]) {
-      setContactsLoading(campaignId);
-      try {
-        const resp = await fetch(`/api/integrations/linkedin/campaigns/${campaignId}`);
-        const data = await resp.json();
-        if (resp.ok) {
-          setCampaignContacts(prev => ({ ...prev, [campaignId]: data.contacts || [] }));
-        }
-      } catch (error) {
-        console.error('Error fetching contacts:', error);
-      } finally {
-        setContactsLoading(null);
-      }
+      await fetchCampaignContacts(campaignId);
     }
   };
 
@@ -401,18 +415,11 @@ export default function LinkedInIntegrationPage() {
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to retry');
       showToast(data.message, 'success');
-      // Refresh campaign contacts and stats
-      setCampaignContacts(prev => ({ ...prev, [campaignId]: undefined as any }));
       fetchCampaigns();
       // Re-fetch contacts if expanded
       if (expandedCampaign === campaignId) {
-        setContactsLoading(campaignId);
-        const detailResp = await fetch(`/api/integrations/linkedin/campaigns/${campaignId}`);
-        const detailData = await detailResp.json();
-        if (detailResp.ok) {
-          setCampaignContacts(prev => ({ ...prev, [campaignId]: detailData.contacts || [] }));
-        }
-        setContactsLoading(null);
+        const pg = contactsPagination[campaignId]?.page || 1;
+        await fetchCampaignContacts(campaignId, pg, contactsStatusFilter[campaignId] || '', contactsSearch[campaignId] || '');
       }
     } catch (error) {
       showToast((error as Error).message, 'error');
@@ -825,71 +832,157 @@ export default function LinkedInIntegrationPage() {
                               )}
 
                               {/* Expanded: contact list */}
-                              {isExpanded && (
+                              {isExpanded && (() => {
+                                const pg = contactsPagination[campaign.id] || { page: 1, total_pages: 1, total: 0 };
+                                const currentFilter = contactsStatusFilter[campaign.id] || '';
+                                const currentSearch = contactsSearch[campaign.id] || '';
+                                const searchInputVal = contactsSearchInput[campaign.id] ?? '';
+
+                                return (
                                 <div style={{ borderTop: '1px solid var(--tblr-border-color)', padding: 12 }}>
+                                  {/* Filters row */}
+                                  <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                                    {/* Status filter pills */}
+                                    <div className="btn-group btn-group-sm">
+                                      {[
+                                        { value: '', label: 'All', count: stats.total },
+                                        { value: 'pending', label: 'Pending', count: stats.pending },
+                                        { value: 'sent', label: 'Sent', count: stats.sent },
+                                        { value: 'accepted', label: 'Accepted', count: stats.accepted },
+                                        { value: 'error', label: 'Error', count: stats.error },
+                                      ].filter(f => f.value === '' || f.count > 0).map((f) => (
+                                        <button
+                                          key={f.value}
+                                          className={`btn btn-sm ${currentFilter === f.value ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                          onClick={() => {
+                                            setContactsStatusFilter(prev => ({ ...prev, [campaign.id]: f.value }));
+                                            fetchCampaignContacts(campaign.id, 1, f.value, currentSearch);
+                                          }}
+                                        >
+                                          {f.label} ({f.count})
+                                        </button>
+                                      ))}
+                                    </div>
+
+                                    {/* Search */}
+                                    <div className="input-group input-group-sm ms-auto" style={{ maxWidth: 220 }}>
+                                      <input
+                                        type="text"
+                                        className="form-control form-control-sm"
+                                        placeholder="Search name..."
+                                        value={searchInputVal}
+                                        onChange={(e) => setContactsSearchInput(prev => ({ ...prev, [campaign.id]: e.target.value }))}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            const val = (e.target as HTMLInputElement).value.trim();
+                                            setContactsSearch(prev => ({ ...prev, [campaign.id]: val }));
+                                            fetchCampaignContacts(campaign.id, 1, currentFilter, val);
+                                          }
+                                        }}
+                                      />
+                                      <button
+                                        className="btn btn-outline-secondary btn-sm"
+                                        onClick={() => {
+                                          setContactsSearch(prev => ({ ...prev, [campaign.id]: searchInputVal.trim() }));
+                                          fetchCampaignContacts(campaign.id, 1, currentFilter, searchInputVal.trim());
+                                        }}
+                                      >
+                                        <IconSearch size={14} />
+                                      </button>
+                                    </div>
+                                  </div>
+
                                   {contactsLoading === campaign.id ? (
                                     <div className="d-flex align-items-center text-muted py-2">
                                       <IconLoader2 size={14} className="me-2" style={{ animation: 'spin 1s linear infinite' }} />
                                       Loading contacts...
                                     </div>
                                   ) : (campaignContacts[campaign.id] || []).length === 0 ? (
-                                    <div className="text-muted small py-2">No contacts in this campaign.</div>
+                                    <div className="text-muted small py-2">
+                                      {currentFilter || currentSearch ? 'No contacts match the current filter.' : 'No contacts in this campaign.'}
+                                    </div>
                                   ) : (
-                                    <div className="table-responsive">
-                                      <table className="table table-sm table-vcenter mb-0">
-                                        <thead>
-                                          <tr>
-                                            <th>Name</th>
-                                            <th>LinkedIn</th>
-                                            <th>Status</th>
-                                            <th>Sent</th>
-                                            <th></th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {(campaignContacts[campaign.id] || []).slice(0, 50).map((contact) => (
-                                            <tr key={contact.id}>
-                                              <td className="small">{contact.full_name || '—'}</td>
-                                              <td className="small">
-                                                {contact.linkedin_url ? (
-                                                  <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue">
-                                                    Profile
-                                                  </a>
-                                                ) : '—'}
-                                              </td>
-                                              <td>
-                                                <span className={`badge ${STATUS_BADGES[contact.status] || 'bg-secondary-lt'}`}>
-                                                  {contact.status}
-                                                </span>
-                                              </td>
-                                              <td className="text-muted small">
-                                                {contact.sent_at ? new Date(contact.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                                              </td>
-                                              <td>
-                                                {contact.status === 'error' && (
-                                                  <button
-                                                    className="btn btn-ghost-warning btn-icon btn-sm"
-                                                    title="Retry"
-                                                    onClick={() => handleRetryFailed(campaign.id, contact.id)}
-                                                    disabled={retrying === contact.id}
-                                                  >
-                                                    <IconRefresh size={14} className={retrying === contact.id ? 'spin' : ''} />
-                                                  </button>
-                                                )}
-                                              </td>
+                                    <>
+                                      <div className="table-responsive">
+                                        <table className="table table-sm table-vcenter mb-0">
+                                          <thead>
+                                            <tr>
+                                              <th>Name</th>
+                                              <th>LinkedIn</th>
+                                              <th>Status</th>
+                                              <th>Sent</th>
+                                              <th></th>
                                             </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                      {(campaignContacts[campaign.id] || []).length > 50 && (
-                                        <div className="text-muted small text-center py-2">
-                                          Showing 50 of {campaignContacts[campaign.id].length} contacts
+                                          </thead>
+                                          <tbody>
+                                            {(campaignContacts[campaign.id] || []).map((contact) => (
+                                              <tr key={contact.id}>
+                                                <td className="small">{contact.full_name || '—'}</td>
+                                                <td className="small">
+                                                  {contact.linkedin_url ? (
+                                                    <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue">
+                                                      Profile
+                                                    </a>
+                                                  ) : '—'}
+                                                </td>
+                                                <td>
+                                                  <span className={`badge ${STATUS_BADGES[contact.status] || 'bg-secondary-lt'}`}>
+                                                    {contact.status}
+                                                  </span>
+                                                </td>
+                                                <td className="text-muted small">
+                                                  {contact.sent_at ? new Date(contact.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                                                </td>
+                                                <td>
+                                                  {contact.status === 'error' && (
+                                                    <button
+                                                      className="btn btn-ghost-warning btn-icon btn-sm"
+                                                      title="Retry"
+                                                      onClick={() => handleRetryFailed(campaign.id, contact.id)}
+                                                      disabled={retrying === contact.id}
+                                                    >
+                                                      <IconRefresh size={14} className={retrying === contact.id ? 'spin' : ''} />
+                                                    </button>
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+
+                                      {/* Pagination */}
+                                      {pg.total_pages > 1 && (
+                                        <div className="d-flex align-items-center justify-content-between mt-2">
+                                          <div className="text-muted small">
+                                            Showing {((pg.page - 1) * 50) + 1}–{Math.min(pg.page * 50, pg.total)} of {pg.total.toLocaleString()}
+                                          </div>
+                                          <div className="btn-group btn-group-sm">
+                                            <button
+                                              className="btn btn-outline-secondary btn-sm"
+                                              disabled={pg.page <= 1}
+                                              onClick={() => fetchCampaignContacts(campaign.id, pg.page - 1, currentFilter, currentSearch)}
+                                            >
+                                              <IconChevronLeft size={14} />
+                                            </button>
+                                            <span className="btn btn-outline-secondary btn-sm disabled">
+                                              {pg.page} / {pg.total_pages}
+                                            </span>
+                                            <button
+                                              className="btn btn-outline-secondary btn-sm"
+                                              disabled={pg.page >= pg.total_pages}
+                                              onClick={() => fetchCampaignContacts(campaign.id, pg.page + 1, currentFilter, currentSearch)}
+                                            >
+                                              <IconChevronRight size={14} />
+                                            </button>
+                                          </div>
                                         </div>
                                       )}
-                                    </div>
+                                    </>
                                   )}
                                 </div>
-                              )}
+                                );
+                              })()}
                             </div>
                           );
                         })}

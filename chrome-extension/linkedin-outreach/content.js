@@ -2,6 +2,10 @@
 // Injected into LinkedIn profile pages to click Connect and send messages
 
 (function() {
+  // Guard against double-injection
+  if (window.__trafficAiContentLoaded) return;
+  window.__trafficAiContentLoaded = true;
+
   // Listen for messages from background script
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'sendConnectionRequest') {

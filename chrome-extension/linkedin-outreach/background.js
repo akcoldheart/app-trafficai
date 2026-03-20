@@ -102,6 +102,17 @@ async function sendConnectionRequest(linkedinUrl, message) {
       chrome.tabs.onUpdated.addListener(listener);
     });
 
+    // Ensure content script is injected (manifest content_scripts may not fire on programmatic tabs)
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content.js'],
+      });
+    } catch (injectErr) {
+      console.warn('[TrafficAI] Content script injection warning:', injectErr.message);
+      // May already be injected via manifest — continue anyway
+    }
+
     // Send message to content script to click Connect
     const result = await new Promise((resolve) => {
       const timeout = setTimeout(() => {

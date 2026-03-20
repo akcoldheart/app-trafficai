@@ -30,24 +30,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     try {
-      const { data: contacts } = await supabaseAdmin
-        .from('linkedin_campaign_contacts')
-        .select('*')
-        .eq('campaign_id', id)
-        .order('created_at', { ascending: true })
-        .limit(500);
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(100, Math.max(1, parseInt(req.query.page_size as string) || 50));
+      const statusFilter = req.query.status as string || '';
+      const search = (req.query.search as string || '').trim();
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
 
-      const statusCounts = (contacts || []).reduce((acc: Record<string, number>, c: any) => {
-        acc[c.status] = (acc[c.status] || 0) + 1;
-        return acc;
-      }, {});
+      // Get total counts by status (always unfiltered for the stats bar)
+      const { data: allContacts } = await supabaseAdmin
+        .from('linkedin_campaign_contacts')
+        .select('status')
+        .eq('campaign_id', id);
+
+      const statusCounts: Record<string, number> = { total: 0, pending: 0, sent: 0, accepted: 0, declined: 0, error: 0 };
+      for (const c of (allContacts || [])) {
+        statusCounts.total++;
+        if (c.status in statusCounts) statusCounts[c.status as keyof typeof statusCounts]++;
+      }
+
+      // Build filtered + paginated query
+      let query = supabaseAdmin
+        .from('linkedin_campaign_contacts')
+        .select('*', { count: 'exact' })
+        .eq('campaign_id', id);
+
+      if (statusFilter && ['pending', 'sent', 'accepted', 'declined', 'error'].includes(statusFilter)) {
+        query = query.eq('status', statusFilter);
+      }
+
+      if (search) {
+        query = query.or(`full_name.ilike.%${search}%,contact_email.ilike.%${search}%,linkedin_url.ilike.%${search}%`);
+      }
+
+      const { data: contacts, count } = await query
+        .order('created_at', { ascending: true })
+        .range(from, to);
 
       return res.status(200).json({
         campaign,
         contacts: contacts || [],
-        stats: {
-          total: contacts?.length || 0,
-          ...statusCounts,
+        stats: statusCounts,
+        pagination: {
+          page,
+          page_size: pageSize,
+          total: count || 0,
+          total_pages: Math.ceil((count || 0) / pageSize),
         },
       });
     } catch (error) {
