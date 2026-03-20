@@ -65,6 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (operating_hours_end) updates.operating_hours_end = operating_hours_end;
     if (operating_timezone) updates.operating_timezone = operating_timezone;
     if (daily_limit !== undefined) updates.daily_limit = Math.min(daily_limit, 30);
+    if (req.body.connection_message !== undefined) updates.connection_message = req.body.connection_message;
 
     try {
       const { data, error } = await supabaseAdmin

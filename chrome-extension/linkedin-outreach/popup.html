@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Traffic AI - LinkedIn Outreach</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">Traffic AI</div>
+      <div class="subtitle">LinkedIn Outreach</div>
+    </div>
+
+    <!-- Not Connected State -->
+    <div id="setup-view" style="display: none;">
+      <div class="section">
+        <h3>Connect to Traffic AI</h3>
+        <p class="hint">Enter your Traffic AI extension token to get started.</p>
+
+        <div class="field">
+          <label>API URL</label>
+          <input type="text" id="api-url" value="https://app.trafficai.io" placeholder="https://app.trafficai.io">
+        </div>
+
+        <div class="field">
+          <label>Extension Token</label>
+          <input type="password" id="api-token" placeholder="Paste your extension token">
+          <p class="hint">Generate a token from Integrations &rarr; LinkedIn in your Traffic AI dashboard.</p>
+        </div>
+
+        <button id="connect-btn" class="btn btn-primary">Connect</button>
+        <div id="connect-error" class="error" style="display: none;"></div>
+      </div>
+    </div>
+
+    <!-- Connected State -->
+    <div id="connected-view" style="display: none;">
+      <!-- Status indicators -->
+      <div class="status-row">
+        <div class="status-item">
+          <div id="linkedin-status" class="status-dot red"></div>
+          <span>LinkedIn</span>
+        </div>
+        <div class="status-item">
+          <div id="api-status" class="status-dot red"></div>
+          <span>Traffic AI</span>
+        </div>
+      </div>
+
+      <div id="linkedin-warning" class="warning" style="display: none;">
+        Please log into LinkedIn in this browser to enable outreach.
+      </div>
+
+      <!-- Last run info -->
+      <div id="last-run-section" class="section" style="display: none;">
+        <h3>Last Run</h3>
+        <div id="last-run-info" class="info-text"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="section">
+        <button id="run-now-btn" class="btn btn-primary">
+          <span id="run-now-text">Send Now</span>
+          <span id="run-now-spinner" class="spinner" style="display: none;"></span>
+        </button>
+        <p class="hint">Process pending connection requests immediately.</p>
+      </div>
+
+      <div class="section">
+        <button id="disconnect-btn" class="btn btn-danger">Disconnect</button>
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

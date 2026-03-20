@@ -19,6 +19,7 @@ import {
   IconClock,
   IconSend,
   IconShieldLock,
+  IconPlug,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 
@@ -42,6 +43,7 @@ interface Campaign {
   operating_hours_end: string;
   operating_timezone: string;
   daily_limit: number;
+  connection_message?: string | null;
   total_sent: number;
   total_accepted: number;
   created_at: string;
@@ -129,6 +131,7 @@ export default function LinkedInIntegrationPage() {
     operating_hours_end: '17:00',
     operating_timezone: 'America/New_York',
     daily_limit: 25,
+    connection_message: "Hi {first_name}, I came across your profile and would love to connect. I think there could be great synergy between what we do. Looking forward to connecting!",
   });
   const [creatingCampaign, setCreatingCampaign] = useState(false);
 
@@ -138,6 +141,11 @@ export default function LinkedInIntegrationPage() {
   const [contactsLoading, setContactsLoading] = useState<string | null>(null);
 
   const [toast, setToast] = useState<Toast | null>(null);
+
+  // Chrome extension
+  const [extensionToken, setExtensionToken] = useState<string | null>(null);
+  const [generatingToken, setGeneratingToken] = useState(false);
+  const [showToken, setShowToken] = useState(false);
 
   const showToast = (message: string, type: Toast['type'] = 'info') => {
     setToast({ message, type });
@@ -298,6 +306,7 @@ export default function LinkedInIntegrationPage() {
       operating_hours_end: newCampaign.operating_hours_end,
       operating_timezone: newCampaign.operating_timezone,
       daily_limit: newCampaign.daily_limit,
+      connection_message: newCampaign.connection_message.trim() || null,
     };
     if (sourceType === 'pixel') body.source_pixel_id = sourceId;
     else body.source_audience_id = sourceId;
@@ -323,6 +332,7 @@ export default function LinkedInIntegrationPage() {
         operating_hours_end: '17:00',
         operating_timezone: 'America/New_York',
         daily_limit: 25,
+        connection_message: "Hi {first_name}, I came across your profile and would love to connect. I think there could be great synergy between what we do. Looking forward to connecting!",
       });
       fetchCampaigns();
     } catch (error) {
@@ -647,6 +657,22 @@ export default function LinkedInIntegrationPage() {
                             <div className="form-hint mt-1">Connection requests sent per day. Keep under 30 for safety.</div>
                           </div>
 
+                          <div className="mb-3">
+                            <label className="form-label fw-bold">Connection Message (optional)</label>
+                            <textarea
+                              className="form-control"
+                              rows={4}
+                              placeholder="Hi {first_name}, I'd love to connect..."
+                              value={newCampaign.connection_message}
+                              onChange={(e) => setNewCampaign(prev => ({ ...prev, connection_message: e.target.value }))}
+                              disabled={creatingCampaign}
+                              maxLength={300}
+                            />
+                            <div className="form-hint mt-1">
+                              Max 300 characters. Variables: {'{first_name}'}, {'{last_name}'}, {'{company}'}, {'{job_title}'}. Leave empty for no message.
+                            </div>
+                          </div>
+
                           <button
                             className="btn btn-primary"
                             onClick={handleCreateCampaign}
@@ -811,6 +837,79 @@ export default function LinkedInIntegrationPage() {
                         })}
                       </div>
                     )}
+                  </div>
+
+                  {/* Chrome Extension Section */}
+                  <hr className="my-3" />
+                  <div className="mb-4">
+                    <h4 className="mb-2">
+                      <IconPlug size={18} className="me-2" />
+                      Chrome Extension
+                    </h4>
+                    <p className="text-muted small mb-3">
+                      Install the Traffic AI Chrome extension to send LinkedIn connection requests from your browser.
+                      The extension uses your real LinkedIn session for maximum safety.
+                    </p>
+
+                    {extensionToken ? (
+                      <div className="mb-3">
+                        <label className="form-label fw-bold">Extension Token</label>
+                        <div className="input-group" style={{ maxWidth: 500 }}>
+                          <input
+                            type={showToken ? 'text' : 'password'}
+                            className="form-control form-control-sm"
+                            value={extensionToken}
+                            readOnly
+                          />
+                          <button
+                            className="btn btn-outline-secondary btn-sm"
+                            onClick={() => setShowToken(!showToken)}
+                          >
+                            {showToken ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                          </button>
+                          <button
+                            className="btn btn-outline-secondary btn-sm"
+                            onClick={() => {
+                              navigator.clipboard.writeText(extensionToken);
+                              showToast('Token copied to clipboard', 'success');
+                            }}
+                          >
+                            Copy
+                          </button>
+                        </div>
+                        <div className="form-hint mt-1">Paste this token in the Chrome extension to connect.</div>
+                      </div>
+                    ) : null}
+
+                    <button
+                      className="btn btn-outline-primary btn-sm"
+                      onClick={async () => {
+                        setGeneratingToken(true);
+                        try {
+                          const resp = await fetch('/api/integrations/linkedin/extension/token', {
+                            method: 'POST',
+                          });
+                          const data = await resp.json();
+                          if (!resp.ok) throw new Error(data.error || 'Failed to generate token');
+                          setExtensionToken(data.token);
+                          setShowToken(true);
+                          showToast('Extension token generated! Copy it and paste in the Chrome extension.', 'success');
+                        } catch (error) {
+                          showToast((error as Error).message, 'error');
+                        } finally {
+                          setGeneratingToken(false);
+                        }
+                      }}
+                      disabled={generatingToken}
+                    >
+                      {generatingToken ? (
+                        <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} /> Generating...</>
+                      ) : extensionToken ? (
+                        'Regenerate Token'
+                      ) : (
+                        'Generate Extension Token'
+                      )}
+                    </button>
                   </div>
 
                   <hr className="my-3" />

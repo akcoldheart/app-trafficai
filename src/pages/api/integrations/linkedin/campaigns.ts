@@ -67,6 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       operating_hours_end = '17:00',
       operating_timezone = 'America/New_York',
       daily_limit = 25,
+      connection_message,
     } = req.body;
 
     if (!name) {
@@ -131,6 +132,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           operating_hours_end,
           operating_timezone,
           daily_limit: Math.min(daily_limit, 30),
+          connection_message: connection_message || null,
         })
         .select('*')
         .single();
