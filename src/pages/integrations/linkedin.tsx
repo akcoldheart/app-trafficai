@@ -20,6 +20,7 @@ import {
   IconSend,
   IconShieldLock,
   IconPlug,
+  IconRefresh,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 
@@ -387,6 +388,39 @@ export default function LinkedInIntegrationPage() {
     }
   };
 
+  const [retrying, setRetrying] = useState<string | null>(null);
+
+  const handleRetryFailed = async (campaignId: string, contactId?: string) => {
+    setRetrying(contactId || campaignId);
+    try {
+      const resp = await fetch(`/api/integrations/linkedin/campaigns/${campaignId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'retry', contact_id: contactId }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to retry');
+      showToast(data.message, 'success');
+      // Refresh campaign contacts and stats
+      setCampaignContacts(prev => ({ ...prev, [campaignId]: undefined as any }));
+      fetchCampaigns();
+      // Re-fetch contacts if expanded
+      if (expandedCampaign === campaignId) {
+        setContactsLoading(campaignId);
+        const detailResp = await fetch(`/api/integrations/linkedin/campaigns/${campaignId}`);
+        const detailData = await detailResp.json();
+        if (detailResp.ok) {
+          setCampaignContacts(prev => ({ ...prev, [campaignId]: detailData.contacts || [] }));
+        }
+        setContactsLoading(null);
+      }
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setRetrying(null);
+    }
+  };
+
   if (loading) {
     return (
       <Layout title="LinkedIn Integration" pageTitle="Loading...">
@@ -741,6 +775,17 @@ export default function LinkedInIntegrationPage() {
                                 </div>
 
                                 <div className="d-flex gap-1" onClick={(e) => e.stopPropagation()}>
+                                  {stats.error > 0 && (
+                                    <button
+                                      className="btn btn-ghost-warning btn-sm"
+                                      title={`Retry ${stats.error} failed`}
+                                      onClick={() => handleRetryFailed(campaign.id)}
+                                      disabled={retrying === campaign.id}
+                                    >
+                                      <IconRefresh size={14} className={`me-1${retrying === campaign.id ? ' spin' : ''}`} />
+                                      Retry {stats.error}
+                                    </button>
+                                  )}
                                   {campaign.status === 'active' ? (
                                     <button
                                       className="btn btn-ghost-warning btn-icon btn-sm"
@@ -798,6 +843,7 @@ export default function LinkedInIntegrationPage() {
                                             <th>LinkedIn</th>
                                             <th>Status</th>
                                             <th>Sent</th>
+                                            <th></th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -818,6 +864,18 @@ export default function LinkedInIntegrationPage() {
                                               </td>
                                               <td className="text-muted small">
                                                 {contact.sent_at ? new Date(contact.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                                              </td>
+                                              <td>
+                                                {contact.status === 'error' && (
+                                                  <button
+                                                    className="btn btn-ghost-warning btn-icon btn-sm"
+                                                    title="Retry"
+                                                    onClick={() => handleRetryFailed(campaign.id, contact.id)}
+                                                    disabled={retrying === contact.id}
+                                                  >
+                                                    <IconRefresh size={14} className={retrying === contact.id ? 'spin' : ''} />
+                                                  </button>
+                                                )}
                                               </td>
                                             </tr>
                                           ))}
@@ -1019,6 +1077,9 @@ export default function LinkedInIntegrationPage() {
         }
         .space-y-3 > * + * {
           margin-top: 0.75rem;
+        }
+        .spin {
+          animation: spin 1s linear infinite;
         }
       `}</style>
     </Layout>

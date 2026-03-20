@@ -84,6 +84,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
+  if (req.method === 'PATCH') {
+    // Retry failed contacts - reset error status back to pending
+    const { action, contact_id } = req.body;
+
+    if (action !== 'retry') {
+      return res.status(400).json({ error: 'Invalid action' });
+    }
+
+    try {
+      const query = supabaseAdmin
+        .from('linkedin_campaign_contacts')
+        .update({ status: 'pending', error_message: null, sent_at: null })
+        .eq('campaign_id', id)
+        .eq('status', 'error');
+
+      // If contact_id provided, retry single contact; otherwise retry all errors
+      if (contact_id) {
+        query.eq('id', contact_id);
+      }
+
+      const { data, error } = await query.select('id');
+      if (error) throw error;
+
+      const count = data?.length || 0;
+      return res.status(200).json({
+        success: true,
+        message: `${count} contact${count !== 1 ? 's' : ''} reset to pending`,
+        count,
+      });
+    } catch (error) {
+      console.error('Error retrying contacts:', error);
+      return res.status(500).json({ error: 'Failed to retry contacts' });
+    }
+  }
+
   if (req.method === 'DELETE') {
     try {
       await supabaseAdmin

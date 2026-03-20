@@ -77,23 +77,24 @@ async function sendConnectionRequest(linkedinUrl, message) {
   const profileUrl = `https://www.linkedin.com/in/${slug}/`;
   console.log(`[TrafficAI] Navigating to profile: ${profileUrl}`);
 
-  // Open profile in a new tab
-  const tab = await chrome.tabs.create({ url: profileUrl, active: false });
+  // Open profile in an active tab (loads faster than background)
+  const tab = await chrome.tabs.create({ url: profileUrl, active: true });
 
   try {
-    // Wait for page to load
-    await new Promise((resolve, reject) => {
+    // Wait for page to load (30s timeout for slow connections)
+    await new Promise((resolve) => {
       const timeout = setTimeout(() => {
         chrome.tabs.onUpdated.removeListener(listener);
-        reject(new Error('Page load timeout'));
-      }, 15000);
+        // Don't reject — try to proceed anyway, page might be partially loaded
+        resolve();
+      }, 30000);
 
       const listener = (tabId, info) => {
         if (tabId === tab.id && info.status === 'complete') {
           chrome.tabs.onUpdated.removeListener(listener);
           clearTimeout(timeout);
-          // Give extra time for LinkedIn's JS to render
-          setTimeout(resolve, 2000);
+          // Give extra time for LinkedIn's JS to render the Connect button
+          setTimeout(resolve, 3000);
         }
       };
       chrome.tabs.onUpdated.addListener(listener);
