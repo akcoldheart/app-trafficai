@@ -64,6 +64,8 @@ function personalizeMessage(template, contact) {
     .replace(/\{last_name\}/gi, lastName)
     .replace(/\{full_name\}/gi, contact.full_name || '')
     .replace(/\{email\}/gi, contact.contact_email || '')
+    .replace(/\{company\}/gi, contact.company || '')
+    .replace(/\{job_title\}/gi, contact.job_title || '')
     .trim()
     .slice(0, 300);
 }

@@ -138,6 +138,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         contact_email: c.email || null,
         linkedin_url: c.linkedin_url!,
         full_name: c.full_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || null,
+        company: c.company || null,
+        job_title: c.job_title || null,
         status: 'pending',
       }));
 

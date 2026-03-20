@@ -85,7 +85,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const { data: contacts } = await supabaseAdmin
         .from('linkedin_campaign_contacts')
-        .select('id, campaign_id, contact_email, linkedin_url, full_name, status')
+        .select('id, campaign_id, contact_email, linkedin_url, full_name, company, job_title, status')
         .eq('campaign_id', campaign.id)
         .eq('status', 'pending')
         .order('created_at', { ascending: true })
