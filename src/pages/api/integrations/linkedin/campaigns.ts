@@ -16,10 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const { data: campaigns, error } = await supabaseAdmin
         .from('linkedin_campaigns')
-        .select(`
-          *,
-          linkedin_campaign_contacts(count)
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -28,33 +25,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Get contact status counts for each campaign
       const campaignsWithStats = await Promise.all(
         (campaigns || []).map(async (campaign: any) => {
-          const { data: statusCounts } = await supabaseAdmin
-            .rpc('get_campaign_contact_counts', { campaign_uuid: campaign.id })
-            .single();
+          const { data: contacts } = await supabaseAdmin
+            .from('linkedin_campaign_contacts')
+            .select('status')
+            .eq('campaign_id', campaign.id);
 
-          return {
-            ...campaign,
-            contact_stats: statusCounts || { total: 0, pending: 0, sent: 0, accepted: 0, declined: 0, error: 0 },
-          };
+          const counts = { total: 0, pending: 0, sent: 0, accepted: 0, declined: 0, error: 0 };
+          for (const c of (contacts || [])) {
+            counts.total++;
+            const s = c.status as keyof typeof counts;
+            if (s in counts) counts[s]++;
+          }
+
+          return { ...campaign, contact_stats: counts };
         })
       );
 
       return res.status(200).json({ campaigns: campaignsWithStats });
     } catch (error) {
       console.error('Error fetching LinkedIn campaigns:', error);
-
-      // Fallback without RPC
-      try {
-        const { data: campaigns } = await supabaseAdmin
-          .from('linkedin_campaigns')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        return res.status(200).json({ campaigns: campaigns || [] });
-      } catch (fallbackError) {
-        return res.status(500).json({ error: 'Failed to fetch campaigns' });
-      }
+      return res.status(500).json({ error: 'Failed to fetch campaigns' });
     }
   }
 
