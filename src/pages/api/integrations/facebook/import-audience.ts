@@ -82,10 +82,14 @@ function getPreComputedEmailHashes(contact: Record<string, any>): string[] {
 
   const hashes = new Set<string>();
 
-  // Check enrichment_data (visitors) and data JSONB (audience_contacts)
+  // Check enrichment_data (visitors — UPPERCASE keys) and data JSONB (audience_contacts — lowercase keys)
   for (const source of [enrichment, extraData]) {
     if (!source) continue;
-    for (const key of ['SHA256_PERSONAL_EMAIL', 'SHA256_BUSINESS_EMAIL']) {
+    // Check both UPPERCASE (raw API / enrichment_data) and lowercase (normalized audience_contacts data)
+    for (const key of [
+      'SHA256_PERSONAL_EMAIL', 'sha256_personal_email',
+      'SHA256_BUSINESS_EMAIL', 'sha256_business_email',
+    ]) {
       const val = source[key];
       if (typeof val === 'string' && val.trim()) {
         // Can be comma-separated: "hash1, hash2"
