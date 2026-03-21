@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthenticatedUser } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import { getIntegration, getVisitorsForSync, getAudienceContactsForSync } from '@/lib/integrations';
+import { logEvent } from '@/lib/webhook-logger';
 import crypto from 'crypto';
 
 export const config = { maxDuration: 300 };
@@ -10,6 +11,19 @@ const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// Basic email validation
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function getClientIp(req: NextApiRequest): string {
+  return (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || '';
+}
+
+function isTokenExpired(config: Record<string, unknown>): boolean {
+  const expiresAt = config.token_expires_at as string | undefined;
+  if (!expiresAt) return false;
+  return new Date(expiresAt).getTime() < Date.now();
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -20,6 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!user) return;
 
   const { ad_account_id, audience_name, source_pixel_id, source_audience_id } = req.body;
+  const ip = getClientIp(req);
 
   if (!ad_account_id || !audience_name) {
     return res.status(400).json({ error: 'ad_account_id and audience_name are required' });
@@ -34,6 +49,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!integration) {
       return res.status(401).json({ error: 'Facebook not connected' });
+    }
+
+    // Check token expiry
+    const integrationConfig = (integration.config || {}) as Record<string, unknown>;
+    if (isTokenExpired(integrationConfig)) {
+      await logEvent({
+        type: 'api',
+        event_name: 'facebook_import_audience',
+        status: 'error',
+        message: 'Facebook import failed - access token has expired',
+        user_id: user.id,
+        ip_address: ip,
+        request_data: { ad_account_id, audience_name, source_pixel_id, source_audience_id },
+      });
+      return res.status(401).json({
+        error: 'Facebook access token has expired. Please reconnect your Facebook account.',
+        token_expired: true,
+      });
     }
 
     const accessToken = integration.api_key;
@@ -61,16 +94,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       contacts = await getAudienceContactsForSync(source_audience_id);
     }
 
+    // Validate and filter emails
     const emails = contacts
       .map(c => c.email?.toLowerCase().trim())
-      .filter((e): e is string => !!e);
+      .filter((e): e is string => !!e && EMAIL_REGEX.test(e));
+
+    const skippedCount = contacts.filter(c => c.email).length - emails.length;
 
     if (emails.length === 0) {
       await supabaseAdmin
         .from('facebook_audience_imports')
-        .update({ status: 'failed', error_message: 'No contacts with emails found' })
+        .update({ status: 'failed', error_message: 'No valid email addresses found' })
         .eq('id', importRecord.id);
-      return res.status(400).json({ error: 'No contacts with emails found' });
+
+      await logEvent({
+        type: 'api',
+        event_name: 'facebook_import_audience',
+        status: 'error',
+        message: `Facebook audience import failed - no valid emails found (${skippedCount} invalid emails skipped)`,
+        user_id: user.id,
+        ip_address: ip,
+        request_data: { ad_account_id, audience_name, source_pixel_id, source_audience_id },
+      });
+
+      return res.status(400).json({ error: 'No valid email addresses found' });
     }
 
     // Hash emails with SHA256
@@ -96,38 +143,84 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const createData = await createResp.json();
 
     if (!createResp.ok || !createData.id) {
+      const errorMsg = createData.error?.message || 'Failed to create audience';
       await supabaseAdmin
         .from('facebook_audience_imports')
-        .update({ status: 'failed', error_message: createData.error?.message || 'Failed to create audience' })
+        .update({ status: 'failed', error_message: errorMsg })
         .eq('id', importRecord.id);
-      return res.status(400).json({ error: 'Failed to create Facebook audience', details: createData.error?.message });
+
+      await logEvent({
+        type: 'api',
+        event_name: 'facebook_import_audience',
+        status: 'error',
+        message: `Failed to create Facebook Custom Audience "${audience_name}"`,
+        user_id: user.id,
+        ip_address: ip,
+        request_data: { ad_account_id, audience_name },
+        error_details: errorMsg,
+      });
+
+      return res.status(400).json({ error: 'Failed to create Facebook audience', details: errorMsg });
     }
 
     const fbAudienceId = createData.id;
 
-    // Upload hashed users in batches of 5000
+    // Upload hashed users in batches of 5000, track failures
     const batchSize = 5000;
+    let successfulUploads = 0;
+    let failedBatches = 0;
+    const batchErrors: string[] = [];
+
     for (let i = 0; i < hashedEmails.length; i += batchSize) {
       const batch = hashedEmails.slice(i, i + batchSize);
-      const uploadResp = await fetch(
-        `https://graph.facebook.com/v19.0/${fbAudienceId}/users`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            payload: {
-              schema: ['EMAIL_SHA256'],
-              data: batch.map(h => [h]),
-            },
-            access_token: accessToken,
-          }),
-        }
-      );
+      const batchNumber = Math.floor(i / batchSize) + 1;
 
-      if (!uploadResp.ok) {
-        const uploadData = await uploadResp.json();
-        console.error('Facebook upload batch error:', uploadData);
+      try {
+        const uploadResp = await fetch(
+          `https://graph.facebook.com/v19.0/${fbAudienceId}/users`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              payload: {
+                schema: ['EMAIL_SHA256'],
+                data: batch.map(h => [h]),
+              },
+              access_token: accessToken,
+            }),
+          }
+        );
+
+        if (!uploadResp.ok) {
+          const uploadData = await uploadResp.json();
+          failedBatches++;
+          batchErrors.push(`Batch ${batchNumber}: ${uploadData.error?.message || 'Upload failed'}`);
+        } else {
+          successfulUploads += batch.length;
+        }
+      } catch (batchErr) {
+        failedBatches++;
+        batchErrors.push(`Batch ${batchNumber}: ${(batchErr as Error).message}`);
       }
+    }
+
+    // Determine final status based on batch results
+    const totalBatches = Math.ceil(hashedEmails.length / batchSize);
+    let finalStatus: string;
+    let finalMessage: string;
+    let errorMessage: string | null = null;
+
+    if (failedBatches === 0) {
+      finalStatus = 'completed';
+      finalMessage = `Successfully imported ${emails.length} contacts to Facebook Custom Audience "${audience_name}"`;
+    } else if (failedBatches === totalBatches) {
+      finalStatus = 'failed';
+      errorMessage = `All ${totalBatches} upload batches failed: ${batchErrors.join('; ')}`;
+      finalMessage = `Facebook audience "${audience_name}" was created but all contact uploads failed`;
+    } else {
+      finalStatus = 'completed';
+      errorMessage = `${failedBatches}/${totalBatches} batches failed: ${batchErrors.join('; ')}`;
+      finalMessage = `Imported ${successfulUploads}/${emails.length} contacts to Facebook Custom Audience "${audience_name}" (${failedBatches} batches failed)`;
     }
 
     // Update import record
@@ -135,18 +228,57 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from('facebook_audience_imports')
       .update({
         audience_id: fbAudienceId,
-        contact_count: emails.length,
-        status: 'completed',
+        contact_count: successfulUploads || emails.length,
+        status: finalStatus,
+        error_message: errorMessage,
       })
       .eq('id', importRecord.id);
+
+    await logEvent({
+      type: 'api',
+      event_name: 'facebook_import_audience',
+      status: failedBatches === totalBatches ? 'error' : failedBatches > 0 ? 'warning' : 'success',
+      message: finalMessage,
+      user_id: user.id,
+      ip_address: ip,
+      request_data: { ad_account_id, audience_name, source_pixel_id, source_audience_id },
+      response_data: {
+        audience_id: fbAudienceId,
+        total_emails: emails.length,
+        successful_uploads: successfulUploads,
+        failed_batches: failedBatches,
+        total_batches: totalBatches,
+        skipped_invalid_emails: skippedCount,
+      },
+      error_details: batchErrors.length > 0 ? batchErrors.join('; ') : undefined,
+    });
+
+    if (failedBatches === totalBatches) {
+      return res.status(500).json({
+        error: finalMessage,
+        audience_id: fbAudienceId,
+      });
+    }
 
     return res.status(200).json({
       success: true,
       audience_id: fbAudienceId,
-      contact_count: emails.length,
-      message: `Successfully imported ${emails.length} contacts to Facebook Custom Audience "${audience_name}"`,
+      contact_count: successfulUploads || emails.length,
+      message: finalMessage,
+      warnings: failedBatches > 0 ? batchErrors : undefined,
     });
   } catch (error) {
+    await logEvent({
+      type: 'api',
+      event_name: 'facebook_import_audience',
+      status: 'error',
+      message: `Facebook audience import failed: ${(error as Error).message}`,
+      user_id: user.id,
+      ip_address: ip,
+      request_data: { ad_account_id, audience_name, source_pixel_id, source_audience_id },
+      error_details: (error as Error).message,
+    });
+
     console.error('Error importing Facebook audience:', error);
     return res.status(500).json({ error: 'Failed to import audience' });
   }

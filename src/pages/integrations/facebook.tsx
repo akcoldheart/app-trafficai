@@ -27,6 +27,7 @@ interface TokenInfo {
   ad_account_id: string | null;
   ad_account_name: string | null;
   token_expires_at: string | null;
+  token_expired?: boolean;
 }
 
 interface AdAccount {
@@ -344,19 +345,18 @@ export default function FacebookIntegrationPage() {
                   <div className="mb-4 p-3 rounded" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
                     <h4 className="mb-3">How to get your Facebook App credentials</h4>
                     <ol className="mb-0" style={{ paddingLeft: '1.25rem' }}>
-                      <li className="mb-2">Go to <strong>developers.facebook.com</strong> and create an app (type: Business)</li>
-                      <li className='mb-2'>Click <strong>"my apps"</strong> in the <strong>top right</strong> corner</li>
-                      <li className='mb-2'> Click <strong>"create app"</strong> on the  <strong>right side</strong> </li>
-                      <li className="mb-2">Fill in app details <strong>"App name"</strong>  and <strong>"Contact email"</strong> click next</li>
-                      <li className='mb-2'>Select the <strong>"All"</strong> radial button then <strong>"measure ad performance data with marketing API"</strong> click next</li>
-                      <li className='mb-2'>Select the <strong>business portfolio</strong> you would like to connect this app to, click next</li>
-                      <li className='mb-2'>In your app dashboard, go to <strong>Settings → Basic</strong></li>
-                      <li className='mb-2'>Click next, verify data is correct and click next</li>
-                      <li className='mb-2'>Copy your <strong>App ID and App Secret</strong></li>
-                      <li className='mb-2'>Go to Facebook Login → Settings.</li>
-                      <li className='mb-2'>Turn on: <strong>(Client OAuth Login) (Web OAuth Login)</strong></li>
-                      <li className='mb-2'>In Valid OAuth Redirect URIs, paste <strong>https://app.trafficai.io/api/integrations/facebook/callback </strong> and click enter</li>
-                      
+                      <li className="mb-2">Go to <strong>developers.facebook.com</strong> and click <strong>"My Apps"</strong> in the top right</li>
+                      <li className="mb-2">Click <strong>"Create App"</strong></li>
+                      <li className="mb-2">Select <strong>"Other"</strong> for use case, then click next</li>
+                      <li className="mb-2">Select app type <strong>"Business"</strong>, click next</li>
+                      <li className="mb-2">Fill in <strong>"App name"</strong> and <strong>"Contact email"</strong>, select your <strong>business portfolio</strong>, click next</li>
+                      <li className="mb-2">In your app dashboard, click <strong>"Add Product"</strong> and add <strong>"Marketing API"</strong></li>
+                      <li className="mb-2">Go to <strong>App Settings → Basic</strong></li>
+                      <li className="mb-2">Copy your <strong>App ID</strong> and <strong>App Secret</strong></li>
+                      <li className="mb-2">Click <strong>"Add Product"</strong> and add <strong>"Facebook Login for Business"</strong></li>
+                      <li className="mb-2">Go to Facebook Login → <strong>Settings</strong></li>
+                      <li className="mb-2">Enable <strong>Client OAuth Login</strong> and <strong>Web OAuth Login</strong></li>
+                      <li className="mb-2">In Valid OAuth Redirect URIs, add <strong>https://app.trafficai.io/api/integrations/facebook/callback</strong> and save</li>
                     </ol>
                   </div>
 
@@ -438,6 +438,33 @@ export default function FacebookIntegrationPage() {
                 </div>
               ) : (
                 <div>
+                  {/* Token Expired Warning */}
+                  {tokenInfo?.token_expired && (
+                    <div className="alert alert-danger mb-4">
+                      <div className="d-flex align-items-center">
+                        <IconAlertCircle size={18} className="me-2" />
+                        <div>
+                          <strong>Facebook token has expired.</strong> Please disconnect and reconnect your Facebook account to continue using this integration.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Token Expiring Soon Warning */}
+                  {tokenInfo?.token_expires_at && !tokenInfo.token_expired && (() => {
+                    const daysUntilExpiry = Math.ceil((new Date(tokenInfo.token_expires_at!).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                    return daysUntilExpiry <= 7 ? (
+                      <div className="alert alert-warning mb-4">
+                        <div className="d-flex align-items-center">
+                          <IconAlertCircle size={18} className="me-2" />
+                          <div>
+                            Your Facebook token expires in <strong>{daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''}</strong>. Consider reconnecting soon to avoid interruption.
+                          </div>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
                   {/* Ad Account Selector */}
                   <div className="mb-4">
                     <h4 className="mb-2">Ad Account</h4>
