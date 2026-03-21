@@ -71,18 +71,48 @@ const COUNTRY_MAP: Record<string, string> = {
   'united arab emirates': 'ae', 'saudi arabia': 'sa',
 };
 
-function normalizeContact(contact: Record<string, any>): string[] {
+/**
+ * Extract pre-computed SHA256 email hashes from enrichment_data.
+ * The API provides SHA256_PERSONAL_EMAIL and SHA256_BUSINESS_EMAIL as
+ * comma-separated lists of hashes that directly match Meta social profiles.
+ */
+function getPreComputedEmailHashes(contact: Record<string, any>): string[] {
+  const enrichment = contact.enrichment_data as Record<string, any> | null;
+  const extraData = contact.data as Record<string, any> | null;
+
+  const hashes = new Set<string>();
+
+  // Check enrichment_data (visitors) and data JSONB (audience_contacts)
+  for (const source of [enrichment, extraData]) {
+    if (!source) continue;
+    for (const key of ['SHA256_PERSONAL_EMAIL', 'SHA256_BUSINESS_EMAIL']) {
+      const val = source[key];
+      if (typeof val === 'string' && val.trim()) {
+        // Can be comma-separated: "hash1, hash2"
+        for (const h of val.split(',')) {
+          const trimmed = h.trim().toLowerCase();
+          // Validate it looks like a SHA256 hex string (64 chars)
+          if (trimmed.length === 64 && /^[0-9a-f]+$/.test(trimmed)) {
+            hashes.add(trimmed);
+          }
+        }
+      }
+    }
+  }
+
+  return Array.from(hashes);
+}
+
+/**
+ * Build the non-email portion of a Facebook row (PHONE, FN, LN, CT, ST, COUNTRY, ZIP, GEN).
+ * These are hashed by us since there are no pre-computed hashes for these fields.
+ */
+function buildNonEmailFields(contact: Record<string, any>): string[] {
   const enrichment = contact.enrichment_data as Record<string, any> | null;
   const meta = contact.metadata as Record<string, any> | null;
   const extraData = contact.data as Record<string, any> | null;
 
-  // EMAIL — lowercase, trim, validate
-  const rawEmail = (contact.email || '').toLowerCase().trim();
-  const email = EMAIL_REGEX.test(rawEmail) ? sha256(rawEmail) : '';
-
   // PHONE — digits only, must include country code
-  // Visitors: metadata.phone | enrichment_data.MOBILE_PHONE/DIRECT_NUMBER/PERSONAL_PHONE
-  // Audience contacts: phone column directly
   let rawPhone = contact.phone
     || meta?.phone
     || enrichment?.MOBILE_PHONE
@@ -92,7 +122,6 @@ function normalizeContact(contact: Record<string, any>): string[] {
     || '';
   if (typeof rawPhone === 'string') {
     rawPhone = rawPhone.replace(/[\s\-\(\)\.\+]/g, '');
-    // Prepend US country code for 10-digit numbers
     if (rawPhone.length === 10 && /^\d+$/.test(rawPhone)) {
       rawPhone = '1' + rawPhone;
     }
@@ -102,7 +131,7 @@ function normalizeContact(contact: Record<string, any>): string[] {
   }
   const phone = sha256(rawPhone);
 
-  // FN — first name, lowercase, trim
+  // FN — first name
   let fn = '';
   if (contact.first_name) {
     fn = contact.first_name.toLowerCase().trim();
@@ -113,7 +142,7 @@ function normalizeContact(contact: Record<string, any>): string[] {
   }
   const fnHash = sha256(fn);
 
-  // LN — last name, lowercase, trim
+  // LN — last name
   let ln = '';
   if (contact.last_name) {
     ln = contact.last_name.toLowerCase().trim();
@@ -127,28 +156,26 @@ function normalizeContact(contact: Record<string, any>): string[] {
   }
   const lnHash = sha256(ln);
 
-  // CT — city, lowercase, a-z and spaces only, then remove spaces
+  // CT — city
   const rawCity = (contact.city || enrichment?.PERSONAL_CITY || enrichment?.CITY || '')
     .toLowerCase().trim().replace(/[^a-z\s]/g, '').replace(/\s+/g, '');
   const ct = sha256(rawCity);
 
-  // ST — state as 2-letter code, lowercase
+  // ST — state as 2-letter code
   const rawStateInput = (contact.state || enrichment?.PERSONAL_STATE || enrichment?.STATE || '').toLowerCase().trim();
   const rawState = rawStateInput.length > 2
     ? (US_STATE_MAP[rawStateInput] || rawStateInput.substring(0, 2))
     : rawStateInput;
   const st = sha256(rawState);
 
-  // COUNTRY — 2-letter ISO country code, lowercase
+  // COUNTRY — 2-letter ISO code
   let rawCountry = (contact.country || enrichment?.COUNTRY || '').toLowerCase().trim();
   if (rawCountry.length > 2) {
     rawCountry = COUNTRY_MAP[rawCountry] || rawCountry.substring(0, 2);
   }
   const country = sha256(rawCountry);
 
-  // ZIP — first 5 digits for US, as-is for others
-  // Visitors: enrichment_data.PERSONAL_ZIP | enrichment_data.COMPANY_ZIP
-  // Audience contacts: data JSONB
+  // ZIP
   let rawZip = '';
   const metaZip = enrichment?.PERSONAL_ZIP
     || enrichment?.COMPANY_ZIP
@@ -157,23 +184,48 @@ function normalizeContact(contact: Record<string, any>): string[] {
     || contact.zip || contact.postal_code || '';
   if (typeof metaZip === 'string' && metaZip.trim()) {
     rawZip = metaZip.toLowerCase().trim();
-    // US zip: first 5 chars only
     if (rawCountry === 'us' && rawZip.length > 5) {
       rawZip = rawZip.substring(0, 5);
     }
   }
   const zip = sha256(rawZip);
 
-  // GEN — gender: m or f, lowercase
+  // GEN — gender: m or f
   let rawGender = (meta?.gender || enrichment?.GENDER || extraData?.gender || '').toLowerCase().trim();
   if (rawGender === 'male') rawGender = 'm';
   else if (rawGender === 'female') rawGender = 'f';
   else if (rawGender !== 'm' && rawGender !== 'f') rawGender = '';
   const gen = sha256(rawGender);
 
-  // Return array matching schema order:
-  // [EMAIL, PHONE, FN, LN, CT, ST, COUNTRY, ZIP, GEN]
-  return [email, phone, fnHash, lnHash, ct, st, country, zip, gen];
+  return [phone, fnHash, lnHash, ct, st, country, zip, gen];
+}
+
+/**
+ * Convert a contact into one or more Facebook upload rows.
+ * Uses pre-computed SHA256_PERSONAL_EMAIL / SHA256_BUSINESS_EMAIL hashes from the
+ * enrichment API when available — these match Meta profiles directly.
+ * Falls back to hashing the stored email if no pre-computed hashes exist.
+ * Returns multiple rows when a contact has multiple email hashes.
+ */
+function normalizeContact(contact: Record<string, any>): { rows: string[][]; usedPrecomputed: boolean } {
+  const nonEmailFields = buildNonEmailFields(contact);
+
+  // Prefer pre-computed SHA256 hashes from the API — these match Meta profiles
+  const precomputed = getPreComputedEmailHashes(contact);
+  if (precomputed.length > 0) {
+    // Create one row per pre-computed email hash for maximum matching
+    const rows = precomputed.map(hash => [hash, ...nonEmailFields]);
+    return { rows, usedPrecomputed: true };
+  }
+
+  // Fallback: hash the stored email ourselves
+  const rawEmail = (contact.email || '').toLowerCase().trim();
+  const emailHash = EMAIL_REGEX.test(rawEmail) ? sha256(rawEmail) : '';
+  if (!emailHash) {
+    return { rows: [], usedPrecomputed: false };
+  }
+
+  return { rows: [[emailHash, ...nonEmailFields]], usedPrecomputed: false };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -256,19 +308,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let contactsWithName = 0;
     let contactsWithLocation = 0;
     let contactsWithZip = 0;
+    let precomputedHashCount = 0;
+    let fallbackHashCount = 0;
+    let uniqueContacts = 0;
 
     for (const contact of contacts) {
-      const row = normalizeContact(contact);
-      // row[0] is hashed email — skip if empty (no valid email)
-      if (!row[0]) {
+      const result = normalizeContact(contact);
+      if (result.rows.length === 0) {
         skippedNoEmail++;
         continue;
       }
-      if (row[1]) contactsWithPhone++;
-      if (row[2] || row[3]) contactsWithName++;
-      if (row[4] || row[5] || row[6]) contactsWithLocation++;
-      if (row[7]) contactsWithZip++;
-      rows.push(row);
+
+      uniqueContacts++;
+      if (result.usedPrecomputed) {
+        precomputedHashCount += result.rows.length;
+      } else {
+        fallbackHashCount += result.rows.length;
+      }
+
+      // Stats based on first row (same non-email fields for all rows of same contact)
+      const firstRow = result.rows[0];
+      if (firstRow[1]) contactsWithPhone++;     // PHONE
+      if (firstRow[2] || firstRow[3]) contactsWithName++;  // FN or LN
+      if (firstRow[4] || firstRow[5] || firstRow[6]) contactsWithLocation++; // CT, ST, or COUNTRY
+      if (firstRow[7]) contactsWithZip++;       // ZIP
+
+      rows.push(...result.rows);
     }
 
     if (rows.length === 0) {
@@ -299,7 +364,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         body: JSON.stringify({
           name: audience_name,
           subtype: 'CUSTOM',
-          description: `Imported from Traffic AI - ${rows.length} contacts`,
+          description: `Imported from Traffic AI - ${uniqueContacts} contacts`,
           customer_file_source: 'USER_PROVIDED_ONLY',
           access_token: accessToken,
         }),
@@ -377,7 +442,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (failedBatches === 0) {
       finalStatus = 'completed';
-      finalMessage = `Imported ${rows.length} contacts to Facebook audience "${audience_name}" (${contactsWithName} with name, ${contactsWithPhone} with phone, ${contactsWithZip} with zip)`;
+      finalMessage = `Imported ${uniqueContacts} contacts (${rows.length} rows) to Facebook audience "${audience_name}" — ${precomputedHashCount} pre-hashed, ${fallbackHashCount} fallback hashed`;
     } else if (failedBatches === totalBatches) {
       finalStatus = 'failed';
       errorMessage = `All ${totalBatches} upload batches failed: ${batchErrors.join('; ')}`;
@@ -409,7 +474,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       request_data: { ad_account_id, audience_name, source_pixel_id, source_audience_id },
       response_data: {
         audience_id: fbAudienceId,
-        total_contacts: rows.length,
+        unique_contacts: uniqueContacts,
+        total_rows: rows.length,
+        precomputed_hashes: precomputedHashCount,
+        fallback_hashes: fallbackHashCount,
         successful_uploads: successfulUploads,
         failed_batches: failedBatches,
         total_batches: totalBatches,
