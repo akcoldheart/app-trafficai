@@ -35,33 +35,80 @@ function sha256(value: string | null | undefined): string {
  * Facebook requires: lowercase, trimmed, no extra spaces, then SHA256 hashed.
  * See: https://developers.facebook.com/docs/marketing-api/audiences/guides/custom-audiences#hash
  */
+// US state name → 2-letter code mapping
+const US_STATE_MAP: Record<string, string> = {
+  'alabama': 'al', 'alaska': 'ak', 'arizona': 'az', 'arkansas': 'ar',
+  'california': 'ca', 'colorado': 'co', 'connecticut': 'ct', 'delaware': 'de',
+  'florida': 'fl', 'georgia': 'ga', 'hawaii': 'hi', 'idaho': 'id',
+  'illinois': 'il', 'indiana': 'in', 'iowa': 'ia', 'kansas': 'ks',
+  'kentucky': 'ky', 'louisiana': 'la', 'maine': 'me', 'maryland': 'md',
+  'massachusetts': 'ma', 'michigan': 'mi', 'minnesota': 'mn', 'mississippi': 'ms',
+  'missouri': 'mo', 'montana': 'mt', 'nebraska': 'ne', 'nevada': 'nv',
+  'new hampshire': 'nh', 'new jersey': 'nj', 'new mexico': 'nm', 'new york': 'ny',
+  'north carolina': 'nc', 'north dakota': 'nd', 'ohio': 'oh', 'oklahoma': 'ok',
+  'oregon': 'or', 'pennsylvania': 'pa', 'rhode island': 'ri', 'south carolina': 'sc',
+  'south dakota': 'sd', 'tennessee': 'tn', 'texas': 'tx', 'utah': 'ut',
+  'vermont': 'vt', 'virginia': 'va', 'washington': 'wa', 'west virginia': 'wv',
+  'wisconsin': 'wi', 'wyoming': 'wy', 'district of columbia': 'dc',
+};
+
+// Country name → 2-letter ISO code mapping
+const COUNTRY_MAP: Record<string, string> = {
+  'united states': 'us', 'united states of america': 'us', 'usa': 'us',
+  'canada': 'ca', 'united kingdom': 'uk', 'great britain': 'gb',
+  'australia': 'au', 'germany': 'de', 'france': 'fr', 'india': 'in',
+  'brazil': 'br', 'mexico': 'mx', 'spain': 'es', 'italy': 'it',
+  'netherlands': 'nl', 'japan': 'jp', 'south korea': 'kr',
+  'new zealand': 'nz', 'ireland': 'ie', 'sweden': 'se',
+  'norway': 'no', 'denmark': 'dk', 'finland': 'fi',
+  'switzerland': 'ch', 'austria': 'at', 'belgium': 'be',
+  'portugal': 'pt', 'poland': 'pl', 'singapore': 'sg',
+  'israel': 'il', 'south africa': 'za', 'argentina': 'ar',
+  'chile': 'cl', 'colombia': 'co', 'philippines': 'ph',
+  'indonesia': 'id', 'malaysia': 'my', 'thailand': 'th',
+  'vietnam': 'vn', 'turkey': 'tr', 'egypt': 'eg',
+  'nigeria': 'ng', 'kenya': 'ke', 'uae': 'ae',
+  'united arab emirates': 'ae', 'saudi arabia': 'sa',
+};
+
 function normalizeContact(contact: Record<string, any>): string[] {
+  const enrichment = contact.enrichment_data as Record<string, any> | null;
+  const meta = contact.metadata as Record<string, any> | null;
+  const extraData = contact.data as Record<string, any> | null;
+
   // EMAIL — lowercase, trim, validate
   const rawEmail = (contact.email || '').toLowerCase().trim();
   const email = EMAIL_REGEX.test(rawEmail) ? sha256(rawEmail) : '';
 
-  // PHONE — digits only, must include country code, no symbols
-  // Visitors store phone in metadata, audience_contacts have it directly
-  let rawPhone = contact.phone || (contact.metadata as Record<string, any>)?.phone || '';
+  // PHONE — digits only, must include country code
+  // Visitors: metadata.phone | enrichment_data.MOBILE_PHONE/DIRECT_NUMBER/PERSONAL_PHONE
+  // Audience contacts: phone column directly
+  let rawPhone = contact.phone
+    || meta?.phone
+    || enrichment?.MOBILE_PHONE
+    || enrichment?.DIRECT_NUMBER
+    || enrichment?.PERSONAL_PHONE
+    || enrichment?.ALL_MOBILES?.split(',')[0]
+    || '';
   if (typeof rawPhone === 'string') {
     rawPhone = rawPhone.replace(/[\s\-\(\)\.\+]/g, '');
-    // Ensure it starts with country code (prepend 1 for US if 10 digits)
+    // Prepend US country code for 10-digit numbers
     if (rawPhone.length === 10 && /^\d+$/.test(rawPhone)) {
       rawPhone = '1' + rawPhone;
     }
-    // Only keep if it looks like a valid phone number
     if (!/^\d{7,15}$/.test(rawPhone)) rawPhone = '';
   } else {
     rawPhone = '';
   }
   const phone = sha256(rawPhone);
 
-  // FN — first name, lowercase, trim, remove non-alpha characters
+  // FN — first name, lowercase, trim
   let fn = '';
   if (contact.first_name) {
     fn = contact.first_name.toLowerCase().trim();
+  } else if (enrichment?.FIRST_NAME) {
+    fn = enrichment.FIRST_NAME.toLowerCase().trim();
   } else if (contact.full_name) {
-    // Extract first name from full name
     fn = contact.full_name.split(/\s+/)[0]?.toLowerCase().trim() || '';
   }
   const fnHash = sha256(fn);
@@ -70,6 +117,8 @@ function normalizeContact(contact: Record<string, any>): string[] {
   let ln = '';
   if (contact.last_name) {
     ln = contact.last_name.toLowerCase().trim();
+  } else if (enrichment?.LAST_NAME) {
+    ln = enrichment.LAST_NAME.toLowerCase().trim();
   } else if (contact.full_name) {
     const parts = contact.full_name.trim().split(/\s+/);
     if (parts.length > 1) {
@@ -78,60 +127,53 @@ function normalizeContact(contact: Record<string, any>): string[] {
   }
   const lnHash = sha256(ln);
 
-  // CT — city, lowercase, no punctuation, a-z only
-  const rawCity = (contact.city || '').toLowerCase().trim().replace(/[^a-z\s]/g, '').replace(/\s+/g, '');
+  // CT — city, lowercase, a-z and spaces only, then remove spaces
+  const rawCity = (contact.city || enrichment?.PERSONAL_CITY || enrichment?.CITY || '')
+    .toLowerCase().trim().replace(/[^a-z\s]/g, '').replace(/\s+/g, '');
   const ct = sha256(rawCity);
 
-  // ST — state, lowercase 2-letter code
-  const rawState = (contact.state || '').toLowerCase().trim();
-  // Facebook expects 2-letter state code; if longer, try abbreviation
-  const st = sha256(rawState.length <= 2 ? rawState : rawState.substring(0, 2));
+  // ST — state as 2-letter code, lowercase
+  const rawStateInput = (contact.state || enrichment?.PERSONAL_STATE || enrichment?.STATE || '').toLowerCase().trim();
+  const rawState = rawStateInput.length > 2
+    ? (US_STATE_MAP[rawStateInput] || rawStateInput.substring(0, 2))
+    : rawStateInput;
+  const st = sha256(rawState);
 
   // COUNTRY — 2-letter ISO country code, lowercase
-  let rawCountry = (contact.country || '').toLowerCase().trim();
-  // Common full-name to ISO mapping
-  const countryMap: Record<string, string> = {
-    'united states': 'us', 'united states of america': 'us', 'usa': 'us',
-    'canada': 'ca', 'united kingdom': 'uk', 'great britain': 'gb',
-    'australia': 'au', 'germany': 'de', 'france': 'fr', 'india': 'in',
-    'brazil': 'br', 'mexico': 'mx', 'spain': 'es', 'italy': 'it',
-    'netherlands': 'nl', 'japan': 'jp', 'south korea': 'kr',
-    'new zealand': 'nz', 'ireland': 'ie', 'sweden': 'se',
-    'norway': 'no', 'denmark': 'dk', 'finland': 'fi',
-    'switzerland': 'ch', 'austria': 'at', 'belgium': 'be',
-    'portugal': 'pt', 'poland': 'pl', 'singapore': 'sg',
-    'israel': 'il', 'south africa': 'za', 'argentina': 'ar',
-    'chile': 'cl', 'colombia': 'co', 'philippines': 'ph',
-    'indonesia': 'id', 'malaysia': 'my', 'thailand': 'th',
-    'vietnam': 'vn', 'turkey': 'tr', 'egypt': 'eg',
-    'nigeria': 'ng', 'kenya': 'ke', 'uae': 'ae',
-    'united arab emirates': 'ae', 'saudi arabia': 'sa',
-  };
+  let rawCountry = (contact.country || enrichment?.COUNTRY || '').toLowerCase().trim();
   if (rawCountry.length > 2) {
-    rawCountry = countryMap[rawCountry] || rawCountry.substring(0, 2);
+    rawCountry = COUNTRY_MAP[rawCountry] || rawCountry.substring(0, 2);
   }
   const country = sha256(rawCountry);
 
-  // ZIP — first 5 digits for US, keep as-is for others, lowercase
+  // ZIP — first 5 digits for US, as-is for others
+  // Visitors: enrichment_data.PERSONAL_ZIP | enrichment_data.COMPANY_ZIP
+  // Audience contacts: data JSONB
   let rawZip = '';
-  const metaZip = (contact.metadata as Record<string, any>)?.zip ||
-    (contact.metadata as Record<string, any>)?.postal_code ||
-    (contact.metadata as Record<string, any>)?.zipcode ||
-    (contact.data as Record<string, any>)?.zip ||
-    (contact.data as Record<string, any>)?.postal_code ||
-    contact.zip || contact.postal_code || '';
-  if (typeof metaZip === 'string') {
+  const metaZip = enrichment?.PERSONAL_ZIP
+    || enrichment?.COMPANY_ZIP
+    || meta?.zip || meta?.postal_code
+    || extraData?.zip || extraData?.postal_code
+    || contact.zip || contact.postal_code || '';
+  if (typeof metaZip === 'string' && metaZip.trim()) {
     rawZip = metaZip.toLowerCase().trim();
-    // US zip: first 5 chars
+    // US zip: first 5 chars only
     if (rawCountry === 'us' && rawZip.length > 5) {
       rawZip = rawZip.substring(0, 5);
     }
   }
   const zip = sha256(rawZip);
 
+  // GEN — gender: m or f, lowercase
+  let rawGender = (meta?.gender || enrichment?.GENDER || extraData?.gender || '').toLowerCase().trim();
+  if (rawGender === 'male') rawGender = 'm';
+  else if (rawGender === 'female') rawGender = 'f';
+  else if (rawGender !== 'm' && rawGender !== 'f') rawGender = '';
+  const gen = sha256(rawGender);
+
   // Return array matching schema order:
-  // [EMAIL, PHONE, FN, LN, CT, ST, COUNTRY, ZIP]
-  return [email, phone, fnHash, lnHash, ct, st, country, zip];
+  // [EMAIL, PHONE, FN, LN, CT, ST, COUNTRY, ZIP, GEN]
+  return [email, phone, fnHash, lnHash, ct, st, country, zip, gen];
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -204,13 +246,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Multi-key schema for Facebook Custom Audiences
-    const schema = ['EMAIL', 'PHONE', 'FN', 'LN', 'CT', 'ST', 'COUNTRY', 'ZIP'];
+    // See: https://developers.facebook.com/docs/marketing-api/audiences/guides/custom-audiences#hash
+    const schema = ['EMAIL', 'PHONE', 'FN', 'LN', 'CT', 'ST', 'COUNTRY', 'ZIP', 'GEN'];
 
     // Normalize and hash all contacts — filter out those with no valid email
     const rows: string[][] = [];
     let skippedNoEmail = 0;
     let contactsWithPhone = 0;
     let contactsWithName = 0;
+    let contactsWithLocation = 0;
+    let contactsWithZip = 0;
 
     for (const contact of contacts) {
       const row = normalizeContact(contact);
@@ -221,6 +266,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       if (row[1]) contactsWithPhone++;
       if (row[2] || row[3]) contactsWithName++;
+      if (row[4] || row[5] || row[6]) contactsWithLocation++;
+      if (row[7]) contactsWithZip++;
       rows.push(row);
     }
 
@@ -330,7 +377,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (failedBatches === 0) {
       finalStatus = 'completed';
-      finalMessage = `Successfully imported ${rows.length} contacts to Facebook Custom Audience "${audience_name}" (multi-key: ${contactsWithName} with name, ${contactsWithPhone} with phone)`;
+      finalMessage = `Imported ${rows.length} contacts to Facebook audience "${audience_name}" (${contactsWithName} with name, ${contactsWithPhone} with phone, ${contactsWithZip} with zip)`;
     } else if (failedBatches === totalBatches) {
       finalStatus = 'failed';
       errorMessage = `All ${totalBatches} upload batches failed: ${batchErrors.join('; ')}`;
@@ -369,6 +416,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         skipped_no_email: skippedNoEmail,
         contacts_with_phone: contactsWithPhone,
         contacts_with_name: contactsWithName,
+        contacts_with_location: contactsWithLocation,
+        contacts_with_zip: contactsWithZip,
         schema_keys: schema,
       },
       error_details: batchErrors.length > 0 ? batchErrors.join('; ') : undefined,

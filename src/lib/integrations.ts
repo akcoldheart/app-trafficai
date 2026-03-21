@@ -128,7 +128,7 @@ export async function getVisitorsForSync(userId: string, pixelId?: string) {
   while (true) {
     let query = supabaseAdmin
       .from('visitors')
-      .select('email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata')
+      .select('email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata, enrichment_data')
       .eq('user_id', userId)
       .not('email', 'is', null);
 
