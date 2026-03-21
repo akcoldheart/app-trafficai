@@ -89,6 +89,7 @@ function getPreComputedEmailHashes(contact: Record<string, any>): string[] {
     for (const key of [
       'SHA256_PERSONAL_EMAIL', 'sha256_personal_email',
       'SHA256_BUSINESS_EMAIL', 'sha256_business_email',
+      'HEM_SHA256', 'hem_sha256',
     ]) {
       const val = source[key];
       if (typeof val === 'string' && val.trim()) {
