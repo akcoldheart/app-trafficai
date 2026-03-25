@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Screenshot 2 - Setup View</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #0f0f1a;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .chrome-frame {
+      background: #2b2b3d;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+      overflow: hidden;
+      width: 380px;
+    }
+
+    .chrome-titlebar {
+      display: flex;
+      align-items: center;
+      padding: 10px 14px;
+      background: #1e1e30;
+      gap: 6px;
+    }
+
+    .chrome-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .chrome-dot.red { background: #ff5f56; }
+    .chrome-dot.yellow { background: #ffbd2e; }
+    .chrome-dot.green { background: #27c93f; }
+
+    .chrome-title {
+      margin-left: 8px;
+      font-size: 11px;
+      color: #888;
+    }
+
+    .popup {
+      width: 100%;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-size: 13px;
+      padding: 16px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #e040fb, #7c4dff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      font-size: 11px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    .section { margin-bottom: 16px; }
+
+    h3 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #ccc;
+    }
+
+    .hint {
+      font-size: 11px;
+      color: #666;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .field { margin-bottom: 12px; }
+
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #999;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.05);
+      color: #e0e0e0;
+      font-size: 13px;
+      outline: none;
+      box-sizing: border-box;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0A66C2, #0077B5);
+      color: white;
+    }
+
+    .label-tag {
+      position: absolute;
+      top: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #e040fb, #7c4dff);
+      color: white;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 14px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    .wrapper {
+      position: relative;
+      padding-top: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="label-tag">Extension Popup — Setup</div>
+    <div class="chrome-frame">
+      <div class="chrome-titlebar">
+        <div class="chrome-dot red"></div>
+        <div class="chrome-dot yellow"></div>
+        <div class="chrome-dot green"></div>
+        <div class="chrome-title">Traffic AI - LinkedIn Outreach</div>
+      </div>
+      <div class="popup">
+        <div class="header">
+          <div class="logo">Traffic AI</div>
+          <div class="subtitle">LinkedIn Outreach</div>
+        </div>
+
+        <div class="section">
+          <h3>Connect to Traffic AI</h3>
+          <p class="hint" style="margin-bottom: 12px;">Enter your Traffic AI extension token to get started.</p>
+
+          <div class="field">
+            <label>API URL</label>
+            <input type="text" value="https://app.trafficai.io" readonly>
+          </div>
+
+          <div class="field">
+            <label>Extension Token</label>
+            <input type="text" value="" placeholder="Paste your extension token">
+            <p class="hint">Generate a token from Integrations &rarr; LinkedIn in your Traffic AI dashboard.</p>
+          </div>
+
+          <button class="btn btn-primary">Connect</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

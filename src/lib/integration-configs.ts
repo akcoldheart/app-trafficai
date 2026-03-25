@@ -13,7 +13,7 @@ export interface IntegrationConfig {
   secondaryAuthLabel?: string;
   secondaryAuthPlaceholder?: string;
   secondaryAuthHint?: string;
-  features: ('sync_visitors' | 'sync_audiences' | 'notifications' | 'webhooks' | 'lists' | 'campaigns')[];
+  features: ('sync_visitors' | 'sync_audiences' | 'notifications' | 'webhooks' | 'lists' | 'campaigns' | 'sms_automation' | 'conversions')[];
   setupSteps: string[];
   category: 'crm' | 'email_marketing' | 'notifications' | 'automation' | 'ecommerce' | 'advertising' | 'outreach';
 }
@@ -270,6 +270,56 @@ export const INTEGRATION_CONFIGS: Record<string, IntegrationConfig> = {
     ],
     category: 'outreach',
   },
+  ringcentral: {
+    key: 'ringcentral',
+    name: 'RingCentral',
+    description: 'Automated SMS to new pixel visitors',
+    color: '#F47721',
+    letterIcon: 'RC',
+    authType: 'oauth',
+    authLabel: 'RingCentral Client ID',
+    authPlaceholder: 'your-client-id',
+    authHint: 'Create a RingCentral app at developers.ringcentral.com with SMS permissions.',
+    secondaryAuthLabel: 'Client Secret',
+    secondaryAuthPlaceholder: 'your-client-secret',
+    secondaryAuthHint: 'Found in your RingCentral app credentials.',
+    features: ['sms_automation'],
+    setupSteps: [
+      'Go to developers.ringcentral.com and sign in',
+      'Click "Create App" and select "REST API App"',
+      'Set the app name (e.g. "Traffic AI SMS")',
+      'Under Permissions, add "SMS" and "Read Messages"',
+      'Set the OAuth Redirect URI to https://app.trafficai.io/api/integrations/ringcentral/callback',
+      'Copy the Client ID and Client Secret',
+      'Paste them below and click Connect',
+    ],
+    category: 'outreach',
+  },
+  google_ads: {
+    key: 'google_ads',
+    name: 'Google Ads',
+    description: 'Customer Match & offline conversions',
+    color: '#4285F4',
+    letterIcon: 'G',
+    authType: 'oauth',
+    authLabel: 'Google Client ID',
+    authPlaceholder: 'xxxxx.apps.googleusercontent.com',
+    authHint: 'Create OAuth credentials in Google Cloud Console with Google Ads API enabled.',
+    secondaryAuthLabel: 'Client Secret',
+    secondaryAuthPlaceholder: 'GOCSPX-xxxxxxxxxxxxxxxx',
+    secondaryAuthHint: 'Found in your Google Cloud Console OAuth 2.0 credentials.',
+    features: ['sync_audiences', 'conversions'],
+    setupSteps: [
+      'Go to console.cloud.google.com and create a project',
+      'Enable the Google Ads API in APIs & Services',
+      'Create OAuth 2.0 credentials (Web application type)',
+      'Add https://app.trafficai.io/api/integrations/google_ads/callback as redirect URI',
+      'Copy the Client ID and Client Secret',
+      'Get your Google Ads Developer Token from your MCC account',
+      'Paste credentials below and click Connect',
+    ],
+    category: 'advertising',
+  },
 };
 
 export const INTEGRATION_ORDER = [
@@ -284,6 +334,8 @@ export const INTEGRATION_ORDER = [
   'activecampaign',
   'facebook',
   'linkedin',
+  'ringcentral',
+  'google_ads',
 ] as const;
 
 export function getIntegrationConfig(key: string): IntegrationConfig | undefined {

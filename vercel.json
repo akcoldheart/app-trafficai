@@ -27,6 +27,10 @@
     {
       "path": "/api/cron/linkedin-drip",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/ringcentral-sms",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

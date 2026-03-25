@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Screenshot 3 - Promotional</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f0f1a 0%, #1a1a3e 50%, #0f0f1a 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .promo {
+      width: 1280px;
+      height: 800px;
+      background: linear-gradient(160deg, #0f0f1a 0%, #1a1a3e 40%, #12122a 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Decorative background elements */
+    .promo::before {
+      content: '';
+      position: absolute;
+      top: -200px;
+      right: -200px;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(124,77,255,0.15) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+
+    .promo::after {
+      content: '';
+      position: absolute;
+      bottom: -200px;
+      left: -200px;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(224,64,251,0.1) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+
+    .content {
+      display: flex;
+      align-items: center;
+      gap: 80px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .text-side {
+      max-width: 480px;
+    }
+
+    .brand {
+      font-size: 14px;
+      font-weight: 600;
+      color: #7c4dff;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      margin-bottom: 16px;
+    }
+
+    .headline {
+      font-size: 48px;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+
+    .headline .gradient {
+      background: linear-gradient(135deg, #e040fb, #7c4dff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .description {
+      font-size: 18px;
+      color: #8888aa;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    .features {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .features li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #bbb;
+      font-size: 15px;
+    }
+
+    .check {
+      width: 20px;
+      height: 20px;
+      background: linear-gradient(135deg, #0A66C2, #0077B5);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+
+    /* Popup mockup on right side */
+    .popup-side {
+      position: relative;
+    }
+
+    .chrome-frame {
+      background: #2b2b3d;
+      border-radius: 12px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
+      overflow: hidden;
+      width: 340px;
+      transform: perspective(800px) rotateY(-5deg) rotateX(2deg);
+    }
+
+    .chrome-titlebar {
+      display: flex;
+      align-items: center;
+      padding: 10px 14px;
+      background: #1e1e30;
+      gap: 6px;
+    }
+
+    .chrome-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .chrome-dot.red { background: #ff5f56; }
+    .chrome-dot.yellow { background: #ffbd2e; }
+    .chrome-dot.green { background: #27c93f; }
+
+    .popup-content {
+      background: #1a1a2e;
+      padding: 16px;
+    }
+
+    .popup-header {
+      text-align: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .popup-logo {
+      font-size: 18px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #e040fb, #7c4dff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .popup-subtitle {
+      font-size: 11px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    .status-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #2FCB72;
+      box-shadow: 0 0 0 3px rgba(47,203,114,0.2);
+    }
+
+    .info-box {
+      font-size: 12px;
+      color: #888;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.06);
+      margin-bottom: 12px;
+    }
+
+    .info-box-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ccc;
+      margin-bottom: 6px;
+    }
+
+    .send-btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #0A66C2, #0077B5);
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .send-hint {
+      font-size: 11px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    /* Floating LinkedIn-style notification */
+    .float-notification {
+      position: absolute;
+      bottom: -30px;
+      right: -40px;
+      background: #1a1a2e;
+      border: 1px solid rgba(47,203,114,0.3);
+      border-radius: 10px;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+      z-index: 2;
+    }
+
+    .float-notification .success-icon {
+      width: 28px;
+      height: 28px;
+      background: rgba(47,203,114,0.15);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #2FCB72;
+      font-size: 14px;
+    }
+
+    .float-notification .float-text {
+      font-size: 12px;
+      color: #ccc;
+    }
+    .float-notification .float-text strong {
+      color: #2FCB72;
+    }
+  </style>
+</head>
+<body>
+  <div class="promo">
+    <div class="content">
+      <div class="text-side">
+        <div class="brand">Traffic AI</div>
+        <h1 class="headline">
+          Automate <span class="gradient">LinkedIn</span><br>
+          Connection Requests
+        </h1>
+        <p class="description">
+          Send personalized LinkedIn connection requests directly from your Traffic AI campaigns. Set it up once, let it run in the background.
+        </p>
+        <ul class="features">
+          <li>
+            <div class="check">&#10003;</div>
+            Personalized connection messages
+          </li>
+          <li>
+            <div class="check">&#10003;</div>
+            Automatic scheduling with smart delays
+          </li>
+          <li>
+            <div class="check">&#10003;</div>
+            Real-time status tracking in dashboard
+          </li>
+          <li>
+            <div class="check">&#10003;</div>
+            Works with your existing Traffic AI campaigns
+          </li>
+        </ul>
+      </div>
+
+      <div class="popup-side">
+        <div class="chrome-frame">
+          <div class="chrome-titlebar">
+            <div class="chrome-dot red"></div>
+            <div class="chrome-dot yellow"></div>
+            <div class="chrome-dot green"></div>
+          </div>
+          <div class="popup-content">
+            <div class="popup-header">
+              <div class="popup-logo">Traffic AI</div>
+              <div class="popup-subtitle">LinkedIn Outreach</div>
+            </div>
+
+            <div class="status-row">
+              <div class="status-item">
+                <div class="status-dot"></div>
+                <span>LinkedIn</span>
+              </div>
+              <div class="status-item">
+                <div class="status-dot"></div>
+                <span>Traffic AI</span>
+              </div>
+            </div>
+
+            <div class="info-box-label">Last Run</div>
+            <div class="info-box">12 of 15 sent · 2h ago</div>
+
+            <button class="send-btn">Send Now</button>
+            <p class="send-hint">Process pending connection requests immediately.</p>
+          </div>
+        </div>
+
+        <div class="float-notification">
+          <div class="success-icon">&#10003;</div>
+          <div class="float-text">
+            <strong>12 requests sent</strong><br>
+            Campaign "Q1 Leads" completed
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
