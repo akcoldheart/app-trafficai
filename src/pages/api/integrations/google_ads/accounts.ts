@@ -35,10 +35,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await getAuthenticatedUser(req, res);
     if (!user) return;
 
-    const { customer_id, customer_name } = req.body;
-    if (!customer_id) {
+    const { customer_id: rawCustomerId, customer_name } = req.body;
+    if (!rawCustomerId) {
       return res.status(400).json({ error: 'customer_id is required' });
     }
+    // Strip dashes — Google Ads API requires digits only
+    const customer_id = rawCustomerId.replace(/-/g, '');
 
     try {
       const integration = await getIntegration(user.id, 'google_ads');

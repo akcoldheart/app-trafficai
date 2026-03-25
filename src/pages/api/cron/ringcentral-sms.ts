@@ -116,12 +116,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             }
 
             // Check dedup: has this visitor already been texted for this pixel today?
+            const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
             const { data: existingLog } = await supabaseAdmin
               .from('ringcentral_sms_log')
               .select('id')
               .eq('pixel_id', pixelId)
               .eq('visitor_id', visitor.visitor_id || visitor.id)
-              .gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
+              .eq('sent_date', today)
               .limit(1);
 
             if (existingLog && existingLog.length > 0) {

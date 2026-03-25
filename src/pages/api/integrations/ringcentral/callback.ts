@@ -67,9 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.redirect('/integrations/ringcentral?error=invalid_state');
   }
 
-  const apiBase = process.env.RINGCENTRAL_SANDBOX === 'true'
-    ? 'https://platform.devtest.ringcentral.com'
-    : 'https://platform.ringcentral.com';
+  const apiBase = 'https://platform.ringcentral.com';
 
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'https://' + req.headers.host}/api/integrations/ringcentral/callback`;
 

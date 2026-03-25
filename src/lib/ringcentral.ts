@@ -7,11 +7,6 @@ const supabaseAdmin = createClient(
 );
 
 const RC_API_BASE = 'https://platform.ringcentral.com';
-const RC_SANDBOX_API_BASE = 'https://platform.devtest.ringcentral.com';
-
-function getApiBase(): string {
-  return process.env.RINGCENTRAL_SANDBOX === 'true' ? RC_SANDBOX_API_BASE : RC_API_BASE;
-}
 
 /**
  * Refresh RingCentral OAuth token if expired. Returns valid access token.
@@ -36,7 +31,7 @@ export async function refreshRCTokenIfNeeded(
   const clientId = config.client_id as string;
   const clientSecret = config.client_secret as string;
 
-  const resp = await fetch(`${getApiBase()}/restapi/oauth/token`, {
+  const resp = await fetch(`${RC_API_BASE}/restapi/oauth/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -82,7 +77,7 @@ export async function sendSms(
   toNumber: string,
   text: string
 ): Promise<{ messageId: string }> {
-  const resp = await fetch(`${getApiBase()}/restapi/v1.0/account/~/extension/~/sms`, {
+  const resp = await fetch(`${RC_API_BASE}/restapi/v1.0/account/~/extension/~/sms`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -108,7 +103,7 @@ export async function sendSms(
  */
 export async function getPhoneNumbers(accessToken: string): Promise<{ phoneNumber: string; label: string }[]> {
   const resp = await fetch(
-    `${getApiBase()}/restapi/v1.0/account/~/extension/~/phone-number?usageType=DirectNumber&perPage=100`,
+    `${RC_API_BASE}/restapi/v1.0/account/~/extension/~/phone-number?usageType=DirectNumber&perPage=100`,
     {
       headers: { 'Authorization': `Bearer ${accessToken}` },
     }

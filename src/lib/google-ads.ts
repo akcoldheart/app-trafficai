@@ -5,13 +5,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const GOOGLE_ADS_API_VERSION = 'v16';
-
-interface GoogleAdsTokens {
-  access_token: string;
-  refresh_token: string;
-  token_expires_at: string;
-}
+const GOOGLE_ADS_API_VERSION = 'v18';
 
 /**
  * Refresh Google OAuth token if expired. Returns the current valid access token.
@@ -55,10 +49,11 @@ export async function refreshGoogleTokenIfNeeded(
 
   const newExpiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
 
-  // Update stored tokens
+  // Update stored tokens (api_key stays in sync with access token)
   await supabaseAdmin
     .from('platform_integrations')
     .update({
+      api_key: data.access_token,
       config: {
         ...config,
         google_access_token: data.access_token,
@@ -139,24 +134,33 @@ export async function listAccessibleCustomers(
   const customers: { customerId: string; descriptiveName: string }[] = [];
 
   for (const rn of resourceNames) {
-    const id = rn.replace('customers/', '');
+    const id = rn.replace('customers/', '').replace(/-/g, '');
     try {
+      // Use googleads.search to get customer descriptive name
       const custResp = await fetch(
-        `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/${rn}`,
+        `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${id}/googleAds:searchStream`,
         {
+          method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'developer-token': developerToken,
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            query: 'SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1',
+          }),
         }
       );
-      const custData = await custResp.json();
-      customers.push({
-        customerId: id,
-        descriptiveName: custData.descriptiveName || id,
-      });
+      if (custResp.ok) {
+        const custData = await custResp.json();
+        const name = custData[0]?.results?.[0]?.customer?.descriptiveName || id;
+        customers.push({ customerId: id, descriptiveName: name });
+      } else {
+        // May be a manager account we can't query directly — still list it
+        customers.push({ customerId: id, descriptiveName: `Account ${id}` });
+      }
     } catch {
-      customers.push({ customerId: id, descriptiveName: id });
+      customers.push({ customerId: id, descriptiveName: `Account ${id}` });
     }
   }
 
@@ -236,6 +240,10 @@ export async function uploadUserData(
           type: 'CUSTOMER_MATCH_USER_LIST',
           customerMatchUserListMetadata: {
             userList: userListResourceName,
+            consent: {
+              adUserData: 'GRANTED',
+              adPersonalization: 'GRANTED',
+            },
           },
         },
       }),
@@ -351,6 +359,10 @@ export async function uploadOfflineConversions(
       userIdentifiers: [
         { hashedEmail: c.hashedEmail },
       ],
+      consent: {
+        adUserData: 'GRANTED',
+        adPersonalization: 'GRANTED',
+      },
     }));
 
     try {

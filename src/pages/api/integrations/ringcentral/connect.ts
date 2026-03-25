@@ -29,9 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       config: { client_id, client_secret, oauth_nonce: oauthNonce },
     });
 
-    const apiBase = process.env.RINGCENTRAL_SANDBOX === 'true'
-      ? 'https://platform.devtest.ringcentral.com'
-      : 'https://platform.ringcentral.com';
+    const apiBase = 'https://platform.ringcentral.com';
 
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'https://' + req.headers.host}/api/integrations/ringcentral/callback`;
     const state = Buffer.from(JSON.stringify({ userId: user.id, nonce: oauthNonce })).toString('base64url');

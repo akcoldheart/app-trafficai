@@ -34,13 +34,14 @@ CREATE TABLE IF NOT EXISTS ringcentral_sms_log (
   status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'sent', 'delivered', 'failed')),
   ringcentral_message_id TEXT,
   error_message TEXT,
+  sent_date DATE NOT NULL DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   sent_at TIMESTAMPTZ
 );
 
 -- Dedup: at most one SMS per visitor per pixel per day
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ringcentral_sms_log_dedup
-  ON ringcentral_sms_log(pixel_id, visitor_id, (created_at::date));
+  ON ringcentral_sms_log(pixel_id, visitor_id, sent_date);
 
 CREATE INDEX IF NOT EXISTS idx_ringcentral_sms_log_user ON ringcentral_sms_log(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ringcentral_sms_log_status ON ringcentral_sms_log(status);
