@@ -9,6 +9,9 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Max time to spend processing pixels (leave 30s buffer for response)
+const MAX_PROCESSING_MS = 270_000; // 4.5 minutes
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -21,12 +24,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Fetch all active pixels with visitors_api_url set
+    // Fetch all active pixels with visitors_api_url set, ordered by last fetch time
+    // so that pixels that haven't been synced recently get priority (round-robin)
     const { data: pixels, error } = await supabaseAdmin
       .from('pixels')
       .select('id, user_id, visitors_api_url')
       .eq('status', 'active')
-      .not('visitors_api_url', 'is', null);
+      .not('visitors_api_url', 'is', null)
+      .order('visitors_api_last_fetched_at', { ascending: true, nullsFirst: true });
 
     if (error) {
       console.error('Error fetching pixels for cron:', error);
@@ -38,10 +43,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const results = [];
+    const startTime = Date.now();
+    let skippedDueToTimeout = 0;
 
     // Stagger pixel syncs with a 3-second delay between each to avoid
     // overwhelming the AudienceLab API and hitting rate limits (429s)
     for (let i = 0; i < pixels.length; i++) {
+      // Check if we're running low on time before starting next pixel
+      if (Date.now() - startTime > MAX_PROCESSING_MS) {
+        skippedDueToTimeout = pixels.length - i;
+        console.warn(`[cron/fetch-visitors] Timeout approaching after ${i} pixels, skipping remaining ${skippedDueToTimeout}. They will be prioritized in the next run.`);
+        break;
+      }
+
       const pixel = pixels[i];
 
       // Wait between pixels (skip delay for the first one)
@@ -69,6 +83,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       processed: results.length,
       succeeded: totalSuccess,
       failed: totalFailed,
+      skipped_timeout: skippedDueToTimeout,
+      total_pixels: pixels.length,
       results,
     });
   } catch (error) {
