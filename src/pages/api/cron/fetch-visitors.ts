@@ -27,7 +27,7 @@ function interleaveByUser(pixels: { id: string; user_id: string; visitors_api_ur
   }
 
   // Sort each user's pixels by last fetched (oldest first, nulls first)
-  for (const group of byUser.values()) {
+  for (const group of Array.from(byUser.values())) {
     group.sort((a, b) => {
       if (!a.visitors_api_last_fetched_at && !b.visitors_api_last_fetched_at) return 0;
       if (!a.visitors_api_last_fetched_at) return -1;
@@ -37,7 +37,7 @@ function interleaveByUser(pixels: { id: string; user_id: string; visitors_api_ur
   }
 
   // Sort users by their oldest pixel's fetch time (so most-stale user goes first)
-  const userOrder = [...byUser.entries()].sort((a, b) => {
+  const userOrder = Array.from(byUser.entries()).sort((a, b) => {
     const aOldest = a[1][0].visitors_api_last_fetched_at;
     const bOldest = b[1][0].visitors_api_last_fetched_at;
     if (!aOldest && !bOldest) return 0;

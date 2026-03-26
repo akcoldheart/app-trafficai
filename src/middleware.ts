@@ -19,6 +19,30 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip auth for referral click tracking (public endpoint)
+  if (pathname === '/api/referrals/track-click') {
+    return NextResponse.next();
+  }
+
+  // Capture referral code from ?ref= query parameter and store in cookie
+  const refCode = request.nextUrl.searchParams.get('ref');
+  if (refCode) {
+    // Strip the ref param and redirect to clean URL
+    const cleanUrl = request.nextUrl.clone();
+    cleanUrl.searchParams.delete('ref');
+    const response = NextResponse.redirect(cleanUrl);
+
+    // Set referral cookie (30-day expiry, readable by JS for signup page)
+    response.cookies.set('ref_code', refCode, {
+      maxAge: 30 * 24 * 60 * 60, // 30 days
+      path: '/',
+      sameSite: 'lax',
+      httpOnly: false, // Signup page needs to read this client-side
+    });
+
+    return response;
+  }
+
   return await updateSession(request);
 }
 

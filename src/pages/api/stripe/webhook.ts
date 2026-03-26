@@ -115,6 +115,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             subscriptionId: session.subscription as string,
             responseData: { plan: planId, updated: updateData?.length || 0 },
           });
+
+          // Track referral conversion: if this user was referred, mark as converted
+          try {
+            const { data: referralRow } = await supabase
+              .from('referrals')
+              .select('id, commission_rate')
+              .eq('referred_user_id', userId)
+              .eq('status', 'signed_up')
+              .single();
+
+            if (referralRow) {
+              // Get subscription amount from Stripe
+              let monthlyRevenue = 0;
+              if (session.subscription) {
+                const sub = await stripe.subscriptions.retrieve(session.subscription as string);
+                const priceAmount = sub.items.data[0]?.price?.unit_amount || 0;
+                monthlyRevenue = priceAmount / 100; // cents to dollars
+              }
+
+              const commissionAmount = monthlyRevenue * ((referralRow.commission_rate || 20) / 100);
+
+              await supabase
+                .from('referrals')
+                .update({
+                  status: 'converted',
+                  converted_at: new Date().toISOString(),
+                  stripe_subscription_id: session.subscription as string,
+                  plan_id: planId,
+                  monthly_revenue: monthlyRevenue,
+                  commission_amount: commissionAmount,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', referralRow.id);
+            }
+          } catch (refErr) {
+            console.error('Referral conversion tracking error:', refErr);
+          }
         }
         break;
       }
@@ -198,6 +235,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             })
             .eq('id', userData.id);
 
+          // Mark referral as churned if this was a referred user
+          try {
+            await supabase
+              .from('referrals')
+              .update({
+                status: 'churned',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('referred_user_id', userData.id)
+              .eq('status', 'converted');
+          } catch (refErr) {
+            console.error('Referral churn tracking error:', refErr);
+          }
         }
         break;
       }

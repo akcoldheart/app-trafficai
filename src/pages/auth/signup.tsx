@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Head from 'next/head';
@@ -15,6 +15,13 @@ const GoogleLogo = () => (
   </svg>
 );
 
+// Read a cookie by name from document.cookie
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
 export default function Signup() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -24,7 +31,13 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refCode, setRefCode] = useState<string | null>(null);
   const supabase = createClient();
+
+  // Read referral cookie on mount
+  useEffect(() => {
+    setRefCode(getCookie('ref_code'));
+  }, []);
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +64,7 @@ export default function Signup() {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             company_website: companyWebsite || null,
+            ref_code: refCode || null,
           },
         },
       });
@@ -81,7 +95,7 @@ export default function Signup() {
         provider: 'google',
         options: {
           // Use API route for server-side code exchange (handles PKCE properly)
-          redirectTo: `${window.location.origin}/api/auth/callback?redirect=/`,
+          redirectTo: `${window.location.origin}/api/auth/callback?redirect=/${refCode ? `&ref_code=${encodeURIComponent(refCode)}` : ''}`,
         },
       });
 

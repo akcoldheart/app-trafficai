@@ -12,6 +12,9 @@ import {
   IconAlertCircle,
   IconLock,
   IconKey,
+  IconUsersGroup,
+  IconCopy,
+  IconExternalLink,
 } from '@tabler/icons-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -33,6 +36,28 @@ export default function Profile() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Referral state
+  const [referralUrl, setReferralUrl] = useState('');
+  const [referralCode, setReferralCode] = useState('');
+  const [referralCopied, setReferralCopied] = useState(false);
+
+  // Fetch referral code
+  useEffect(() => {
+    fetch('/api/referrals/my-code')
+      .then(r => r.json())
+      .then(data => {
+        if (data.referral_url) setReferralUrl(data.referral_url);
+        if (data.code) setReferralCode(data.code);
+      })
+      .catch(() => {});
+  }, []);
+
+  const copyReferralLink = () => {
+    navigator.clipboard.writeText(referralUrl);
+    setReferralCopied(true);
+    setTimeout(() => setReferralCopied(false), 2000);
+  };
 
   // Fetch profile data from API on mount
   useEffect(() => {
@@ -362,6 +387,49 @@ export default function Profile() {
                     : '-'}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Referral Program */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">
+                <IconUsersGroup className="icon me-2" />
+                Referral Program
+              </h3>
+            </div>
+            <div className="card-body">
+              <p className="text-muted mb-3">
+                Earn commissions by referring new users to Traffic AI.
+              </p>
+              {referralUrl ? (
+                <>
+                  <label className="form-label">Your Referral Link</label>
+                  <div className="input-group mb-3">
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      value={referralUrl}
+                      readOnly
+                    />
+                    <button
+                      className="btn btn-outline-primary btn-sm"
+                      onClick={copyReferralLink}
+                      title="Copy link"
+                    >
+                      {referralCopied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                    </button>
+                  </div>
+                  <Link href="/account/referrals" className="btn btn-primary btn-sm w-100">
+                    <IconExternalLink size={16} className="me-1" />
+                    View Referral Dashboard
+                  </Link>
+                </>
+              ) : (
+                <div className="text-center py-2">
+                  <IconLoader2 size={20} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+                </div>
+              )}
             </div>
           </div>
 
