@@ -949,7 +949,7 @@ export default function Audiences() {
       }
 
       showToast(`Audience unassigned from ${userEmail}. It remains in the Audiences tab.`, 'success');
-      await Promise.all([loadAudiences(currentPage), loadAudienceRequests()]);
+      await Promise.all([loadAudiences(currentPage), loadAudienceRequests(), loadAudienceAssignments()]);
     } catch (error) {
       showToast((error as Error).message, 'error');
     } finally {
