@@ -26,11 +26,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const profile = await getUserProfile(user.id, req, res);
     const isAdmin = profile.role === 'admin';
 
-    // Find the audience request with this audience_id
+    // Find the original audience request (not delete requests) with this audience_id
     const { data: request, error } = await supabaseAdmin
       .from('audience_requests')
       .select('*')
       .eq('audience_id', id)
+      .neq('request_type', 'delete')
       .single();
 
     if (error || !request) {
@@ -64,13 +65,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .delete()
         .eq('audience_id', id);
 
-      // Delete the audience request (use admin client to bypass RLS,
-      // since RLS only allows deleting 'pending' requests but approved
-      // audiences have status='approved' — auth is already checked above)
+      // Delete audience assignments
+      await supabaseAdmin
+        .from('audience_assignments')
+        .delete()
+        .eq('audience_id', id);
+
+      // Delete all audience_requests rows for this audience (original + any removal requests)
+      // Uses admin client to bypass RLS since approved requests can't be deleted by RLS policy
       const { error: deleteError } = await supabaseAdmin
         .from('audience_requests')
         .delete()
-        .eq('id', request.id);
+        .eq('audience_id', id);
 
       if (deleteError) {
         console.error('Error deleting audience:', deleteError);
