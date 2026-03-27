@@ -95,14 +95,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Request type, name, and form data are required' });
       }
 
-      if (!['standard', 'custom'].includes(request_type)) {
+      if (!['standard', 'custom', 'delete'].includes(request_type)) {
         return res.status(400).json({ error: 'Invalid request type' });
+      }
+
+      // For delete requests, require audience_id in form_data
+      if (request_type === 'delete') {
+        const audienceId = (form_data as Record<string, unknown>)?.audience_id;
+        if (!audienceId) {
+          return res.status(400).json({ error: 'audience_id is required for delete requests' });
+        }
       }
 
       // Get user email for notification
       const profile = await getUserProfile(user.id, req, res);
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('audience_requests')
         .insert({
           user_id: user.id,
@@ -121,12 +129,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Create admin notification
+      const notifTitle = request_type === 'delete' ? 'Audience Removal Request' : 'New Audience Request';
+      const notifMsg = request_type === 'delete'
+        ? `${profile.email} has requested to remove audience: ${name}`
+        : `${profile.email} has submitted a ${request_type} audience request: ${name}`;
+
       await createAdminNotification(
         req,
         res,
         'audience_request',
-        'New Audience Request',
-        `${profile.email} has submitted a ${request_type} audience request: ${name}`,
+        notifTitle,
+        notifMsg,
         data.id,
         'audience_request'
       );

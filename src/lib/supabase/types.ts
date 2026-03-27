@@ -722,7 +722,7 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          request_type: 'standard' | 'custom';
+          request_type: 'standard' | 'custom' | 'delete';
           name: string;
           form_data: Json;
           data_points: string[];
@@ -737,7 +737,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id: string;
-          request_type: 'standard' | 'custom';
+          request_type: 'standard' | 'custom' | 'delete';
           name: string;
           form_data: Json;
           data_points?: string[];
@@ -913,7 +913,7 @@ export interface PixelRequest {
 export interface AudienceRequest {
   id: string;
   user_id: string;
-  request_type: 'standard' | 'custom';
+  request_type: 'standard' | 'custom' | 'delete';
   name: string;
   form_data: Record<string, unknown>;
   data_points: string[];

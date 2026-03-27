@@ -80,6 +80,8 @@ export default function Audiences() {
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteName, setDeleteName] = useState<string | null>(null);
+  const [deleteIsManual, setDeleteIsManual] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<'audiences' | 'requests'>('audiences');
@@ -618,32 +620,59 @@ export default function Audiences() {
 
     setDeleting(true);
     try {
-      // Check if it's a manual audience
-      const isManualAudience = deleteId.startsWith('manual_');
+      if (isAdmin) {
+        // Admins can delete directly
+        const isManualAudience = deleteId.startsWith('manual_');
 
-      if (isManualAudience) {
-        // Delete manual audience from local database
-        const response = await fetch(`/api/audiences/manual/${deleteId}`, {
-          method: 'DELETE',
+        if (isManualAudience) {
+          const response = await fetch(`/api/audiences/manual/${deleteId}`, {
+            method: 'DELETE',
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to delete audience');
+          }
+        } else {
+          await TrafficAPI.deleteAudience(deleteId);
+        }
+
+        setShowDeleteModal(false);
+        setDeleteId(null);
+        setDeleteName(null);
+        showToast('Audience deleted successfully', 'success');
+        loadAudiences(currentPage);
+      } else {
+        // Non-admins: submit a deletion request for admin approval
+        const response = await fetch('/api/audience-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            request_type: 'delete',
+            name: deleteName || 'Unknown Audience',
+            form_data: {
+              audience_id: deleteId,
+              is_manual: deleteIsManual,
+            },
+          }),
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.error || 'Failed to delete audience');
+          throw new Error(data.error || 'Failed to submit deletion request');
         }
-      } else {
-        // Delete from external API
-        await TrafficAPI.deleteAudience(deleteId);
-      }
 
-      setShowDeleteModal(false);
-      setDeleteId(null);
-      showToast('Audience deleted successfully', 'success');
-      loadAudiences(currentPage);
+        setShowDeleteModal(false);
+        setDeleteId(null);
+        setDeleteName(null);
+        showToast('Removal request submitted. An admin will review it shortly.', 'success');
+        loadAudienceRequests();
+      }
     } catch (error) {
       console.error('Delete error:', error);
-      showToast('Error deleting audience: ' + (error as Error).message, 'error');
+      showToast('Error: ' + (error as Error).message, 'error');
     } finally {
       setDeleting(false);
     }
@@ -894,6 +923,33 @@ export default function Audiences() {
       await Promise.all([loadAudiences(currentPage), loadAudienceRequests()]);
       setActiveTab('audiences');
       showToast('Request approved! Audience created successfully.', 'success');
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleApproveDeleteRequest = async (request: AudienceRequest) => {
+    const userEmail = request.user?.email || 'this user';
+    if (!confirm(`Unassign "${request.name}" from ${userEmail}? The audience will remain available for reassignment.`)) return;
+
+    setProcessing(true);
+    try {
+      const response = await fetch(`/api/admin/audience-requests/${request.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to unassign audience');
+      }
+
+      showToast(`Audience unassigned from ${userEmail}. It remains in the Audiences tab.`, 'success');
+      await Promise.all([loadAudiences(currentPage), loadAudienceRequests()]);
     } catch (error) {
       showToast((error as Error).message, 'error');
     } finally {
@@ -1237,6 +1293,8 @@ export default function Audiences() {
                                       className="btn btn-sm btn-outline-danger"
                                       onClick={() => {
                                         setDeleteId(id);
+                                        setDeleteName(audience.name || 'Unnamed Audience');
+                                        setDeleteIsManual(!!audience.isManual);
                                         setShowDeleteModal(true);
                                       }}
                                     >
@@ -1336,8 +1394,11 @@ export default function Audiences() {
                             </div>
                           </td>
                           <td>
-                            <span className={`badge ${request.request_type === 'custom' ? 'bg-purple-lt' : 'bg-blue-lt'}`}>
-                              {request.request_type}
+                            <span className={`badge ${
+                              request.request_type === 'delete' ? 'bg-orange-lt' :
+                              request.request_type === 'custom' ? 'bg-purple-lt' : 'bg-blue-lt'
+                            }`}>
+                              {request.request_type === 'delete' ? 'removal' : request.request_type}
                             </span>
                           </td>
                           {isAdmin && (
@@ -1358,7 +1419,28 @@ export default function Audiences() {
                           </td>
                           <td>
                             <div className="btn-list flex-nowrap">
-                              {isAdmin && request.status === 'pending' && (
+                              {isAdmin && request.status === 'pending' && request.request_type === 'delete' && (
+                                <>
+                                  <button
+                                    className="btn btn-warning btn-sm"
+                                    onClick={() => handleApproveDeleteRequest(request)}
+                                    disabled={processing}
+                                    title="Unassign audience from this user"
+                                  >
+                                    <IconUserShare size={14} className="me-1" />
+                                    Unassign
+                                  </button>
+                                  <button
+                                    className="btn btn-outline-secondary btn-sm"
+                                    onClick={() => handleRejectRequest(request)}
+                                    disabled={processing}
+                                    title="Reject"
+                                  >
+                                    <IconX size={14} />
+                                  </button>
+                                </>
+                              )}
+                              {isAdmin && request.status === 'pending' && request.request_type !== 'delete' && (
                                 <>
                                   <button
                                     className="btn btn-primary btn-sm"
@@ -1422,17 +1504,17 @@ export default function Audiences() {
                   onClick={() => !deleting && setShowDeleteModal(false)}
                   disabled={deleting}
                 ></button>
-                <div className="modal-status bg-danger"></div>
+                <div className={`modal-status ${isAdmin ? 'bg-danger' : 'bg-warning'}`}></div>
                 <div className="modal-body text-center py-4">
-                  <IconTrash className="icon mb-2 text-danger icon-lg" />
-                  <h3>Are you sure?</h3>
+                  <IconTrash className={`icon mb-2 icon-lg ${isAdmin ? 'text-danger' : 'text-warning'}`} />
+                  <h3>{isAdmin ? 'Are you sure?' : 'Request Removal'}</h3>
                   <div className="text-muted">
-                    Do you really want to delete this audience? This action cannot be undone.
+                    {isAdmin
+                      ? 'Do you really want to delete this audience? This action cannot be undone.'
+                      : 'This will send a request to your admin to remove this audience from your account.'}
                   </div>
-                  {deleteId && (
-                    <div className="text-muted small mt-2">
-                      ID: <code>{deleteId}</code>
-                    </div>
+                  {deleteName && (
+                    <div className="fw-medium mt-2">{deleteName}</div>
                   )}
                 </div>
                 <div className="modal-footer">
@@ -1449,17 +1531,17 @@ export default function Audiences() {
                       </div>
                       <div className="col">
                         <button
-                          className="btn btn-danger w-100"
+                          className={`btn w-100 ${isAdmin ? 'btn-danger' : 'btn-warning'}`}
                           onClick={() => handleDelete()}
                           disabled={deleting}
                         >
                           {deleting ? (
                             <>
                               <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                              Deleting...
+                              {isAdmin ? 'Deleting...' : 'Submitting...'}
                             </>
                           ) : (
-                            'Delete'
+                            isAdmin ? 'Delete' : 'Request Removal'
                           )}
                         </button>
                       </div>

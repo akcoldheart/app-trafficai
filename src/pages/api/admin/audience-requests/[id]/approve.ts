@@ -1,8 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { requireRole, getUserApiKey, logAuditAction } from '@/lib/api-helpers';
 
 const TRAFFIC_AI_API_URL = process.env.TRAFFIC_AI_API_URL;
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -40,74 +46,90 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Request has already been processed' });
     }
 
-    // Determine effective user: use assigned user if provided, otherwise original requester
-    const effectiveUserId = assigned_user_id || audienceRequest.user_id;
-
-    // Get the effective user's API key
-    const apiKey = await getUserApiKey(effectiveUserId, req, res);
-    if (!apiKey) {
-      return res.status(400).json({ error: 'Assigned user does not have an API key assigned' });
-    }
-
-    // Use edited data if provided, otherwise use original request data
-    const finalName = edited_name || audienceRequest.name;
     const formData = (edited_form_data || audienceRequest.form_data) as Record<string, unknown>;
     let audienceId: string | null = null;
 
-    if (audienceRequest.request_type === 'standard') {
-      // Standard audience creation
-      const audiencePayload = {
-        name: finalName,
-        filters: formData.filters || {},
-        days_back: formData.days_back || 7,
-        ...(formData.segment ? { segment: formData.segment } : {}),
-      };
+    if (audienceRequest.request_type === 'delete') {
+      // Handle delete request approval — unassign the user from the audience
+      const targetAudienceId = formData.audience_id as string;
+      const requestingUserId = audienceRequest.user_id;
 
-      const response = await fetch(`${TRAFFIC_AI_API_URL}/audiences`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
-        },
-        body: JSON.stringify(audiencePayload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error('Traffic AI API error:', data);
-        return res.status(response.status).json({
-          error: data.error || 'Failed to create audience via Traffic AI'
-        });
+      if (!targetAudienceId) {
+        return res.status(400).json({ error: 'No audience_id found in delete request' });
       }
 
-      audienceId = data.id || data.audienceId;
+      // Remove this user's assignment to the audience
+      await supabaseAdmin
+        .from('audience_assignments')
+        .delete()
+        .eq('audience_id', targetAudienceId)
+        .eq('user_id', requestingUserId);
+
+      audienceId = targetAudienceId;
     } else {
-      // Custom audience creation
-      const customPayload = {
-        topic: formData.topic || audienceRequest.name,
-        description: formData.description || '',
-      };
+      // Handle standard/custom audience creation
+      const effectiveUserId = assigned_user_id || audienceRequest.user_id;
 
-      const response = await fetch(`${TRAFFIC_AI_API_URL}/audiences/custom`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
-        },
-        body: JSON.stringify(customPayload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error('Traffic AI API error:', data);
-        return res.status(response.status).json({
-          error: data.error || 'Failed to create custom audience via Traffic AI'
-        });
+      const apiKey = await getUserApiKey(effectiveUserId, req, res);
+      if (!apiKey) {
+        return res.status(400).json({ error: 'Assigned user does not have an API key assigned' });
       }
 
-      audienceId = data.id || data.audienceId;
+      const finalName = edited_name || audienceRequest.name;
+
+      if (audienceRequest.request_type === 'standard') {
+        const audiencePayload = {
+          name: finalName,
+          filters: formData.filters || {},
+          days_back: formData.days_back || 7,
+          ...(formData.segment ? { segment: formData.segment } : {}),
+        };
+
+        const response = await fetch(`${TRAFFIC_AI_API_URL}/audiences`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey,
+          },
+          body: JSON.stringify(audiencePayload),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error('Traffic AI API error:', data);
+          return res.status(response.status).json({
+            error: data.error || 'Failed to create audience via Traffic AI'
+          });
+        }
+
+        audienceId = data.id || data.audienceId;
+      } else {
+        const customPayload = {
+          topic: formData.topic || audienceRequest.name,
+          description: formData.description || '',
+        };
+
+        const response = await fetch(`${TRAFFIC_AI_API_URL}/audiences/custom`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey,
+          },
+          body: JSON.stringify(customPayload),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error('Traffic AI API error:', data);
+          return res.status(response.status).json({
+            error: data.error || 'Failed to create custom audience via Traffic AI'
+          });
+        }
+
+        audienceId = data.id || data.audienceId;
+      }
     }
 
     // Update the request status (and reassign user_id if changed)
@@ -122,12 +144,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       updatePayload.user_id = assigned_user_id;
     }
 
-    const { data: updatedRequest, error: updateError } = await supabase
+    // For delete requests, mark as approved (user was unassigned)
+    // For create requests, mark as approved with the new audience_id
+    const { error: updateError } = await supabaseAdmin
       .from('audience_requests')
       .update(updatePayload)
-      .eq('id', id)
-      .select()
-      .single();
+      .eq('id', id);
 
     if (updateError) {
       console.error('Error updating audience request:', updateError);
@@ -136,11 +158,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     await logAuditAction(
       authResult.user.id,
-      'approve_audience_request',
+      audienceRequest.request_type === 'delete' ? 'approve_audience_unassign_request' : 'approve_audience_request',
       req,
       res,
       'audience_request',
-      id,
+      id as string,
       { audience_id: audienceId }
     );
 
@@ -153,7 +175,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       success: true,
-      request: updatedRequest,
       audience_id: audienceId,
     });
   } catch (error) {
