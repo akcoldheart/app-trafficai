@@ -16,6 +16,7 @@ import {
   IconTrash,
   IconEdit,
   IconPlus,
+  IconUserMinus,
 } from '@tabler/icons-react';
 
 interface PixelRequest {
@@ -36,7 +37,7 @@ interface PixelRequest {
 interface AudienceRequest {
   id: string;
   user_id: string;
-  request_type: 'standard' | 'custom';
+  request_type: 'standard' | 'custom' | 'delete';
   name: string;
   form_data: Record<string, unknown>;
   status: 'pending' | 'approved' | 'rejected';
@@ -558,6 +559,33 @@ export default function AdminRequests() {
     }
   };
 
+  const handleApproveRemoval = async (audienceRequest: AudienceRequest) => {
+    const userEmail = audienceRequest.user?.email || 'this user';
+    if (!confirm(`Unassign "${audienceRequest.name}" from ${userEmail}? The audience will remain available for reassignment.`)) return;
+
+    setProcessingId(audienceRequest.id);
+    try {
+      const response = await fetch(`/api/admin/audience-requests/${audienceRequest.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      if (response.ok) {
+        fetchRequests();
+        showToast(`Audience unassigned from ${userEmail}.`, 'success');
+      } else {
+        const data = await response.json();
+        showToast(data.error || 'Failed to unassign audience', 'error');
+      }
+    } catch (error) {
+      console.error('Error approving removal:', error);
+      showToast('Failed to unassign audience', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   const handleReject = async () => {
     if (!selectedRequest) return;
 
@@ -775,9 +803,15 @@ export default function AdminRequests() {
                 {allRequests.map(({ type, request }) => (
                   <tr key={`${type}-${request.id}`}>
                     <td>
-                      <span className={`badge ${type === 'pixel' ? 'bg-purple-lt' : 'bg-blue-lt'}`}>
+                      <span className={`badge ${
+                        type === 'pixel' ? 'bg-purple-lt' :
+                        (type === 'audience' && (request as AudienceRequest).request_type === 'delete') ? 'bg-orange-lt' :
+                        'bg-blue-lt'
+                      }`}>
                         {type === 'pixel' ? (
                           <><IconCode size={12} className="me-1" /> Pixel</>
+                        ) : (request as AudienceRequest).request_type === 'delete' ? (
+                          <><IconUserMinus size={12} className="me-1" /> Removal</>
                         ) : (
                           <><IconUsers size={12} className="me-1" /> Audience</>
                         )}
@@ -788,7 +822,9 @@ export default function AdminRequests() {
                       <div className="text-muted small">
                         {type === 'pixel'
                           ? (request as PixelRequest).domain
-                          : `${(request as AudienceRequest).request_type} audience`}
+                          : (request as AudienceRequest).request_type === 'delete'
+                            ? 'audience removal request'
+                            : `${(request as AudienceRequest).request_type} audience`}
                       </div>
                       {((type === 'pixel' && (request as PixelRequest).data_points?.length > 0) ||
                         (type === 'audience' && (request as AudienceRequest).data_points?.length > 0)) && (
@@ -821,7 +857,32 @@ export default function AdminRequests() {
                     <td className="text-muted">{formatTimeAgo(request.created_at)}</td>
                     <td>
                       <div className="d-flex gap-1">
-                        {request.status === 'pending' && (
+                        {request.status === 'pending' && type === 'audience' && (request as AudienceRequest).request_type === 'delete' && (
+                          <>
+                            <button
+                              className="btn btn-warning btn-sm"
+                              onClick={() => handleApproveRemoval(request as AudienceRequest)}
+                              disabled={processingId === request.id}
+                              title="Unassign audience from this user"
+                            >
+                              <IconUserMinus size={14} className="me-1" />
+                              Unassign
+                            </button>
+                            <button
+                              className="btn btn-outline-secondary btn-sm"
+                              onClick={() => {
+                                setSelectedRequest({ type, request });
+                                setAdminNotes('');
+                                setShowRejectModal(true);
+                              }}
+                              disabled={processingId === request.id}
+                              title="Reject"
+                            >
+                              <IconX size={14} />
+                            </button>
+                          </>
+                        )}
+                        {request.status === 'pending' && !(type === 'audience' && (request as AudienceRequest).request_type === 'delete') && (
                           <>
                             <button
                               className="btn btn-success btn-sm"
@@ -833,7 +894,6 @@ export default function AdminRequests() {
                                   setCustomInstallationCode('');
                                   setShowApproveModal(true);
                                 } else {
-                                  // Use the full review modal for audience requests
                                   openAudienceReviewModal(request as AudienceRequest);
                                 }
                               }}
