@@ -58,12 +58,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'No audience_id found in delete request' });
       }
 
-      // Remove this user's assignment to the audience
+      // Remove this user's assignment from audience_assignments table
       await supabaseAdmin
         .from('audience_assignments')
         .delete()
         .eq('audience_id', targetAudienceId)
         .eq('user_id', requestingUserId);
+
+      // Also remove ownership from the original audience_request if this user is the owner.
+      // Reassign to the approving admin so the audience stays visible in admin view.
+      const { data: originalRequest } = await supabaseAdmin
+        .from('audience_requests')
+        .select('id, user_id')
+        .eq('audience_id', targetAudienceId)
+        .eq('user_id', requestingUserId)
+        .neq('request_type', 'delete')
+        .single();
+
+      if (originalRequest) {
+        await supabaseAdmin
+          .from('audience_requests')
+          .update({ user_id: authResult.user.id })
+          .eq('id', originalRequest.id);
+      }
 
       audienceId = targetAudienceId;
     } else {
