@@ -1235,7 +1235,7 @@ export default function Audiences() {
                                       if (assigned && assigned.length > 0) {
                                         return assigned.map(a => a.email).join(', ');
                                       }
-                                      return (audience as unknown as { user_email?: string }).user_email || '-';
+                                      return <span className="text-muted" style={{ opacity: 0.5 }}>Unassigned</span>;
                                     })()}
                                   </td>
                                 )}
@@ -1282,7 +1282,7 @@ export default function Audiences() {
                                           setReassignRequestId(a.request_id || '');
                                           setReassignAudienceId(audienceId);
                                           const existing = audienceAssignments[audienceId];
-                                          setReassignUserIds(existing ? existing.map(e => e.user_id) : (a.user_id ? [a.user_id] : []));
+                                          setReassignUserIds(existing ? existing.map(e => e.user_id) : []);
                                           setShowReassignModal(true);
                                         }}
                                       >
