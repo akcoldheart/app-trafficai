@@ -1,5 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createClient } from '@/lib/supabase/api';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser, getUserProfile, logAuditAction } from '@/lib/api-helpers';
 
@@ -21,8 +20,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!id || typeof id !== 'string') {
     return res.status(400).json({ error: 'Audience ID is required' });
   }
-
-  const supabase = createClient(req, res);
 
   try {
     // Get user's role to determine access level
@@ -67,8 +64,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .delete()
         .eq('audience_id', id);
 
-      // Delete the audience request
-      const { error: deleteError } = await supabase
+      // Delete the audience request (use admin client to bypass RLS,
+      // since RLS only allows deleting 'pending' requests but approved
+      // audiences have status='approved' — auth is already checked above)
+      const { error: deleteError } = await supabaseAdmin
         .from('audience_requests')
         .delete()
         .eq('id', request.id);
