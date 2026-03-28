@@ -131,23 +131,36 @@ function contactToRow(audienceId: string, contact: Record<string, unknown>) {
   return row;
 }
 
-// Insert contacts into audience_contacts in batches of 200
+// Insert contacts into audience_contacts in batches of 200 with retry
 async function insertContactsBatch(audienceId: string, contacts: Record<string, unknown>[]) {
   const BATCH_SIZE = 200;
+  const MAX_INSERT_RETRIES = 3;
   let inserted = 0;
 
   for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
     const batch = contacts.slice(i, i + BATCH_SIZE);
     const rows = batch.map(c => contactToRow(audienceId, c));
 
-    const { error } = await supabaseAdmin
-      .from('audience_contacts')
-      .insert(rows);
+    let success = false;
+    for (let attempt = 0; attempt < MAX_INSERT_RETRIES; attempt++) {
+      const { error } = await supabaseAdmin
+        .from('audience_contacts')
+        .insert(rows);
 
-    if (error) {
-      console.error(`[Import] Error inserting batch at offset ${i}:`, error);
-    } else {
-      inserted += batch.length;
+      if (!error) {
+        inserted += batch.length;
+        success = true;
+        break;
+      }
+
+      console.error(`[Import] Error inserting batch at offset ${i} (attempt ${attempt + 1}/${MAX_INSERT_RETRIES}):`, error);
+      if (attempt < MAX_INSERT_RETRIES - 1) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      }
+    }
+
+    if (!success) {
+      console.error(`[Import] Batch at offset ${i} failed after ${MAX_INSERT_RETRIES} retries, skipping ${batch.length} contacts`);
     }
   }
 
@@ -474,7 +487,8 @@ async function handleChunk(
 
   // Fetch pages with limited concurrency (3 at a time) to avoid rate limiting
   const CONCURRENCY = 3;
-  const MAX_RETRIES = 2;
+  const MAX_RETRIES = 3;
+  const FETCH_TIMEOUT = 30000; // 30s per page
   console.log(`[Import] Chunk: fetching pages ${pageStart}-${pageEnd} (concurrency=${CONCURRENCY})`);
 
   const allPages = [];
@@ -493,22 +507,32 @@ async function handleChunk(
           try {
             const pageUrl = new URL(url);
             pageUrl.searchParams.set('page', String(page));
-            const pageResponse = await fetch(pageUrl.toString(), { method: 'GET', headers: fetchHeaders });
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+            const pageResponse = await fetch(pageUrl.toString(), {
+              method: 'GET',
+              headers: fetchHeaders,
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeout);
 
             if (pageResponse.ok) {
               const pageData = await pageResponse.json();
               return (pageData.Data || pageData.data || pageData.records || pageData.contacts || []) as Record<string, unknown>[];
             }
 
-            console.error(`[Import] Page ${page} returned ${pageResponse.status} (attempt ${attempt + 1})`);
-            if (attempt < MAX_RETRIES) {
-              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-            }
+            console.error(`[Import] Page ${page} returned ${pageResponse.status} (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
           } catch (err) {
-            console.error(`[Import] Error fetching page ${page} (attempt ${attempt + 1}):`, err);
-            if (attempt < MAX_RETRIES) {
-              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-            }
+            const errMsg = err instanceof Error ? err.message : String(err);
+            console.error(`[Import] Error fetching page ${page} (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${errMsg}`);
+          }
+
+          // Wait before retry with exponential backoff
+          if (attempt < MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
           }
         }
         failedPages++;
@@ -520,6 +544,11 @@ async function handleChunk(
       for (const record of records) {
         newContacts.push(normalizeContact(cleanRecord(record)));
       }
+    }
+
+    // Small delay between concurrency batches to reduce rate-limiting
+    if (i + CONCURRENCY < allPages.length) {
+      await new Promise(r => setTimeout(r, 500));
     }
   }
 
