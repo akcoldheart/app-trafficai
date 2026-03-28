@@ -8,7 +8,7 @@ const supabaseAdmin = createServiceClient(
 );
 
 // Valid extension periods in days
-const VALID_PERIODS = [7, 15];
+const VALID_PERIODS = [1, 7, 15];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Only admins can extend trials
