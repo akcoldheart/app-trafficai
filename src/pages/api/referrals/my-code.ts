@@ -89,9 +89,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(409).json({ error: 'This code is already taken' });
     }
 
+    const normalizedCode = code.toLowerCase();
+
     const { data: updated, error } = await supabaseAdmin
       .from('referral_codes')
-      .update({ code, is_custom: true, updated_at: new Date().toISOString() })
+      .update({ code: normalizedCode, is_custom: true, updated_at: new Date().toISOString() })
       .eq('user_id', user.id)
       .select('*')
       .single();

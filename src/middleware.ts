@@ -32,9 +32,29 @@ export async function middleware(request: NextRequest) {
     cleanUrl.searchParams.delete('ref');
     const response = NextResponse.redirect(cleanUrl);
 
-    // Set referral cookie (30-day expiry, readable by JS for signup page)
+    // Track click and get dynamic cookie duration from the referral code
+    let cookieDurationDays = 30; // default fallback
+    try {
+      const trackUrl = new URL('/api/referrals/track-click', request.url);
+      const trackRes = await fetch(trackUrl.toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: refCode }),
+      });
+      if (trackRes.ok) {
+        const trackData = await trackRes.json();
+        if (trackData.cookie_duration_days) {
+          cookieDurationDays = trackData.cookie_duration_days;
+        }
+      }
+    } catch (err) {
+      // Don't block the redirect if tracking fails
+      console.error('Referral click tracking error:', err);
+    }
+
+    // Set referral cookie with dynamic expiry, readable by JS for signup page
     response.cookies.set('ref_code', refCode, {
-      maxAge: 30 * 24 * 60 * 60, // 30 days
+      maxAge: cookieDurationDays * 24 * 60 * 60,
       path: '/',
       sameSite: 'lax',
       httpOnly: false, // Signup page needs to read this client-side

@@ -202,6 +202,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               subscriptionId: subscription.id,
               responseData: { status, plan: planId },
             });
+
+            // Recalculate referral commission when subscription price changes
+            try {
+              const { data: referralRow } = await supabase
+                .from('referrals')
+                .select('id, commission_rate')
+                .eq('referred_user_id', userData.id)
+                .eq('status', 'converted')
+                .single();
+
+              if (referralRow && status === 'active') {
+                const priceAmount = subscription.items.data[0]?.price?.unit_amount || 0;
+                const monthlyRevenue = priceAmount / 100;
+                const commissionAmount = monthlyRevenue * ((referralRow.commission_rate || 20) / 100);
+
+                await supabase
+                  .from('referrals')
+                  .update({
+                    monthly_revenue: monthlyRevenue,
+                    commission_amount: commissionAmount,
+                    plan_id: planId,
+                    stripe_subscription_id: subscription.id,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', referralRow.id);
+              }
+            } catch (refErr) {
+              console.error('Referral commission recalculation error:', refErr);
+            }
           }
         } else {
           await logStripeWebhook('customer.subscription.updated', 'warning', `No user found for customer ${customerId}`, {

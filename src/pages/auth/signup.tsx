@@ -73,6 +73,18 @@ export default function Signup() {
 
       if (data.session) {
         // User is immediately authenticated (email verification disabled)
+        // Attribute referral if ref code exists
+        if (refCode && data.user) {
+          try {
+            await fetch('/api/referrals/attribute', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ref_code: refCode }),
+            });
+          } catch {
+            // Don't block signup if attribution fails
+          }
+        }
         // Redirect directly to dashboard
         router.push('/');
       } else if (data.user) {

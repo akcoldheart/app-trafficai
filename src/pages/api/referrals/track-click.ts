@@ -16,20 +16,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Code is required' });
   }
 
-  // Get current click count and increment
+  // Look up code, increment clicks, and return cookie duration
   const { data: codeRow } = await supabaseAdmin
     .from('referral_codes')
-    .select('id, total_clicks')
+    .select('id, total_clicks, cookie_duration_days')
     .ilike('code', code)
     .eq('is_active', true)
     .single();
 
-  if (codeRow) {
-    await supabaseAdmin
-      .from('referral_codes')
-      .update({ total_clicks: (codeRow.total_clicks || 0) + 1 })
-      .eq('id', codeRow.id);
+  if (!codeRow) {
+    return res.status(200).json({ success: false, valid: false });
   }
 
-  return res.status(200).json({ success: true });
+  await supabaseAdmin
+    .from('referral_codes')
+    .update({
+      total_clicks: (codeRow.total_clicks || 0) + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', codeRow.id);
+
+  return res.status(200).json({
+    success: true,
+    valid: true,
+    cookie_duration_days: codeRow.cookie_duration_days || 30,
+  });
 }

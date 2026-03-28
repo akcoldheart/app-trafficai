@@ -49,13 +49,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (existing && existing.length > 0) {
         return res.status(409).json({ error: 'This code is already taken' });
       }
-      updates.code = code;
+      updates.code = code.toLowerCase();
       updates.is_custom = true;
     }
 
-    if (commission_rate !== undefined) updates.commission_rate = commission_rate;
+    if (commission_rate !== undefined) {
+      const rate = Number(commission_rate);
+      if (isNaN(rate) || rate < 0 || rate > 100) {
+        return res.status(400).json({ error: 'Commission rate must be between 0 and 100' });
+      }
+      updates.commission_rate = rate;
+    }
     if (is_active !== undefined) updates.is_active = is_active;
-    if (cookie_duration_days !== undefined) updates.cookie_duration_days = cookie_duration_days;
+    if (cookie_duration_days !== undefined) {
+      const days = Number(cookie_duration_days);
+      if (isNaN(days) || days < 1 || days > 365) {
+        return res.status(400).json({ error: 'Cookie duration must be between 1 and 365 days' });
+      }
+      updates.cookie_duration_days = days;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('referral_codes')
