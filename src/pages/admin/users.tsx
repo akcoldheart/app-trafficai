@@ -456,6 +456,14 @@ export default function AdminUsers() {
                                 <li>
                                   <button
                                     className="dropdown-item"
+                                    onClick={() => handleExtendTrial(user.id, 1)}
+                                  >
+                                    +1 day
+                                  </button>
+                                </li>
+                                <li>
+                                  <button
+                                    className="dropdown-item"
                                     onClick={() => handleExtendTrial(user.id, 7)}
                                   >
                                     +7 days
