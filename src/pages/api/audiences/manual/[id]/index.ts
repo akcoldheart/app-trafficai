@@ -27,14 +27,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const isAdmin = profile.role === 'admin';
 
     // Find the original audience request (not delete requests) with this audience_id
-    const { data: request, error } = await supabaseAdmin
+    const { data: requests, error } = await supabaseAdmin
       .from('audience_requests')
       .select('*')
       .eq('audience_id', id)
       .neq('request_type', 'delete')
-      .single();
+      .limit(1);
+
+    const request = requests?.[0];
 
     if (error || !request) {
+      // If no audience_request found, check if this audience still has contacts
+      // (it may have been unassigned and the original request was modified)
+      const { count } = await supabaseAdmin
+        .from('audience_contacts')
+        .select('*', { count: 'exact', head: true })
+        .eq('audience_id', id);
+
+      if (count && count > 0 && req.method === 'DELETE' && isAdmin) {
+        // Audience exists by contacts but has no request row — allow admin to clean up
+        await supabaseAdmin
+          .from('audience_contacts')
+          .delete()
+          .eq('audience_id', id);
+
+        await supabaseAdmin
+          .from('audience_assignments')
+          .delete()
+          .eq('audience_id', id);
+
+        // Clean up any remaining request rows (including delete-type)
+        await supabaseAdmin
+          .from('audience_requests')
+          .delete()
+          .eq('audience_id', id);
+
+        await logAuditAction(user.id, 'delete_manual_audience', req, res, 'audience', id);
+        return res.status(200).json({ success: true });
+      }
+
       return res.status(404).json({ error: 'Audience not found' });
     }
 
