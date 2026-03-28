@@ -27,10 +27,11 @@ export async function middleware(request: NextRequest) {
   // Capture referral code from ?ref= query parameter and store in cookie
   const refCode = request.nextUrl.searchParams.get('ref');
   if (refCode) {
-    // Strip the ref param and redirect to clean URL
-    const cleanUrl = request.nextUrl.clone();
-    cleanUrl.searchParams.delete('ref');
-    const response = NextResponse.redirect(cleanUrl);
+    // Redirect referral visitors to signup page (they're likely new users)
+    const signupUrl = request.nextUrl.clone();
+    signupUrl.searchParams.delete('ref');
+    signupUrl.pathname = '/auth/signup';
+    const response = NextResponse.redirect(signupUrl);
 
     // Track click and get dynamic cookie duration from the referral code
     let cookieDurationDays = 30; // default fallback
