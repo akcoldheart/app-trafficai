@@ -125,18 +125,29 @@ async function fetchWithRetry(
   maxRetries = 3,
 ): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const response = await fetch(url, options);
+    try {
+      const response = await fetch(url, options);
 
-    if (response.status === 429) {
-      if (attempt === maxRetries) return response;
-      // Exponential backoff: 2s, 4s, 8s
+      // Retry on rate limits (429) and server errors (500, 502, 503, 504)
+      const isRetryable = response.status === 429 || (response.status >= 500 && response.status <= 504);
+
+      if (isRetryable) {
+        if (attempt === maxRetries) return response;
+        // Exponential backoff: 2s, 4s, 8s
+        const backoff = Math.pow(2, attempt + 1) * 1000;
+        console.warn(`[visitors-api-fetcher] Got ${response.status}, retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await sleep(backoff);
+        continue;
+      }
+
+      return response;
+    } catch (fetchErr) {
+      // Network errors (DNS, timeout, etc.) — retry
+      if (attempt === maxRetries) throw fetchErr;
       const backoff = Math.pow(2, attempt + 1) * 1000;
-      console.warn(`[visitors-api-fetcher] Rate limited (429), retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})`);
+      console.warn(`[visitors-api-fetcher] Network error, retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries}):`, (fetchErr as Error).message);
       await sleep(backoff);
-      continue;
     }
-
-    return response;
   }
   // Should never reach here, but just in case
   return fetch(url, options);
