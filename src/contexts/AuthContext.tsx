@@ -95,11 +95,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
 
         if (session?.user) {
+          // Attribute referral on first sign-in if ref_code cookie exists
+          if (event === 'SIGNED_IN') {
+            try {
+              const refCodeMatch = document.cookie.match(/(^| )ref_code=([^;]+)/);
+              const refCode = refCodeMatch ? decodeURIComponent(refCodeMatch[2]) : null;
+              if (refCode) {
+                await fetch('/api/referrals/attribute', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    ref_code: refCode,
+                    user_id: session.user.id,
+                    user_email: session.user.email,
+                  }),
+                });
+              }
+            } catch {
+              // Don't block auth flow if attribution fails
+            }
+          }
+
           const { profile, role, menuItems } = await fetchUserData(session.user.id);
           setUserProfile(profile);
           setUserRole(role);
