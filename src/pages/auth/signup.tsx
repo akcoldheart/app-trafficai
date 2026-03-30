@@ -73,13 +73,17 @@ export default function Signup() {
 
       if (data.session) {
         // User is immediately authenticated (email verification disabled)
-        // Attribute referral if ref code exists
+        // Attribute referral if ref code exists — pass user details directly to avoid session timing issues
         if (refCode && data.user) {
           try {
             await fetch('/api/referrals/attribute', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ref_code: refCode }),
+              body: JSON.stringify({
+                ref_code: refCode,
+                user_id: data.user.id,
+                user_email: data.user.email,
+              }),
             });
           } catch {
             // Don't block signup if attribution fails

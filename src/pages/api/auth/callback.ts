@@ -91,13 +91,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.redirect('/auth/login?error=Authentication+failed');
     }
 
-    // Attribute referral if ref_code is present (from OAuth redirect or user metadata)
+    // Attribute referral if ref_code is present
+    // Priority: 1) query param (OAuth redirect), 2) cookie (most reliable, survives OAuth chain), 3) user metadata (email signup)
+    const refCodeFromCookie = req.cookies.ref_code || null;
     const refCodeValue = (typeof ref_code === 'string' ? ref_code : null)
+      || refCodeFromCookie
       || data.session.user.user_metadata?.ref_code
       || null;
 
     if (refCodeValue && data.session.user.id && data.session.user.email) {
+      console.log(`[Referral] Attributing ref_code="${refCodeValue}" to user=${data.session.user.email} (source: ${typeof ref_code === 'string' ? 'query' : refCodeFromCookie ? 'cookie' : 'metadata'})`);
       await attributeReferral(data.session.user.id, data.session.user.email, refCodeValue);
+
+      // Clear the ref_code cookie after successful attribution
+      res.setHeader('Set-Cookie', 'ref_code=; Path=/; Max-Age=0; SameSite=Lax');
     }
 
     // Successfully authenticated, redirect to the requested page or home

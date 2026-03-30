@@ -12,18 +12,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { ref_code } = req.body;
-  if (!ref_code || typeof ref_code !== 'string') {
+  const { ref_code, user_id, user_email } = req.body;
+
+  // ref_code can come from body or cookie
+  const refCode = ref_code || req.cookies.ref_code;
+  if (!refCode || typeof refCode !== 'string') {
     return res.status(400).json({ error: 'ref_code is required' });
   }
 
-  // Get authenticated user
-  const supabase = createClient(req, res);
-  const { data: { user } } = await supabase.auth.getUser();
+  // Get user: prefer passed user_id/email (avoids session timing issues), fallback to auth
+  let userId = user_id;
+  let userEmail = user_email;
 
-  if (!user || !user.email) {
-    return res.status(401).json({ error: 'Not authenticated' });
+  if (!userId || !userEmail) {
+    const supabase = createClient(req, res);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !user.email) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    userId = user.id;
+    userEmail = user.email;
   }
+
+  // Validate the user actually exists in our database (prevents spoofing)
+  const { data: userRow } = await supabaseAdmin
+    .from('users')
+    .select('id')
+    .eq('id', userId)
+    .single();
+
+  if (!userRow) {
+    return res.status(401).json({ error: 'Invalid user' });
+  }
+
+  const user = { id: userId, email: userEmail };
 
   try {
     // Look up the referral code
@@ -31,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from('referral_codes')
       .select('id, user_id, commission_rate, cookie_duration_days')
       .eq('is_active', true)
-      .ilike('code', ref_code)
+      .ilike('code', refCode)
       .single();
 
     if (!codeRow) {
@@ -74,6 +96,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from('users')
       .update({ referred_by: codeRow.user_id })
       .eq('id', user.id);
+
+    console.log(`[Referral] Successfully attributed ref_code="${refCode}" to user=${user.email}`);
+
+    // Clear the ref_code cookie after successful attribution
+    res.setHeader('Set-Cookie', 'ref_code=; Path=/; Max-Age=0; SameSite=Lax');
 
     return res.status(200).json({ success: true });
   } catch (err) {
