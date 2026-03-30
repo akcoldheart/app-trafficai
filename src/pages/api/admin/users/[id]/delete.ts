@@ -148,7 +148,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .delete()
       .eq('user_id', id);
 
-    // 10. Delete the user profile from public.users
+    // 10. Handle referral records before deletion
+    // Mark referrals where this user was referred (they signed up via someone's link)
+    await serviceClient
+      .from('referrals')
+      .update({
+        status: 'churned',
+        monthly_revenue: 0,
+        commission_amount: 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('referred_user_id', id)
+      .in('status', ['signed_up', 'converted']);
+
+    // Delete referral code owned by this user
+    await serviceClient
+      .from('referral_codes')
+      .delete()
+      .eq('user_id', id);
+
+    // Delete referral payouts for this user
+    await serviceClient
+      .from('referral_payouts')
+      .delete()
+      .eq('user_id', id);
+
+    // 11. Delete the user profile from public.users
     await serviceClient
       .from('users')
       .delete()
