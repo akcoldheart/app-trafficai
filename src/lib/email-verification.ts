@@ -100,19 +100,22 @@ export async function getZeroBounceConfig(userId?: string): Promise<Record<strin
  * Check remaining ZeroBounce credits.
  */
 export async function getZeroBounceCredits(apiKey: string): Promise<number> {
-  const response = await fetch(`${ZEROBOUNCE_API_BASE}/getcredits?api_key=${apiKey}`);
+  const response = await fetch(`${ZEROBOUNCE_API_BASE}/getcredits?api_key=${encodeURIComponent(apiKey)}`);
   if (!response.ok) throw new Error('Failed to fetch ZeroBounce credits');
   const data: ZeroBounceCredits = await response.json();
-  return parseInt(data.Credits, 10) || 0;
+  const credits = parseInt(data.Credits, 10);
+  if (credits === -1) throw new Error('Invalid ZeroBounce API key');
+  return credits || 0;
 }
 
 /**
  * Verify a single email via ZeroBounce.
  */
-export async function verifySingleEmail(apiKey: string, email: string): Promise<ZeroBounceResult> {
+export async function verifySingleEmail(apiKey: string, email: string, ipAddress = ''): Promise<ZeroBounceResult> {
   const params = new URLSearchParams({
     api_key: apiKey,
     email: email,
+    ip_address: ipAddress,
   });
 
   const response = await fetch(`${ZEROBOUNCE_API_BASE}/validate?${params}`);
