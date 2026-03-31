@@ -97,7 +97,7 @@ export default function AdminLogs() {
 
   useEffect(() => {
     if (!authLoading && userProfile?.role !== 'admin') {
-      router.push('/dashboard');
+      router.push('/');
       return;
     }
 
