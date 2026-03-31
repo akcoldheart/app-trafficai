@@ -5,7 +5,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export type PlatformType = 'hubspot' | 'slack' | 'zapier' | 'salesforce' | 'shopify' | 'mailchimp' | 'pipedrive' | 'activecampaign' | 'facebook' | 'linkedin' | 'ringcentral' | 'google_ads';
+export type PlatformType = 'hubspot' | 'slack' | 'zapier' | 'salesforce' | 'shopify' | 'mailchimp' | 'pipedrive' | 'activecampaign' | 'facebook' | 'linkedin' | 'ringcentral' | 'google_ads' | 'zerobounce';
 
 export interface PlatformIntegration {
   id: string;

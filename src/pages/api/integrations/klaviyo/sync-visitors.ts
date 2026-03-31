@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthenticatedUser } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
+import { getZeroBounceConfig, isEmailSyncable, verifyAndUpdateVisitors } from '@/lib/email-verification';
 
 export const config = {
   maxDuration: 300,
@@ -203,7 +204,11 @@ export async function syncVisitorsForUser(
   listId: string,
   pixelId?: string | null,
   since?: string | null
-): Promise<{ synced: number; jobs: string[] }> {
+): Promise<{ synced: number; jobs: string[]; filtered?: number }> {
+  // Check ZeroBounce config for email filtering
+  const zbConfig = await getZeroBounceConfig(userId);
+  const verifyOnSync = zbConfig?.verify_on_sync !== false;
+
   // Paginate to fetch visitors (Supabase caps at 1000 rows per request)
   const PAGE_SIZE = 1000;
   let allVisitors: any[] = [];
@@ -212,7 +217,7 @@ export async function syncVisitorsForUser(
   while (true) {
     let query = supabaseAdmin
       .from('visitors')
-      .select('email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata')
+      .select('id, email, first_name, last_name, full_name, company, job_title, city, state, country, linkedin_url, lead_score, total_pageviews, total_sessions, first_seen_at, last_seen_at, metadata, email_status, email_verified_at')
       .eq('user_id', userId)
       .not('email', 'is', null);
 
@@ -243,9 +248,50 @@ export async function syncVisitorsForUser(
   const visitors = allVisitors;
   if (visitors.length === 0) return { synced: 0, jobs: [] };
 
-  const profiles: KlaviyoProfile[] = visitors
-    .filter((v) => v.email)
-    .map((visitor) => {
+  // If ZeroBounce is configured and verify_on_sync is enabled,
+  // verify any unverified emails before filtering
+  if (zbConfig && verifyOnSync) {
+    const unverified = visitors.filter((v: any) => v.email && !v.email_verified_at);
+    if (unverified.length > 0) {
+      try {
+        await verifyAndUpdateVisitors(
+          unverified.map((v: any) => ({ id: v.id, email: v.email })),
+          userId
+        );
+        // Re-fetch email_status for the verified visitors
+        const { data: refreshed } = await supabaseAdmin
+          .from('visitors')
+          .select('id, email_status')
+          .in('id', unverified.map((v: any) => v.id));
+        if (refreshed) {
+          const statusMap = new Map(refreshed.map(r => [r.id, r.email_status]));
+          for (const v of visitors) {
+            if (statusMap.has(v.id)) {
+              v.email_status = statusMap.get(v.id);
+            }
+          }
+        }
+      } catch (zbErr) {
+        console.error('[klaviyo-sync] ZeroBounce verification error during sync:', (zbErr as Error).message);
+      }
+    }
+  }
+
+  // Filter visitors by email verification status (if ZeroBounce is configured)
+  const totalWithEmail = visitors.filter((v: any) => v.email).length;
+  const filteredVisitors = zbConfig
+    ? visitors.filter((v: any) => v.email && isEmailSyncable(v.email_status, zbConfig))
+    : visitors.filter((v: any) => v.email);
+  const filteredCount = totalWithEmail - filteredVisitors.length;
+
+  if (filteredCount > 0) {
+    console.log(`[klaviyo-sync] Filtered out ${filteredCount} visitors with invalid emails (ZeroBounce)`);
+  }
+
+  if (filteredVisitors.length === 0) return { synced: 0, jobs: [], filtered: filteredCount };
+
+  const profiles: KlaviyoProfile[] = filteredVisitors
+    .map((visitor: any) => {
       const meta = visitor.metadata as Record<string, unknown> | null;
       const phone = meta?.phone || meta?.PHONE || meta?.Phone || meta?.phone_number || meta?.MOBILE_PHONE || undefined;
 
@@ -291,7 +337,7 @@ export async function syncVisitorsForUser(
     .eq('user_id', userId)
     .eq('platform', 'klaviyo');
 
-  return { synced: profiles.length, jobs: jobIds };
+  return { synced: profiles.length, jobs: jobIds, filtered: filteredCount };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -321,18 +367,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       type: 'api',
       event_name: 'klaviyo_sync_visitors',
       status: 'success',
-      message: `Synced ${result.synced} visitors to Klaviyo list`,
+      message: `Synced ${result.synced} visitors to Klaviyo list${result.filtered ? ` (${result.filtered} filtered by email verification)` : ''}`,
       user_id: user.id,
       ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || undefined,
       request_data: { pixel_id: pixel_id || 'all', list_id: targetListId },
-      response_data: { synced: result.synced, jobs: result.jobs },
+      response_data: { synced: result.synced, jobs: result.jobs, filtered: result.filtered || 0 },
     });
 
     return res.status(200).json({
       success: true,
       synced: result.synced,
+      filtered: result.filtered || 0,
       jobs: result.jobs,
-      message: `${result.synced} visitors queued for sync to Klaviyo`,
+      message: `${result.synced} visitors queued for sync to Klaviyo${result.filtered ? `, ${result.filtered} filtered by email verification` : ''}`,
     });
   } catch (error) {
     console.error('Error syncing visitors to Klaviyo:', error);

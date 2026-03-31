@@ -42,7 +42,8 @@ Syncs visitor data from the AudienceLab API into the `visitors` table for all ac
    - Split into new inserts vs existing updates
    - Batch insert (200/batch), batch update (50/batch parallel)
    - Update pixel `visitors_api_last_fetched_at` and `visitors_api_last_fetch_status`
-   - Auto-sync new visitors to Klaviyo if integration is configured
+   - **ZeroBounce verification:** If ZeroBounce is connected and `auto_verify` is enabled, new visitor emails are verified before Klaviyo sync. Invalid emails are filtered out.
+   - Auto-sync new visitors to Klaviyo if integration is configured (only verified-safe emails)
 6. **Log result** to `system_logs` table
 
 ### Multi-Pixel Fairness
@@ -75,6 +76,8 @@ If timeout hits at pixel 4, next run prioritizes: A[3], A[4], A[5]
 | `visitors_api_sync` | `success` | Pixel sync completed |
 | `visitors_api_sync` | `error` | Pixel sync failed |
 | `klaviyo_auto_sync_visitors` | `success` | New visitors auto-synced to Klaviyo |
+| `zerobounce_auto_verify` | `success` | Emails verified before Klaviyo sync |
+| `zerobounce_low_credits` | `warning` | Insufficient ZeroBounce credits |
 
 ### Monitoring
 
@@ -93,8 +96,8 @@ If timeout hits at pixel 4, next run prioritizes: A[3], A[4], A[5]
 
 For each connected Klaviyo integration, performs two operations:
 
-1. **Auto-sync visitors to list** -- If `auto_sync_visitors=true` and `default_list_id` is set, syncs new/updated visitors to the configured Klaviyo list (incremental, using `last_synced_at`)
-2. **Auto-push events** -- If `auto_push_events=true`, pushes enabled event types to Klaviyo
+1. **Auto-sync visitors to list** -- If `auto_sync_visitors=true` and `default_list_id` is set, syncs new/updated visitors to the configured Klaviyo list (incremental, using `last_synced_at`). If ZeroBounce is connected with `verify_on_sync=true`, unverified emails are verified first and invalid emails are filtered out.
+2. **Auto-push events** -- If `auto_push_events=true`, pushes enabled event types to Klaviyo. Invalid emails (per ZeroBounce status) are filtered out before sending events.
 
 ### Config Schema (in `platform_integrations.config`)
 

@@ -40,7 +40,7 @@ const supabase = createClient(req, res);
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `pixels` | Tracking pixel configs | `id`, `user_id`, `status`, `visitors_api_url`, `visitors_api_last_fetched_at` |
-| `visitors` | Identified website visitors | `id`, `pixel_id`, `user_id`, `visitor_id`, `email`, `lead_score`, `metadata` (JSONB) |
+| `visitors` | Identified website visitors | `id`, `pixel_id`, `user_id`, `visitor_id`, `email`, `lead_score`, `email_status`, `email_verified_at`, `metadata` (JSONB) |
 | `pixel_events` | Raw tracking events | `id`, `pixel_id`, `event_type`, `page_url`, `created_at` |
 
 **Critical constraint:** `visitors(visitor_id, pixel_id)` UNIQUE -- enables batch upsert
@@ -123,8 +123,9 @@ Migrations are in `supabase/migrations/` with numeric prefixes.
 | 011-025 | Pixels, admin policies, Stripe, trial | 15 |
 | 026-044 | Performance indexes, dashboard aggregates, system logs | 12 |
 | 045-057 | Integrations (Klaviyo, Facebook, LinkedIn, RingCentral, Google Ads) | 13 |
+| 058-061 | Referral system, email verification (ZeroBounce) | 4 |
 
-**Next migration number:** `059`
+**Next migration number:** `062`
 
 ### Key Migrations to Know
 
@@ -137,7 +138,8 @@ Migrations are in `supabase/migrations/` with numeric prefixes.
 | `041_create_system_logs.sql` | System logging table | Observability |
 | `050_klaviyo_integration.sql` | Klaviyo-specific tables | First integration |
 | `051_all_integrations.sql` | `platform_integrations` | Unified integration model |
-| `057_ringcentral_google_ads_integrations.sql` | RingCentral + Google Ads | Latest |
+| `057_ringcentral_google_ads_integrations.sql` | RingCentral + Google Ads | - |
+| `061_email_verification.sql` | `email_status`, `email_sub_status`, `email_verified_at` on visitors | ZeroBounce email verification |
 
 ---
 
@@ -211,3 +213,4 @@ ON CONFLICT DO NOTHING;
 | Duplicate insert errors | Use `.upsert()` with `onConflict` or check constraint first |
 | RLS blocking service operations | Use service role client, not request-scoped client |
 | Large batch inserts timeout | Batch in groups of 200 with `.insert(batch)` |
+| Email verification status on visitors | `email_status` (ZeroBounce), `email_verified_at` — filter with `isEmailSyncable()` from `email-verification.ts` |

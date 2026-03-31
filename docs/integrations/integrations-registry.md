@@ -25,6 +25,7 @@
 | 11 | [LinkedIn](#linkedin) | Outreach | Credentials | Campaigns, sync visitors | Via extension | Yes (30m) |
 | 12 | [RingCentral](#ringcentral) | Outreach | OAuth | SMS automation | Yes | Yes (10m) |
 | 13 | [Google Ads](#google_ads) | Advertising | OAuth | Audiences, conversions | Manual | No |
+| 14 | [ZeroBounce](#zerobounce-email-verification) | Email Verification | API Key | Email validation | Auto (on fetch) | No |
 
 ---
 
@@ -279,6 +280,53 @@ Also triggered inline by `fetch-visitors` cron when new visitors are inserted.
 - `POST /api/integrations/google_ads/upload-conversions` -- Offline conversions
 
 **Security:** PII is SHA-256 hashed before sending to Google Ads API.
+
+---
+
+### ZeroBounce (Email Verification)
+
+**Category:** Email Verification (Global — configured in Settings, not per-user integrations page)
+**Auth:** API Key
+**API Endpoints:**
+- `POST /api/integrations/zerobounce/connect` -- Connect with API key
+- `GET /api/integrations/zerobounce/status` -- Connection status + credits
+- `PUT /api/integrations/zerobounce/status` -- Update config (auto_verify, allow_catch_all, etc.)
+- `DELETE /api/integrations/zerobounce/status` -- Disconnect
+- `GET /api/integrations/zerobounce/credits` -- Check remaining credits
+- `POST /api/integrations/zerobounce/verify` -- Manual bulk verification
+- `GET /api/integrations/zerobounce/stats` -- Verification breakdown stats
+
+**Config (JSONB):**
+```json
+{
+  "auto_verify": true,
+  "allow_catch_all": true,
+  "allow_unknown": true,
+  "verify_on_sync": true
+}
+```
+
+**Database columns on `visitors`:**
+- `email_status` -- ZeroBounce status: `valid`, `invalid`, `catch-all`, `spamtrap`, `abuse`, `do_not_mail`, `unknown`
+- `email_sub_status` -- Detailed sub-status (e.g., `alias_address`, `role_based`, `disposable`)
+- `email_verified_at` -- Timestamp of last verification
+
+**Behavior:**
+- **Auto-verify:** When new visitors are fetched via `visitors-api-fetcher.ts`, emails are verified via ZeroBounce before Klaviyo auto-sync
+- **Verify-on-sync:** When Klaviyo `syncVisitorsForUser()` runs, unverified emails are verified first
+- **Filtering:** Invalid/spamtrap/abuse/do_not_mail emails are blocked from Klaviyo sync and push events
+- **Catch-all/Unknown:** Configurable via settings (default: allowed)
+- **Credits:** System checks available credits before verifying; logs warning when insufficient
+
+**System Logs:**
+- `zerobounce_connect` -- Connection success/failure
+- `zerobounce_disconnect` -- Disconnection
+- `zerobounce_config_update` -- Settings changed
+- `zerobounce_manual_verify` -- Manual bulk verification results
+- `zerobounce_auto_verify` -- Auto-verification during visitor fetch
+- `zerobounce_low_credits` -- Insufficient credits warning
+
+**Note:** ZeroBounce is a global system utility, not a per-user integration. It is configured by admin on the Settings page, not on the Integrations hub page.
 
 ---
 

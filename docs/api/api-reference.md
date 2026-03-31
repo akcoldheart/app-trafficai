@@ -226,6 +226,18 @@
 | POST | `/integrations/google_ads/import-audience` | User | Import audience to Google Ads |
 | POST | `/integrations/google_ads/upload-conversions` | User | Upload offline conversions |
 
+### ZeroBounce (Email Verification)
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | `/integrations/zerobounce/connect` | Admin | Connect with API key |
+| GET | `/integrations/zerobounce/status` | Admin | Connection status + credits |
+| PUT | `/integrations/zerobounce/status` | Admin | Update verification config |
+| DELETE | `/integrations/zerobounce/status` | Admin | Disconnect |
+| GET | `/integrations/zerobounce/credits` | Admin | Check remaining credits |
+| POST | `/integrations/zerobounce/verify` | Admin | Bulk verify unverified emails |
+| GET | `/integrations/zerobounce/stats` | Admin | Verification stats (valid/invalid/catch-all/unknown) |
+
 ---
 
 ## Chat / Messaging

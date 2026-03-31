@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthenticatedUser } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
+import { getZeroBounceConfig, isEmailSyncable } from '@/lib/email-verification';
 
 export const config = {
   maxDuration: 300,
@@ -129,7 +130,7 @@ async function sendEventsParallel(
 async function getVisitorsForType(userId: string, type: string, pixelIds: string[], since: string | null) {
   let query = supabaseAdmin
     .from('visitors')
-    .select('email, first_name, last_name, full_name, company, job_title, lead_score, total_sessions, total_pageviews, last_seen_at, city, state, country')
+    .select('email, first_name, last_name, full_name, company, job_title, lead_score, total_sessions, total_pageviews, last_seen_at, city, state, country, email_status')
     .eq('user_id', userId)
     .not('email', 'is', null)
     .in('pixel_id', pixelIds);
@@ -180,7 +181,7 @@ async function getPricingPageVisitors(userId: string, pixelIds: string[], since:
 
   const { data: visitors } = await supabaseAdmin
     .from('visitors')
-    .select('email, first_name, last_name, full_name, company, job_title, lead_score, total_sessions, total_pageviews, last_seen_at, city, state, country')
+    .select('email, first_name, last_name, full_name, company, job_title, lead_score, total_sessions, total_pageviews, last_seen_at, city, state, country, email_status')
     .eq('user_id', userId)
     .not('email', 'is', null)
     .in('id', visitorIds)
@@ -228,6 +229,9 @@ export async function pushEventsForUser(
   const results: Record<string, { pushed: number; errors: number }> = {};
   let totalPushed = 0;
 
+  // Check ZeroBounce config for email filtering
+  const zbConfig = await getZeroBounceConfig(userId);
+
   for (const type of eventTypes) {
     if (!EVENT_TYPES[type]) continue;
 
@@ -242,6 +246,16 @@ export async function pushEventsForUser(
       console.error(`Error fetching visitors for ${type}:`, error);
       results[type] = { pushed: 0, errors: 1 };
       continue;
+    }
+
+    // Filter out invalid emails if ZeroBounce is configured
+    if (zbConfig && visitors.length > 0) {
+      const before = visitors.length;
+      visitors = visitors.filter((v: any) => isEmailSyncable(v.email_status, zbConfig));
+      const filtered = before - visitors.length;
+      if (filtered > 0) {
+        console.log(`[push-events] Filtered ${filtered} visitors with invalid emails for event type ${type}`);
+      }
     }
 
     if (visitors.length === 0) {

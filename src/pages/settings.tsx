@@ -25,6 +25,9 @@ import {
   IconRocket,
   IconWebhook,
   IconCopy,
+  IconShieldCheck,
+  IconMailOff,
+  IconArrowRight,
 } from '@tabler/icons-react';
 import type { UserWebsite } from '@/lib/supabase/types';
 
@@ -126,6 +129,67 @@ export default function Settings() {
   const [generatingWebhookKey, setGeneratingWebhookKey] = useState(false);
   const [newWebhookKey, setNewWebhookKey] = useState<string | null>(null);
   const [webhookKeyCopied, setWebhookKeyCopied] = useState(false);
+
+  // ZeroBounce state
+  const [zbConnected, setZbConnected] = useState(false);
+  const [zbCredits, setZbCredits] = useState(0);
+  const [zbApiKey, setZbApiKey] = useState('');
+  const [zbShowKey, setZbShowKey] = useState(false);
+  const [zbConnecting, setZbConnecting] = useState(false);
+  const [zbDisconnecting, setZbDisconnecting] = useState(false);
+  const [zbLoading, setZbLoading] = useState(true);
+  const [zbStats, setZbStats] = useState<{ valid: number; invalid: number; unverified: number } | null>(null);
+
+  const fetchZeroBounce = useCallback(async () => {
+    if (!isAdmin) { setZbLoading(false); return; }
+    try {
+      const resp = await fetch('/api/integrations/zerobounce/status');
+      if (resp.ok) {
+        const data = await resp.json();
+        setZbConnected(data.integration?.is_connected || false);
+        setZbCredits(data.credits || 0);
+      }
+      // Fetch stats
+      const statsResp = await fetch('/api/integrations/zerobounce/stats');
+      if (statsResp.ok) {
+        const sData = await statsResp.json();
+        setZbStats({ valid: sData.valid || 0, invalid: sData.invalid || 0, unverified: sData.unverified || 0 });
+      }
+    } catch { /* ignore */ }
+    finally { setZbLoading(false); }
+  }, [isAdmin]);
+
+  const handleZbConnect = async () => {
+    if (!zbApiKey.trim()) return;
+    setZbConnecting(true);
+    try {
+      const resp = await fetch('/api/integrations/zerobounce/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: zbApiKey.trim() }),
+      });
+      if (resp.ok) {
+        setZbApiKey('');
+        fetchZeroBounce();
+      } else {
+        const d = await resp.json();
+        alert(d.error || 'Failed to connect');
+      }
+    } catch { alert('Failed to connect'); }
+    finally { setZbConnecting(false); }
+  };
+
+  const handleZbDisconnect = async () => {
+    if (!confirm('Disconnect ZeroBounce? Email verification will be disabled.')) return;
+    setZbDisconnecting(true);
+    try {
+      await fetch('/api/integrations/zerobounce/status', { method: 'DELETE' });
+      setZbConnected(false);
+      setZbCredits(0);
+      setZbStats(null);
+    } catch { /* ignore */ }
+    finally { setZbDisconnecting(false); }
+  };
 
   const fetchWebsites = useCallback(async () => {
     try {
@@ -564,8 +628,9 @@ export default function Settings() {
       fetchApiKeys();
       fetchAllUsers();
       fetchWebhookKey();
+      fetchZeroBounce();
     }
-  }, [fetchWebsites, fetchAdminSettings, fetchApiKeys, fetchAllUsers, fetchWebhookKey, isAdmin, isRegularUser]);
+  }, [fetchWebsites, fetchAdminSettings, fetchApiKeys, fetchAllUsers, fetchWebhookKey, fetchZeroBounce, isAdmin, isRegularUser]);
 
   const testConnection = async () => {
     setConnectionStatus('testing');
@@ -1000,6 +1065,108 @@ export default function Settings() {
                       </tbody>
                     </table>
                   </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ZeroBounce Email Verification — admin only */}
+          {isAdmin && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">
+                  <IconShieldCheck className="icon me-2" />
+                  Email Verification (ZeroBounce)
+                </h3>
+                {zbConnected && (
+                  <div className="card-actions">
+                    <a href="/integrations/zerobounce" className="btn btn-ghost-primary btn-sm">
+                      <IconArrowRight size={14} className="me-1" />
+                      Full Settings
+                    </a>
+                  </div>
+                )}
+              </div>
+              <div className="card-body">
+                {zbLoading ? (
+                  <div className="text-center py-3">
+                    <IconLoader2 size={24} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+                  </div>
+                ) : zbConnected ? (
+                  <>
+                    <div className="d-flex align-items-center mb-3">
+                      <span className="badge bg-success me-2">Connected</span>
+                      <span className="text-muted small">{zbCredits.toLocaleString()} credits remaining</span>
+                    </div>
+
+                    {zbStats && (
+                      <div className="row g-2 mb-3">
+                        <div className="col-4 text-center">
+                          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#2fb344' }}>{zbStats.valid}</div>
+                          <div className="text-muted" style={{ fontSize: '0.75rem' }}>Valid</div>
+                        </div>
+                        <div className="col-4 text-center">
+                          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#d63939' }}>{zbStats.invalid}</div>
+                          <div className="text-muted" style={{ fontSize: '0.75rem' }}>Invalid</div>
+                        </div>
+                        <div className="col-4 text-center">
+                          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#f59f00' }}>{zbStats.unverified}</div>
+                          <div className="text-muted" style={{ fontSize: '0.75rem' }}>Unverified</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-muted small mb-2">
+                      Invalid emails are automatically filtered before syncing to Klaviyo.
+                    </p>
+
+                    <button
+                      className="btn btn-outline-danger btn-sm"
+                      onClick={handleZbDisconnect}
+                      disabled={zbDisconnecting}
+                    >
+                      {zbDisconnecting ? (
+                        <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} /> Disconnecting...</>
+                      ) : (
+                        <><IconMailOff size={14} className="me-1" /> Disconnect</>
+                      )}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-muted small mb-3">
+                      Connect ZeroBounce to verify visitor emails before syncing to Klaviyo.
+                      Protects your sender reputation by filtering invalid, spam trap, and disposable emails.
+                    </p>
+                    <div className="mb-3">
+                      <label className="form-label small">ZeroBounce API Key</label>
+                      <div className="input-group input-group-sm">
+                        <input
+                          type={zbShowKey ? 'text' : 'password'}
+                          className="form-control"
+                          placeholder="Enter your ZeroBounce API key"
+                          value={zbApiKey}
+                          onChange={(e) => setZbApiKey(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleZbConnect()}
+                        />
+                        <button className="btn btn-outline-secondary" onClick={() => setZbShowKey(!zbShowKey)}>
+                          {zbShowKey ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                        </button>
+                      </div>
+                      <small className="text-muted">Get your API key from <strong>zerobounce.net</strong> &gt; API &gt; API Keys</small>
+                    </div>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={handleZbConnect}
+                      disabled={!zbApiKey.trim() || zbConnecting}
+                    >
+                      {zbConnecting ? (
+                        <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} /> Connecting...</>
+                      ) : (
+                        <><IconShieldCheck size={14} className="me-1" /> Connect ZeroBounce</>
+                      )}
+                    </button>
+                  </>
                 )}
               </div>
             </div>

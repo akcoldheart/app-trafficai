@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
 import { addProfilesToKlaviyo, formatPhoneE164 as formatPhoneKlaviyo } from '@/pages/api/integrations/klaviyo/sync-visitors';
+import { verifyAndUpdateVisitors, getZeroBounceConfig, isEmailSyncable } from '@/lib/email-verification';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -548,8 +549,52 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       user_id: pixel.user_id,
     });
 
-    // Auto-sync ONLY new visitors to Klaviyo list if enabled
+    // Auto-verify new visitor emails via ZeroBounce (if enabled)
+    // Then auto-sync ONLY verified visitors to Klaviyo list
     if (toInsert.length > 0) {
+      // Step 1: Verify emails via ZeroBounce before syncing to Klaviyo
+      let zbConfig: Record<string, unknown> | null = null;
+      const visitorsWithEmail = toInsert.filter(v => v.email);
+
+      if (visitorsWithEmail.length > 0) {
+        try {
+          zbConfig = await getZeroBounceConfig(pixel.user_id);
+          const autoVerify = zbConfig?.auto_verify !== false;
+
+          if (autoVerify) {
+            // Need DB IDs for the newly inserted visitors — fetch them
+            const { data: newDbVisitors } = await supabaseAdmin
+              .from('visitors')
+              .select('id, email')
+              .eq('pixel_id', pixel.id)
+              .in('visitor_id', visitorsWithEmail.map(v => v.visitor_id));
+
+            if (newDbVisitors && newDbVisitors.length > 0) {
+              const toVerify = newDbVisitors
+                .filter((v): v is { id: string; email: string } => !!v.email);
+
+              if (toVerify.length > 0) {
+                const verifyResult = await verifyAndUpdateVisitors(toVerify, pixel.user_id);
+                console.log(`[visitors-api-fetcher] ZeroBounce verified ${verifyResult.verified} emails for pixel ${pixel.id}: ${verifyResult.valid} valid, ${verifyResult.invalid} invalid, ${verifyResult.unknown} unknown`);
+
+                await logEvent({
+                  type: 'api',
+                  event_name: 'zerobounce_auto_verify',
+                  status: 'success',
+                  message: `Auto-verified ${verifyResult.verified} emails: ${verifyResult.valid} valid, ${verifyResult.invalid} invalid`,
+                  user_id: pixel.user_id,
+                  response_data: verifyResult,
+                });
+              }
+            }
+          }
+        } catch (zbErr) {
+          // Don't fail the visitor fetch if ZeroBounce verification fails
+          console.error(`[visitors-api-fetcher] ZeroBounce verification error for pixel ${pixel.id}:`, (zbErr as Error).message);
+        }
+      }
+
+      // Step 2: Sync to Klaviyo (filtering out invalid emails if ZeroBounce is configured)
       try {
         const { data: klaviyoIntegration } = await supabaseAdmin
           .from('platform_integrations')
@@ -567,9 +612,34 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
           if (autoSyncEnabled && defaultListId) {
             const autoSyncPixelId = kConfig.auto_sync_pixel_id as string | undefined;
             if (!autoSyncPixelId || autoSyncPixelId === pixel.id) {
-              // Build Klaviyo profiles directly from the newly inserted records — no DB re-query
+              // If ZeroBounce is configured, re-fetch email_status for newly inserted visitors
+              // to filter out invalid emails before syncing to Klaviyo
+              let emailStatusMap = new Map<string, string | null>();
+              if (zbConfig) {
+                const { data: verifiedVisitors } = await supabaseAdmin
+                  .from('visitors')
+                  .select('email, email_status')
+                  .eq('pixel_id', pixel.id)
+                  .in('visitor_id', toInsert.filter(v => v.email).map(v => v.visitor_id));
+
+                if (verifiedVisitors) {
+                  for (const v of verifiedVisitors) {
+                    if (v.email) emailStatusMap.set(v.email, v.email_status);
+                  }
+                }
+              }
+
+              // Build Klaviyo profiles, filtering out invalid emails
               const newProfiles = toInsert
-                .filter(v => v.email)
+                .filter(v => {
+                  if (!v.email) return false;
+                  // If ZeroBounce is configured, check email status
+                  if (zbConfig) {
+                    const status = emailStatusMap.get(v.email) || null;
+                    return isEmailSyncable(status, zbConfig);
+                  }
+                  return true;
+                })
                 .map(visitor => {
                   const meta = (visitor.metadata || {}) as Record<string, unknown>;
                   const phone = meta?.phone || meta?.PHONE || meta?.Phone || meta?.phone_number || meta?.MOBILE_PHONE || undefined;
@@ -605,6 +675,8 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
                   };
                 });
 
+              const filteredOut = toInsert.filter(v => v.email).length - newProfiles.length;
+
               if (newProfiles.length > 0) {
                 await addProfilesToKlaviyo(klaviyoIntegration.api_key, defaultListId, newProfiles);
 
@@ -619,9 +691,9 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
                   type: 'api',
                   event_name: 'klaviyo_auto_sync_visitors',
                   status: 'success',
-                  message: `Auto-synced ${newProfiles.length} new visitors to Klaviyo list`,
+                  message: `Auto-synced ${newProfiles.length} new visitors to Klaviyo list${filteredOut > 0 ? ` (${filteredOut} filtered by email verification)` : ''}`,
                   user_id: pixel.user_id,
-                  response_data: { synced: newProfiles.length, triggered_by_new: toInsert.length },
+                  response_data: { synced: newProfiles.length, filtered_out: filteredOut, triggered_by_new: toInsert.length },
                 });
               }
             }
