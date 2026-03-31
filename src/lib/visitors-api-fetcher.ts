@@ -559,9 +559,9 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       if (visitorsWithEmail.length > 0) {
         try {
           zbConfig = await getZeroBounceConfig(pixel.user_id);
-          const autoVerify = zbConfig?.auto_verify !== false;
 
-          if (autoVerify) {
+          // Only verify if ZeroBounce is actually connected AND auto_verify is enabled
+          if (zbConfig && zbConfig.auto_verify !== false) {
             // Need DB IDs for the newly inserted visitors — fetch them
             const { data: newDbVisitors } = await supabaseAdmin
               .from('visitors')
@@ -575,16 +575,20 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
 
               if (toVerify.length > 0) {
                 const verifyResult = await verifyAndUpdateVisitors(toVerify, pixel.user_id);
-                console.log(`[visitors-api-fetcher] ZeroBounce verified ${verifyResult.verified} emails for pixel ${pixel.id}: ${verifyResult.valid} valid, ${verifyResult.invalid} invalid, ${verifyResult.unknown} unknown`);
 
-                await logEvent({
-                  type: 'api',
-                  event_name: 'zerobounce_auto_verify',
-                  status: 'success',
-                  message: `Auto-verified ${verifyResult.verified} emails: ${verifyResult.valid} valid, ${verifyResult.invalid} invalid`,
-                  user_id: pixel.user_id,
-                  response_data: verifyResult,
-                });
+                // Only log if verification actually happened (had API key and processed emails)
+                if (verifyResult.verified > 0) {
+                  console.log(`[visitors-api-fetcher] ZeroBounce verified ${verifyResult.verified} emails for pixel ${pixel.id}: ${verifyResult.valid} valid, ${verifyResult.invalid} invalid, ${verifyResult.unknown} unknown`);
+
+                  await logEvent({
+                    type: 'api',
+                    event_name: 'zerobounce_auto_verify',
+                    status: 'success',
+                    message: `Auto-verified ${verifyResult.verified} emails: ${verifyResult.valid} valid, ${verifyResult.invalid} invalid`,
+                    user_id: pixel.user_id,
+                    response_data: verifyResult,
+                  });
+                }
               }
             }
           }

@@ -205,9 +205,9 @@ export async function syncVisitorsForUser(
   pixelId?: string | null,
   since?: string | null
 ): Promise<{ synced: number; jobs: string[]; filtered?: number }> {
-  // Check ZeroBounce config for email filtering
+  // Check ZeroBounce config for email filtering (null = not connected, skip all ZB logic)
   const zbConfig = await getZeroBounceConfig(userId);
-  const verifyOnSync = zbConfig?.verify_on_sync !== false;
+  const verifyOnSync = zbConfig ? zbConfig.verify_on_sync !== false : false;
 
   // Paginate to fetch visitors (Supabase caps at 1000 rows per request)
   const PAGE_SIZE = 1000;
