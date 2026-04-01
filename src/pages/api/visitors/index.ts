@@ -3,6 +3,10 @@ import { createClient } from '@/lib/supabase/api';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser, getUserProfile } from '@/lib/api-helpers';
 
+export const config = {
+  maxDuration: 120,
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;

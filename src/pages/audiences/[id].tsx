@@ -146,15 +146,24 @@ export default function AudienceView() {
     setExporting(true);
     try {
       if (isManual) {
-        // Server-side CSV generation — handles all records regardless of count
+        // Server-side CSV generation — fetch and wait for completion
+        const response = await fetch(`/api/audiences/manual/${id}/export`);
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ error: 'Export failed' }));
+          throw new Error(err.error || 'Export failed');
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.setAttribute('href', `/api/audiences/manual/${id}/export`);
-        link.setAttribute('download', `${audienceName.replace(/[^a-z0-9]/gi, '_')}_export.csv`);
+        link.href = url;
+        link.download = `${audienceName.replace(/[^a-z0-9]/gi, '_')}_export.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
 
-        showToast(`Export started for ${totalRecords.toLocaleString()} records`, 'success');
+        showToast(`Exported ${totalRecords.toLocaleString()} records successfully`, 'success');
       } else {
         // For external API audiences, export current page data
         if (records.length === 0) {

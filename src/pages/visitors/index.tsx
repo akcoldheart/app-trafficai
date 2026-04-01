@@ -302,10 +302,7 @@ export default function Visitors() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      // Fetch all visitors with current filters (without pagination limit)
       const params = new URLSearchParams({
-        page: '1',
-        limit: '10000', // Get all records
         sort: sortBy,
         order: sortOrder,
       });
@@ -316,69 +313,26 @@ export default function Visitors() {
       if (enrichedOnly) params.set('enriched_only', 'true');
       if (minScore) params.set('min_score', minScore);
 
-      const response = await fetch(`/api/visitors?${params}`);
-      const data = await response.json();
-
+      const response = await fetch(`/api/visitors/export?${params}`);
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch visitors');
+        const err = await response.json().catch(() => ({ error: 'Export failed' }));
+        throw new Error(err.error || 'Export failed');
       }
 
-      const allVisitors = data.visitors || [];
-
-      if (allVisitors.length === 0) {
-        showToast('No visitors to export', 'error');
-        setExporting(false);
-        return;
-      }
-
-      // Define export columns in priority order
-      const exportColumns = [
-        'full_name', 'email', 'phone', 'company', 'job_title', 'city', 'state', 'country',
-        'lead_score', 'total_pageviews', 'total_sessions', 'total_clicks',
-        'form_submissions', 'first_seen_at', 'last_seen_at', 'is_identified', 'is_enriched'
-      ];
-
-      const formatColumnName = (name: string) => {
-        return name.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
-      };
-
-      // Create CSV content
-      const csvRows: string[] = [];
-
-      // Header row with S.No.
-      csvRows.push(['"S.No."', ...exportColumns.map(col => `"${formatColumnName(col)}"`)].join(','));
-
-      // Data rows
-      allVisitors.forEach((visitor: Visitor, index: number) => {
-        const row = exportColumns.map((col) => {
-          // Phone is stored in metadata.phone
-          if (col === 'phone') {
-            const phone = (visitor.metadata as Record<string, string> | null)?.phone;
-            return phone ? `"${String(phone).replace(/"/g, '""')}"` : '';
-          }
-          const value = visitor[col as keyof Visitor];
-          if (value === null || value === undefined) return '';
-          if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-          if (typeof value === 'object') return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
-          return `"${String(value).replace(/"/g, '""')}"`;
-        });
-        csvRows.push([`"${index + 1}"`, ...row].join(','));
-      });
-
-      const csvContent = csvRows.join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `visitors_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.href = url;
+      link.download = `visitors_export_${new Date().toISOString().split('T')[0]}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      showToast(`Exported ${allVisitors.length} visitors successfully`, 'success');
+
+      showToast(`Exported ${pagination.total.toLocaleString()} visitors successfully`, 'success');
     } catch (err) {
       console.error('Export error:', err);
-      showToast('Failed to export visitors', 'error');
+      showToast((err as Error).message || 'Failed to export visitors', 'error');
     } finally {
       setExporting(false);
     }
