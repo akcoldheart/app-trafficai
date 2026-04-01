@@ -27,11 +27,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Validate the API key by checking credits
     const credits = await getZeroBounceCredits(api_key);
 
-    // Save the integration
-    const { data, error } = await supabaseAdmin
+    // Check if any admin already connected ZeroBounce
+    const { data: existing } = await supabaseAdmin
       .from('platform_integrations')
-      .upsert(
-        {
+      .select('id')
+      .eq('platform', 'zerobounce')
+      .limit(1)
+      .single();
+
+    let data, error;
+    if (existing) {
+      // Update existing global ZeroBounce integration
+      const result = await supabaseAdmin
+        .from('platform_integrations')
+        .update({
+          api_key,
+          is_connected: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+      data = result.data;
+      error = result.error;
+    } else {
+      // Create new ZeroBounce integration
+      const result = await supabaseAdmin
+        .from('platform_integrations')
+        .insert({
           user_id: user.id,
           platform: 'zerobounce',
           api_key,
@@ -42,12 +65,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             allow_unknown: true,
             verify_on_sync: true,
           },
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,platform' }
-      )
-      .select()
-      .single();
+        })
+        .select()
+        .single();
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) {
       console.error('Error saving ZeroBounce integration:', error);

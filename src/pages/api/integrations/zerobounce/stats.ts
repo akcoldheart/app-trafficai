@@ -42,14 +42,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       supabaseAdmin
         .from('visitors')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        /* all visitors (global ZeroBounce stats) */
         .not('email', 'is', null)
         .then(r => r.count || 0),
       // Verified visitors
       supabaseAdmin
         .from('visitors')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        /* all visitors (global ZeroBounce stats) */
         .not('email', 'is', null)
         .not('email_verified_at', 'is', null)
         .then(r => r.count || 0),
@@ -57,28 +57,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       supabaseAdmin
         .from('visitors')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        /* all visitors (global ZeroBounce stats) */
         .eq('email_status', 'valid')
         .then(r => r.count || 0),
       // Invalid (all bad statuses)
       supabaseAdmin
         .from('visitors')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        /* all visitors (global ZeroBounce stats) */
         .in('email_status', ['invalid', 'spamtrap', 'abuse', 'do_not_mail'])
         .then(r => r.count || 0),
       // Catch-all
       supabaseAdmin
         .from('visitors')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        /* all visitors (global ZeroBounce stats) */
         .eq('email_status', 'catch-all')
         .then(r => r.count || 0),
       // Unknown
       supabaseAdmin
         .from('visitors')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        /* all visitors (global ZeroBounce stats) */
         .eq('email_status', 'unknown')
         .then(r => r.count || 0),
     ]);

@@ -25,10 +25,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Fetch visitors that need verification
+    // Admins can verify all visitors (not just their own)
     let query = supabaseAdmin
       .from('visitors')
       .select('id, email')
-      .eq('user_id', user.id)
       .not('email', 'is', null);
 
     if (pixel_id) {

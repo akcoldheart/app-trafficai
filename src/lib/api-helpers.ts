@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import type { UserRole, Database, Json, Role } from './supabase/types';
 
 export interface ApiError {
@@ -50,7 +51,11 @@ export async function getUserProfile(
   req: NextApiRequest,
   res: NextApiResponse
 ): Promise<UserProfile> {
-  const supabase = createClient(req, res);
+  // Use service role client to bypass RLS
+  const supabase = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
   const { data, error } = await supabase
     .from('users')
     .select('id, email, role, role_id')
@@ -110,7 +115,11 @@ export async function requireRole(
   if (!user) return null;
 
   try {
-    const supabase = createClient(req, res);
+    // Use service role client to bypass RLS for role checks
+    const supabase = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
 
     // Get user with role information

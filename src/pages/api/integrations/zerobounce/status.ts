@@ -14,11 +14,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!user) return;
 
   if (req.method === 'GET') {
+    // ZeroBounce is a global platform integration — fetch regardless of which admin set it up
     const { data, error } = await supabaseAdmin
       .from('platform_integrations')
       .select('id, platform, is_connected, config, last_synced_at, created_at, updated_at, api_key')
-      .eq('user_id', user.id)
       .eq('platform', 'zerobounce')
+      .eq('is_connected', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single();
 
     if (error && error.code !== 'PGRST116') {
@@ -47,11 +50,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'PUT') {
     const { config } = req.body;
 
+    // ZeroBounce is global — find it regardless of which admin created it
     const { data: existing } = await supabaseAdmin
       .from('platform_integrations')
-      .select('config')
-      .eq('user_id', user.id)
+      .select('id, config')
       .eq('platform', 'zerobounce')
+      .eq('is_connected', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single();
 
     if (!existing) {
@@ -63,8 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data, error } = await supabaseAdmin
       .from('platform_integrations')
       .update({ config: mergedConfig, updated_at: new Date().toISOString() })
-      .eq('user_id', user.id)
-      .eq('platform', 'zerobounce')
+      .eq('id', existing.id)
       .select('id, platform, is_connected, config, last_synced_at')
       .single();
 
@@ -83,10 +88,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'DELETE') {
+    // Delete any ZeroBounce integration (global)
     const { error } = await supabaseAdmin
       .from('platform_integrations')
       .delete()
-      .eq('user_id', user.id)
       .eq('platform', 'zerobounce');
 
     if (error) return res.status(500).json({ error: error.message });
