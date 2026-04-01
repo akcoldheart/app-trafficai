@@ -324,7 +324,7 @@ export default function IntegrationDetailPage() {
       const body: Record<string, string> = { audience_id: audienceId };
       if (listId) body.list_id = listId;
 
-      const audienceName = audiences.find((a: { audience_id: string }) => a.audience_id === audienceId)?.name || 'audience';
+      const audienceName = audiences.find((a) => a.id === audienceId)?.name || 'audience';
       const response = await fetch(`/api/integrations/${type}/sync-audience`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
