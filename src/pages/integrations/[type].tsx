@@ -53,7 +53,6 @@ interface Toast {
   message: string;
   type: 'success' | 'error' | 'info';
 }
-
 export default function IntegrationDetailPage() {
   const router = useRouter();
   const { type } = router.query;
