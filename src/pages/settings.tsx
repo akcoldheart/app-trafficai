@@ -1095,7 +1095,7 @@ export default function Settings() {
                 ) : zbConnected ? (
                   <>
                     <div className="d-flex align-items-center mb-3">
-                      <span className="badge bg-success me-2">Connected</span>
+                      <span className="badge me-2" style={{ background: '#1a3a2a', color: '#2fb344', border: '1px solid #2fb344' }}>Connected</span>
                       <span className="text-muted small">{zbCredits.toLocaleString()} credits remaining</span>
                     </div>
 
@@ -1103,15 +1103,15 @@ export default function Settings() {
                       <div className="row g-2 mb-3">
                         <div className="col-4 text-center">
                           <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#2fb344' }}>{zbStats.valid}</div>
-                          <div className="text-muted" style={{ fontSize: '0.75rem' }}>Valid</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#ffffff' }}>Valid</div>
                         </div>
                         <div className="col-4 text-center">
                           <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#d63939' }}>{zbStats.invalid}</div>
-                          <div className="text-muted" style={{ fontSize: '0.75rem' }}>Invalid</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#ffffff' }}>Invalid</div>
                         </div>
                         <div className="col-4 text-center">
                           <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#f59f00' }}>{zbStats.unverified}</div>
-                          <div className="text-muted" style={{ fontSize: '0.75rem' }}>Unverified</div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#ffffff' }}>Unverified</div>
                         </div>
                       </div>
                     )}
