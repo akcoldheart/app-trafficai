@@ -249,6 +249,12 @@ export default function IntegrationDetailPage() {
         throw new Error(data.error || 'Failed to connect');
       }
 
+      // Handle OAuth redirect (e.g., Google Sheets)
+      if (data.redirect_url) {
+        window.location.href = data.redirect_url;
+        return;
+      }
+
       setIntegration(data.integration);
       setApiKey('');
       setSecondaryField('');
@@ -295,6 +301,11 @@ export default function IntegrationDetailPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to sync');
 
+      // Open spreadsheet in new tab if URL returned (e.g., Google Sheets)
+      if (data.spreadsheet_url) {
+        window.open(data.spreadsheet_url, '_blank');
+      }
+
       showToast(data.message || `${data.synced} visitors synced`, 'success');
       fetchIntegration();
     } catch (error) {
@@ -313,14 +324,20 @@ export default function IntegrationDetailPage() {
       const body: Record<string, string> = { audience_id: audienceId };
       if (listId) body.list_id = listId;
 
+      const audienceName = audiences.find((a: { audience_id: string }) => a.audience_id === audienceId)?.name || 'audience';
       const response = await fetch(`/api/integrations/${type}/sync-audience`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, audience_name: audienceName }),
       });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to sync audience');
+
+      // Open spreadsheet in new tab if URL returned (e.g., Google Sheets)
+      if (data.spreadsheet_url) {
+        window.open(data.spreadsheet_url, '_blank');
+      }
 
       showToast(data.message || `${data.synced} contacts synced`, 'success');
     } catch (error) {

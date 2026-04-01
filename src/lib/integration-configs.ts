@@ -320,6 +320,30 @@ export const INTEGRATION_CONFIGS: Record<string, IntegrationConfig> = {
     ],
     category: 'advertising',
   },
+  google_sheets: {
+    key: 'google_sheets',
+    name: 'Google Sheets',
+    description: 'Export visitors & audiences to spreadsheets',
+    color: '#0F9D58',
+    letterIcon: 'GS',
+    authType: 'api_key_and_url',
+    authLabel: 'Google Client ID',
+    authPlaceholder: 'xxxxx.apps.googleusercontent.com',
+    authHint: 'Create OAuth credentials in Google Cloud Console with Google Sheets API enabled.',
+    secondaryAuthLabel: 'Client Secret',
+    secondaryAuthPlaceholder: 'GOCSPX-xxxxxxxxxxxxxxxx',
+    secondaryAuthHint: 'Found in your Google Cloud Console OAuth 2.0 credentials.',
+    features: ['sync_visitors', 'sync_audiences'],
+    setupSteps: [
+      'Go to console.cloud.google.com and create or select a project',
+      'Enable the Google Sheets API in APIs & Services',
+      'Create OAuth 2.0 credentials (Web application type)',
+      'Add your app URL + /api/integrations/google_sheets/callback as redirect URI',
+      'Copy the Client ID and Client Secret below',
+      'Click Connect — you will be redirected to authorize with Google',
+    ],
+    category: 'automation',
+  },
 };
 
 export const INTEGRATION_ORDER = [
@@ -329,6 +353,7 @@ export const INTEGRATION_ORDER = [
   'zapier',
   'salesforce',
   'shopify',
+  'google_sheets',
   'mailchimp',
   'pipedrive',
   'activecampaign',
