@@ -257,42 +257,43 @@ export default function ZeroBounceIntegrationPage() {
           </Link>
         </div>
 
-        {/* Header Card */}
-        <div className="card mb-4" style={{ background: 'linear-gradient(135deg, #00D4AA 0%, #00A888 100%)', border: 'none' }}>
-          <div className="card-body py-4">
+        {/* Header */}
+        <div className="card mb-4" style={{ border: 'none', overflow: 'hidden' }}>
+          <div style={{ background: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)', padding: '2rem 2rem 1.5rem' }}>
             <div className="d-flex align-items-center justify-content-between">
               <div className="d-flex align-items-center">
                 <div
                   style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 12,
-                    background: 'rgba(255,255,255,0.2)',
+                    width: 48,
+                    height: 48,
+                    borderRadius: 10,
+                    background: '#00D4AA',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontWeight: 700,
-                    fontSize: 20,
-                    color: '#fff',
-                    marginRight: 16,
+                    fontWeight: 800,
+                    fontSize: 16,
+                    color: '#0f2027',
+                    marginRight: 14,
+                    letterSpacing: '-0.5px',
                   }}
                 >
                   ZB
                 </div>
                 <div>
-                  <h2 className="mb-0" style={{ color: '#fff', fontWeight: 700 }}>ZeroBounce</h2>
-                  <p className="mb-0" style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.95rem' }}>
-                    Email verification & validation - Protect your sender reputation
+                  <h2 className="mb-0" style={{ color: '#fff', fontWeight: 700, fontSize: '1.35rem' }}>ZeroBounce</h2>
+                  <p className="mb-0" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem' }}>
+                    Email verification & validation
                   </p>
                 </div>
               </div>
               <div>
                 {isConnected ? (
-                  <span className="badge bg-white text-success px-3 py-2" style={{ fontSize: '0.85rem' }}>
-                    <IconCheck size={16} className="me-1" /> Connected
+                  <span className="d-inline-flex align-items-center px-3 py-2" style={{ fontSize: '0.8rem', fontWeight: 600, color: '#00D4AA', background: 'rgba(0,212,170,0.12)', borderRadius: 8, border: '1px solid rgba(0,212,170,0.25)' }}>
+                    <IconCheck size={15} className="me-1" /> Connected
                   </span>
                 ) : (
-                  <span className="badge bg-white text-muted px-3 py-2" style={{ fontSize: '0.85rem' }}>
+                  <span className="d-inline-flex align-items-center px-3 py-2" style={{ fontSize: '0.8rem', fontWeight: 600, color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.08)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)' }}>
                     Not Connected
                   </span>
                 )}
@@ -358,165 +359,178 @@ export default function ZeroBounceIntegrationPage() {
         ) : (
           /* Connected State */
           <>
-            {/* Credits & Stats Row */}
-            <div className="row mb-4">
-              <div className="col-md-3">
-                <div className="card">
-                  <div className="card-body text-center">
-                    <div className="text-muted mb-1" style={{ fontSize: '0.8rem' }}>API Credits</div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#00D4AA' }}>
+            {/* Stats Overview */}
+            <div className="row g-3 mb-4">
+              <div className="col-6 col-lg-3">
+                <div className="card" style={{ borderLeft: '3px solid #00D4AA' }}>
+                  <div className="card-body py-3 px-3">
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <span className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Credits</span>
+                      <IconShieldCheck size={16} style={{ color: '#00D4AA' }} />
+                    </div>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, lineHeight: 1.2 }}>
                       {credits.toLocaleString()}
                     </div>
-                    <small className="text-muted">remaining</small>
+                    <small className="text-muted" style={{ fontSize: '0.75rem' }}>remaining</small>
                   </div>
                 </div>
               </div>
-              <div className="col-md-3">
-                <div className="card">
-                  <div className="card-body text-center">
-                    <div className="text-muted mb-1" style={{ fontSize: '0.8rem' }}>
-                      <IconShieldCheck size={14} className="me-1" /> Valid
+              <div className="col-6 col-lg-3">
+                <div className="card" style={{ borderLeft: '3px solid #2fb344' }}>
+                  <div className="card-body py-3 px-3">
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <span className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Valid</span>
+                      <IconMail size={16} style={{ color: '#2fb344' }} />
                     </div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#2fb344' }}>
-                      {statsLoading ? '...' : stats?.valid || 0}
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, lineHeight: 1.2 }}>
+                      {statsLoading ? '...' : (stats?.valid || 0).toLocaleString()}
                     </div>
-                    <small className="text-muted">emails verified safe</small>
+                    <small className="text-muted" style={{ fontSize: '0.75rem' }}>verified safe</small>
                   </div>
                 </div>
               </div>
-              <div className="col-md-3">
-                <div className="card">
-                  <div className="card-body text-center">
-                    <div className="text-muted mb-1" style={{ fontSize: '0.8rem' }}>
-                      <IconMailOff size={14} className="me-1" /> Invalid
+              <div className="col-6 col-lg-3">
+                <div className="card" style={{ borderLeft: '3px solid #d63939' }}>
+                  <div className="card-body py-3 px-3">
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <span className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invalid</span>
+                      <IconMailOff size={16} style={{ color: '#d63939' }} />
                     </div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#d63939' }}>
-                      {statsLoading ? '...' : stats?.invalid || 0}
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, lineHeight: 1.2 }}>
+                      {statsLoading ? '...' : (stats?.invalid || 0).toLocaleString()}
                     </div>
-                    <small className="text-muted">blocked from sync</small>
+                    <small className="text-muted" style={{ fontSize: '0.75rem' }}>blocked from sync</small>
                   </div>
                 </div>
               </div>
-              <div className="col-md-3">
-                <div className="card">
-                  <div className="card-body text-center">
-                    <div className="text-muted mb-1" style={{ fontSize: '0.8rem' }}>
-                      <IconQuestionMark size={14} className="me-1" /> Unverified
+              <div className="col-6 col-lg-3">
+                <div className="card" style={{ borderLeft: '3px solid #f59f00' }}>
+                  <div className="card-body py-3 px-3">
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <span className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unverified</span>
+                      <IconQuestionMark size={16} style={{ color: '#f59f00' }} />
                     </div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#f59f00' }}>
-                      {statsLoading ? '...' : stats?.unverified || 0}
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, lineHeight: 1.2 }}>
+                      {statsLoading ? '...' : (stats?.unverified || 0).toLocaleString()}
                     </div>
-                    <small className="text-muted">pending verification</small>
+                    <small className="text-muted" style={{ fontSize: '0.75rem' }}>pending verification</small>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Verification Stats Breakdown */}
-            {stats && stats.verified > 0 && (
+            {/* Verification Breakdown */}
+            {stats && stats.total_with_email > 0 && (
               <div className="card mb-4">
                 <div className="card-header">
-                  <h3 className="card-title">
-                    <IconMail size={20} className="me-2" /> Email Verification Breakdown
+                  <h3 className="card-title" style={{ fontSize: '0.9rem' }}>
+                    <IconMail size={18} className="me-2" /> Verification Breakdown
                   </h3>
+                  <div className="card-actions">
+                    <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                      {stats.verified.toLocaleString()} of {stats.total_with_email.toLocaleString()} verified ({stats.total_with_email > 0 ? Math.round((stats.verified / stats.total_with_email) * 100) : 0}%)
+                    </span>
+                  </div>
                 </div>
-                <div className="card-body">
-                  <div className="row g-3">
-                    {/* Progress bar */}
-                    <div className="col-12">
-                      <div className="progress" style={{ height: 24, borderRadius: 12 }}>
-                        {stats.valid > 0 && (
-                          <div
-                            className="progress-bar bg-success"
-                            style={{ width: `${(stats.valid / stats.total_with_email) * 100}%` }}
-                            title={`Valid: ${stats.valid}`}
-                          >
-                            {stats.valid > 0 && `${Math.round((stats.valid / stats.total_with_email) * 100)}%`}
-                          </div>
-                        )}
-                        {stats.catch_all > 0 && (
-                          <div
-                            className="progress-bar bg-warning"
-                            style={{ width: `${(stats.catch_all / stats.total_with_email) * 100}%` }}
-                            title={`Catch-all: ${stats.catch_all}`}
-                          />
-                        )}
-                        {stats.invalid > 0 && (
-                          <div
-                            className="progress-bar bg-danger"
-                            style={{ width: `${(stats.invalid / stats.total_with_email) * 100}%` }}
-                            title={`Invalid: ${stats.invalid}`}
-                          />
-                        )}
-                        {stats.unknown > 0 && (
-                          <div
-                            className="progress-bar bg-secondary"
-                            style={{ width: `${(stats.unknown / stats.total_with_email) * 100}%` }}
-                            title={`Unknown: ${stats.unknown}`}
-                          />
-                        )}
-                        {stats.unverified > 0 && (
-                          <div
-                            className="progress-bar"
-                            style={{ width: `${(stats.unverified / stats.total_with_email) * 100}%`, background: '#e0e0e0' }}
-                            title={`Unverified: ${stats.unverified}`}
-                          />
-                        )}
-                      </div>
-                    </div>
+                <div className="card-body pt-3 pb-3">
+                  {/* Progress bar */}
+                  <div className="progress mb-3" style={{ height: 10, borderRadius: 6, overflow: 'hidden' }}>
+                    {stats.valid > 0 && (
+                      <div
+                        className="progress-bar"
+                        style={{ width: `${(stats.valid / stats.total_with_email) * 100}%`, background: '#2fb344', transition: 'width 0.6s ease' }}
+                        title={`Valid: ${stats.valid}`}
+                      />
+                    )}
+                    {stats.catch_all > 0 && (
+                      <div
+                        className="progress-bar"
+                        style={{ width: `${(stats.catch_all / stats.total_with_email) * 100}%`, background: '#f59f00', transition: 'width 0.6s ease' }}
+                        title={`Catch-all: ${stats.catch_all}`}
+                      />
+                    )}
+                    {stats.invalid > 0 && (
+                      <div
+                        className="progress-bar"
+                        style={{ width: `${(stats.invalid / stats.total_with_email) * 100}%`, background: '#d63939', transition: 'width 0.6s ease' }}
+                        title={`Invalid: ${stats.invalid}`}
+                      />
+                    )}
+                    {stats.unknown > 0 && (
+                      <div
+                        className="progress-bar"
+                        style={{ width: `${(stats.unknown / stats.total_with_email) * 100}%`, background: '#667382', transition: 'width 0.6s ease' }}
+                        title={`Unknown: ${stats.unknown}`}
+                      />
+                    )}
+                    {stats.unverified > 0 && (
+                      <div
+                        className="progress-bar"
+                        style={{ width: `${(stats.unverified / stats.total_with_email) * 100}%`, background: 'rgba(255,255,255,0.08)', transition: 'width 0.6s ease' }}
+                        title={`Unverified: ${stats.unverified}`}
+                      />
+                    )}
+                  </div>
 
-                    {/* Legend */}
-                    <div className="col-12">
-                      <div className="d-flex flex-wrap gap-4" style={{ fontSize: '0.85rem' }}>
-                        <span><span className="badge bg-success me-1">&nbsp;</span> Valid: {stats.valid}</span>
-                        <span><span className="badge bg-warning me-1">&nbsp;</span> Catch-all: {stats.catch_all}</span>
-                        <span><span className="badge bg-danger me-1">&nbsp;</span> Invalid: {stats.invalid}</span>
-                        <span><span className="badge bg-secondary me-1">&nbsp;</span> Unknown: {stats.unknown}</span>
-                        <span><span className="badge me-1" style={{ background: '#e0e0e0' }}>&nbsp;</span> Unverified: {stats.unverified}</span>
-                      </div>
-                    </div>
+                  {/* Legend */}
+                  <div className="d-flex flex-wrap gap-3" style={{ fontSize: '0.8rem' }}>
+                    {[
+                      { color: '#2fb344', label: 'Valid', value: stats.valid },
+                      { color: '#f59f00', label: 'Catch-all', value: stats.catch_all },
+                      { color: '#d63939', label: 'Invalid', value: stats.invalid },
+                      { color: '#667382', label: 'Unknown', value: stats.unknown },
+                      { color: 'rgba(255,255,255,0.15)', label: 'Unverified', value: stats.unverified },
+                    ].filter(item => item.value > 0).map(item => (
+                      <span key={item.label} className="d-inline-flex align-items-center gap-1">
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: item.color, display: 'inline-block' }} />
+                        <span className="text-muted">{item.label}:</span> <strong>{item.value.toLocaleString()}</strong>
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Manual Verify */}
+            {/* Verify Emails */}
             <div className="card mb-4">
-              <div className="card-header d-flex align-items-center justify-content-between">
-                <h3 className="card-title mb-0">
-                  <IconShieldCheck size={20} className="me-2" /> Verify Emails
+              <div className="card-header">
+                <h3 className="card-title" style={{ fontSize: '0.9rem' }}>
+                  <IconShieldCheck size={18} className="me-2" /> Verify Emails
                 </h3>
-                <button
-                  className="btn btn-sm btn-outline-secondary"
-                  onClick={fetchStats}
-                  disabled={statsLoading}
-                >
-                  <IconRefresh size={14} className={statsLoading ? 'icon-spinner' : ''} />
-                </button>
-              </div>
-              <div className="card-body">
-                <p style={{ fontSize: '0.875rem', color: '#666' }}>
-                  Run email verification on all unverified visitor emails. This uses your ZeroBounce credits
-                  ({credits.toLocaleString()} remaining). Invalid emails will be automatically excluded from
-                  Klaviyo sync and push events.
-                </p>
-                <div className="d-flex gap-2">
+                <div className="card-actions">
                   <button
-                    className="btn btn-primary"
-                    onClick={handleVerifyAll}
-                    disabled={verifying || !stats || stats.unverified === 0}
+                    className="btn btn-ghost-secondary btn-sm"
+                    onClick={fetchStats}
+                    disabled={statsLoading}
+                    title="Refresh stats"
                   >
-                    {verifying ? (
-                      <><IconLoader2 size={16} className="icon-spinner me-2" /> Verifying...</>
-                    ) : (
-                      <><IconShieldCheck size={16} className="me-2" /> Verify {stats?.unverified || 0} Unverified Emails</>
-                    )}
+                    <IconRefresh size={14} className={statsLoading ? 'icon-spinner' : ''} />
                   </button>
                 </div>
-                {stats && stats.unverified === 0 && stats.verified > 0 && (
-                  <div className="alert alert-success mt-3 mb-0 py-2" style={{ fontSize: '0.85rem' }}>
-                    <IconCheck size={16} className="me-1" /> All visitor emails have been verified!
+              </div>
+              <div className="card-body">
+                {stats && stats.unverified === 0 && stats.verified > 0 ? (
+                  <div className="d-flex align-items-center gap-2 py-1" style={{ color: '#2fb344', fontSize: '0.875rem' }}>
+                    <IconCheck size={18} />
+                    <span>All visitor emails have been verified.</span>
                   </div>
+                ) : (
+                  <>
+                    <p className="text-muted mb-3" style={{ fontSize: '0.84rem' }}>
+                      Run verification on unverified visitor emails. Uses {credits.toLocaleString()} remaining ZeroBounce credits. Invalid emails are excluded from Klaviyo sync.
+                    </p>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={handleVerifyAll}
+                      disabled={verifying || !stats || stats.unverified === 0}
+                    >
+                      {verifying ? (
+                        <><IconLoader2 size={14} className="icon-spinner me-1" /> Verifying...</>
+                      ) : (
+                        <><IconShieldCheck size={14} className="me-1" /> Verify {(stats?.unverified || 0).toLocaleString()} Unverified Emails</>
+                      )}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -524,8 +538,8 @@ export default function ZeroBounceIntegrationPage() {
             {/* Settings Card */}
             <div className="card mb-4">
               <div className="card-header">
-                <h3 className="card-title">
-                  <IconSettings size={20} className="me-2" /> Verification Settings
+                <h3 className="card-title" style={{ fontSize: '0.9rem' }}>
+                  <IconSettings size={18} className="me-2" /> Verification Settings
                 </h3>
               </div>
               <div className="card-body">
@@ -611,36 +625,23 @@ export default function ZeroBounceIntegrationPage() {
             {/* How It Works */}
             <div className="card mb-4">
               <div className="card-header">
-                <h3 className="card-title">How Email Verification Works</h3>
+                <h3 className="card-title" style={{ fontSize: '0.9rem' }}>How It Works</h3>
               </div>
-              <div className="card-body" style={{ fontSize: '0.875rem' }}>
-                <div className="row g-4">
-                  <div className="col-md-4">
-                    <div className="d-flex align-items-start">
-                      <div className="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style={{ width: 28, height: 28, minWidth: 28, fontSize: '0.8rem', fontWeight: 700 }}>1</div>
-                      <div>
-                        <strong>New Visitor Arrives</strong>
-                        <p className="text-muted mb-0 mt-1">When a new visitor with an email is identified via the Visitors API, the email is sent to ZeroBounce for verification.</p>
-                      </div>
-                    </div>
+              <div className="card-body py-3">
+                <div className="d-flex align-items-center gap-3" style={{ fontSize: '0.82rem' }}>
+                  <div className="d-flex align-items-center gap-2 flex-fill">
+                    <span className="d-flex align-items-center justify-content-center" style={{ width: 24, height: 24, minWidth: 24, borderRadius: 6, background: 'var(--tblr-primary)', color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>1</span>
+                    <div><strong>Visitor identified</strong> <span className="text-muted">— email captured via API</span></div>
                   </div>
-                  <div className="col-md-4">
-                    <div className="d-flex align-items-start">
-                      <div className="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style={{ width: 28, height: 28, minWidth: 28, fontSize: '0.8rem', fontWeight: 700 }}>2</div>
-                      <div>
-                        <strong>Email Validated</strong>
-                        <p className="text-muted mb-0 mt-1">ZeroBounce checks if the email exists, detects spam traps, catch-all domains, disposable addresses, and role-based emails.</p>
-                      </div>
-                    </div>
+                  <IconChevronLeft size={14} className="text-muted" style={{ transform: 'rotate(180deg)', flexShrink: 0 }} />
+                  <div className="d-flex align-items-center gap-2 flex-fill">
+                    <span className="d-flex align-items-center justify-content-center" style={{ width: 24, height: 24, minWidth: 24, borderRadius: 6, background: 'var(--tblr-primary)', color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>2</span>
+                    <div><strong>ZeroBounce validates</strong> <span className="text-muted">— checks spam traps, disposable, catch-all</span></div>
                   </div>
-                  <div className="col-md-4">
-                    <div className="d-flex align-items-start">
-                      <div className="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style={{ width: 28, height: 28, minWidth: 28, fontSize: '0.8rem', fontWeight: 700 }}>3</div>
-                      <div>
-                        <strong>Filtered for Klaviyo</strong>
-                        <p className="text-muted mb-0 mt-1">Only verified-safe emails are synced to Klaviyo, protecting your sender reputation and deliverability.</p>
-                      </div>
-                    </div>
+                  <IconChevronLeft size={14} className="text-muted" style={{ transform: 'rotate(180deg)', flexShrink: 0 }} />
+                  <div className="d-flex align-items-center gap-2 flex-fill">
+                    <span className="d-flex align-items-center justify-content-center" style={{ width: 24, height: 24, minWidth: 24, borderRadius: 6, background: 'var(--tblr-primary)', color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>3</span>
+                    <div><strong>Safe emails synced</strong> <span className="text-muted">— invalid filtered from Klaviyo</span></div>
                   </div>
                 </div>
               </div>
