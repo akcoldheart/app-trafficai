@@ -13,10 +13,13 @@ interface TrialNotificationProps {
 }
 
 export default function TrialNotification({ className = '' }: TrialNotificationProps) {
-  const { userProfile } = useAuth();
+  const { userProfile, teamContext } = useAuth();
 
   const trialStatus = useMemo(() => {
     if (!userProfile) return null;
+
+    // Don't show trial banner for team members (they use the owner's plan)
+    if (teamContext?.isMember) return null;
 
     // Only show for trial plan users
     const currentPlan = userProfile.plan || 'trial';

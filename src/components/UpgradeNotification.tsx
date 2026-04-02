@@ -26,7 +26,10 @@ interface UpgradeNotificationProps {
 }
 
 export default function UpgradeNotification({ className = '' }: UpgradeNotificationProps) {
-  const { userProfile } = useAuth();
+  const { userProfile, teamContext } = useAuth();
+
+  // Don't show upgrade notifications for team members
+  if (teamContext?.isMember) return null;
   const [identifiedVisitors, setIdentifiedVisitors] = useState<number | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(true);

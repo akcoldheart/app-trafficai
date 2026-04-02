@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegrationStatus, disconnectIntegration } from '@/lib/integrations';
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
@@ -20,19 +20,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   if (req.method === 'GET') {
     try {
       const [integration, templatesResult, smsLogResult] = await Promise.all([
-        getIntegrationStatus(user.id, PLATFORM),
+        getIntegrationStatus(effectiveUserId, PLATFORM),
         supabaseAdmin
           .from('ringcentral_sms_templates')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', effectiveUserId)
           .order('created_at', { ascending: false }),
         supabaseAdmin
           .from('ringcentral_sms_log')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', effectiveUserId)
           .order('created_at', { ascending: false })
           .limit(50),
       ]);
@@ -45,20 +47,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { count: sentToday } = await supabaseAdmin
         .from('ringcentral_sms_log')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .gte('created_at', today.toISOString());
 
       const { count: deliveredToday } = await supabaseAdmin
         .from('ringcentral_sms_log')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .eq('status', 'sent')
         .gte('created_at', today.toISOString());
 
       const { count: failedToday } = await supabaseAdmin
         .from('ringcentral_sms_log')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .eq('status', 'failed')
         .gte('created_at', today.toISOString());
 
@@ -86,9 +88,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await supabaseAdmin
         .from('ringcentral_sms_templates')
         .delete()
-        .eq('user_id', user.id);
+        .eq('user_id', effectiveUserId);
 
-      await disconnectIntegration(user.id, PLATFORM);
+      await disconnectIntegration(effectiveUserId, PLATFORM);
 
       await logEvent({
         type: 'api',

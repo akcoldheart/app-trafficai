@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, logAuditAction } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId, logAuditAction } from '@/lib/api-helpers';
 import type { IntegrationType } from '@/lib/supabase/types';
 
 const INTEGRATION_DEFAULTS: Record<IntegrationType, { name: string; description: string }> = {
@@ -15,6 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
   const supabase = createClient(req, res);
 
   try {
@@ -23,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data, error } = await supabase
         .from('integrations')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', effectiveUserId);
 
       if (error) {
         console.error('Error fetching integrations:', error);
@@ -62,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data, error } = await supabase
         .from('integrations')
         .upsert({
-          user_id: user.id,
+          user_id: effectiveUserId,
           type: integrationType,
           name: defaults.name,
           config: config || {},

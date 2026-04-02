@@ -251,6 +251,116 @@ export async function createAdminNotification(
 }
 
 /**
+ * Team context for the current user
+ */
+export interface TeamContext {
+  effectiveUserId: string;
+  isTeamMember: boolean;
+  isTeamOwner: boolean;
+  teamId: string | null;
+  teamRole: 'owner' | 'admin' | 'member' | null;
+}
+
+// Simple in-memory cache for team context (30s TTL)
+const teamContextCache = new Map<string, { data: TeamContext; expires: number }>();
+
+/**
+ * Get the effective user ID for data access.
+ * If the user is a team member, returns the team owner's user_id.
+ * If the user is a team owner or has no team, returns their own user_id.
+ */
+export async function getEffectiveUserId(userId: string): Promise<string> {
+  const ctx = await getTeamContext(userId);
+  return ctx.effectiveUserId;
+}
+
+/**
+ * Get full team context for the current user.
+ * Cached for 30 seconds to avoid repeated DB queries.
+ */
+export async function getTeamContext(userId: string): Promise<TeamContext> {
+  // Check cache
+  const cached = teamContextCache.get(userId);
+  if (cached && cached.expires > Date.now()) {
+    return cached.data;
+  }
+
+  const supabase = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  // Check if user owns a team
+  const { data: ownedTeam } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('owner_user_id', userId)
+    .maybeSingle();
+
+  if (ownedTeam) {
+    const result: TeamContext = {
+      effectiveUserId: userId,
+      isTeamMember: false,
+      isTeamOwner: true,
+      teamId: ownedTeam.id,
+      teamRole: 'owner',
+    };
+    teamContextCache.set(userId, { data: result, expires: Date.now() + 30000 });
+    return result;
+  }
+
+  // Check if user is a member of a team
+  const { data: membership } = await supabase
+    .from('team_members')
+    .select('team_id, role')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (membership) {
+    // Resolve team owner's user_id
+    const { data: team } = await supabase
+      .from('teams')
+      .select('owner_user_id')
+      .eq('id', membership.team_id)
+      .single();
+
+    if (team) {
+      const result: TeamContext = {
+        effectiveUserId: team.owner_user_id,
+        isTeamMember: true,
+        isTeamOwner: false,
+        teamId: membership.team_id,
+        teamRole: membership.role as 'admin' | 'member',
+      };
+      teamContextCache.set(userId, { data: result, expires: Date.now() + 30000 });
+      return result;
+    }
+  }
+
+  // No team association
+  const result: TeamContext = {
+    effectiveUserId: userId,
+    isTeamMember: false,
+    isTeamOwner: false,
+    teamId: null,
+    teamRole: null,
+  };
+  teamContextCache.set(userId, { data: result, expires: Date.now() + 30000 });
+  return result;
+}
+
+/**
+ * Clear team context cache for a user (call after team membership changes)
+ */
+export function clearTeamContextCache(userId?: string) {
+  if (userId) {
+    teamContextCache.delete(userId);
+  } else {
+    teamContextCache.clear();
+  }
+}
+
+/**
  * Check if user is an admin
  */
 export async function isUserAdmin(

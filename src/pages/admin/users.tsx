@@ -13,6 +13,7 @@ import {
   IconCalendarPlus,
   IconClock,
   IconUserShare,
+  IconUsersGroup,
 } from '@tabler/icons-react';
 import type { Role } from '@/lib/supabase/types';
 
@@ -364,6 +365,7 @@ export default function AdminUsers() {
                   <th>User</th>
                   <th>Role</th>
                   <th>Plan</th>
+                  <th>Team</th>
                   <th>Trial Status</th>
                   <th>Joined</th>
                   <th className="w-1">Actions</th>
@@ -419,6 +421,16 @@ export default function AdminUsers() {
                             </option>
                           ))}
                         </select>
+                      )}
+                    </td>
+                    <td>
+                      {(user as any).team_member_count > 0 ? (
+                        <span className="badge bg-cyan-lt">
+                          <IconUsersGroup size={12} className="me-1" />
+                          {(user as any).team_member_count}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
                       )}
                     </td>
                     <td>

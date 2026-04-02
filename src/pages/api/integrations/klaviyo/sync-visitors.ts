@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
 import { getZeroBounceConfig, isEmailSyncable, verifyAndUpdateVisitors } from '@/lib/email-verification';
@@ -348,9 +348,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { pixel_id, list_id } = req.body;
 
-  const integration = await getKlaviyoIntegration(user.id);
+  const integration = await getKlaviyoIntegration(effectiveUserId);
   if (!integration) {
     return res.status(400).json({ error: 'Klaviyo not connected' });
   }
@@ -361,7 +363,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const result = await syncVisitorsForUser(user.id, integration.api_key, targetListId, pixel_id);
+    const result = await syncVisitorsForUser(effectiveUserId, integration.api_key, targetListId, pixel_id);
 
     await logEvent({
       type: 'api',

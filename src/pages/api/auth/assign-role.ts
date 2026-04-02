@@ -8,6 +8,66 @@ const supabaseAdmin = createServiceClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+async function fetchTeamContext(userId: string) {
+  // Check if user owns a team
+  const { data: ownedTeam } = await supabaseAdmin
+    .from('teams')
+    .select('id, name, max_seats')
+    .eq('owner_user_id', userId)
+    .maybeSingle();
+
+  if (ownedTeam) {
+    const { count } = await supabaseAdmin
+      .from('team_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('team_id', ownedTeam.id);
+
+    return {
+      teamId: ownedTeam.id,
+      teamName: ownedTeam.name,
+      isOwner: true,
+      isMember: false,
+      teamRole: 'owner' as const,
+      memberCount: (count || 0) + 1, // +1 for owner
+      maxSeats: ownedTeam.max_seats,
+    };
+  }
+
+  // Check if user is a member of a team
+  const { data: membership } = await supabaseAdmin
+    .from('team_members')
+    .select('team_id, role')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (membership) {
+    const { data: team } = await supabaseAdmin
+      .from('teams')
+      .select('id, name, max_seats')
+      .eq('id', membership.team_id)
+      .single();
+
+    if (team) {
+      const { count } = await supabaseAdmin
+        .from('team_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('team_id', team.id);
+
+      return {
+        teamId: team.id,
+        teamName: team.name,
+        isOwner: false,
+        isMember: true,
+        teamRole: membership.role as 'admin' | 'member',
+        memberCount: (count || 0) + 1,
+        maxSeats: team.max_seats,
+      };
+    }
+  }
+
+  return null;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -56,10 +116,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .filter((m: any) => m !== null && m.is_active)
         .sort((a: any, b: any) => a.display_order - b.display_order);
 
+      // Fetch team context
+      const teamContext = await fetchTeamContext(user.id);
+
       return res.status(200).json({
         profile: userData,
         role: roleData,
         menuItems,
+        teamContext,
       });
     }
 
@@ -112,10 +176,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .filter((m: any) => m !== null && m.is_active)
       .sort((a: any, b: any) => a.display_order - b.display_order);
 
+    // Fetch team context
+    const teamContext = await fetchTeamContext(user.id);
+
     return res.status(200).json({
       profile: { ...userData, role_id: roleData.id },
       role: roleData,
       menuItems,
+      teamContext,
     });
   } catch (error) {
     console.error('Assign role error:', error);

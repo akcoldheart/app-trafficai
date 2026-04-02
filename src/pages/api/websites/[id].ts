@@ -1,12 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
   const supabase = createClient(req, res);
+  const effectiveUserId = await getEffectiveUserId(user.id);
   const { id } = req.query;
 
   if (!id || typeof id !== 'string') {
@@ -18,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .from('user_websites')
     .select('*')
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('user_id', effectiveUserId)
     .single();
 
   if (fetchError || !existingWebsite) {
@@ -61,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from('user_websites')
       .update(updates)
       .eq('id', id)
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .select()
       .single();
 
@@ -78,7 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from('user_websites')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id);
+      .eq('user_id', effectiveUserId);
 
     if (error) {
       console.error('Error deleting website:', error);

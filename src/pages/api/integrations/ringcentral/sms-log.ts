@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdmin = createClient(
@@ -15,6 +15,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   try {
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = 50;
@@ -23,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data, error, count } = await supabaseAdmin
       .from('ringcentral_sms_log')
       .select('*', { count: 'exact' })
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .order('created_at', { ascending: false })
       .range(from, from + pageSize - 1);
 

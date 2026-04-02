@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser, getUserProfile } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, getEffectiveUserId } from '@/lib/api-helpers';
 
 export const config = {
   maxDuration: 300,
@@ -39,6 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const profile = await getUserProfile(user.id, req, res);
     const isAdmin = profile.role === 'admin';
+    const effectiveUserId = await getEffectiveUserId(user.id);
 
     const {
       pixel_id,
@@ -56,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select('id', { count: 'exact', head: true });
 
     if (!isAdmin) {
-      countQuery = countQuery.eq('user_id', user.id);
+      countQuery = countQuery.eq('user_id', effectiveUserId);
     }
     if (pixel_id) {
       countQuery = countQuery.eq('pixel_id', Array.isArray(pixel_id) ? pixel_id[0] : pixel_id);
@@ -100,7 +101,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .range(offset, offset + BATCH - 1);
 
       if (!isAdmin) {
-        query = query.eq('user_id', user.id);
+        query = query.eq('user_id', effectiveUserId);
       }
       if (pixel_id) {
         query = query.eq('pixel_id', Array.isArray(pixel_id) ? pixel_id[0] : pixel_id);

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import type { ZapierConfig, ZapierTrigger } from '@/lib/zapier';
 
@@ -12,12 +12,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   if (req.method === 'GET') {
     try {
       const { data, error } = await supabaseAdmin
         .from('platform_integrations')
         .select('id, platform, is_connected, config, last_synced_at, created_at, updated_at')
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .eq('platform', 'zapier')
         .single();
 
@@ -47,7 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .from('platform_integrations')
         .upsert(
           {
-            user_id: user.id,
+            user_id: effectiveUserId,
             platform: 'zapier',
             is_connected: hasAnyWebhook,
             config,
@@ -73,7 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await supabaseAdmin
         .from('platform_integrations')
         .delete()
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .eq('platform', 'zapier');
 
       return res.status(200).json({ success: true });

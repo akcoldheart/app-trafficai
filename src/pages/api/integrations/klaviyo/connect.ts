@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdmin = createClient(
@@ -14,6 +14,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
+
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   const { api_key } = req.body;
 
@@ -44,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from('platform_integrations')
       .upsert(
         {
-          user_id: user.id,
+          user_id: effectiveUserId,
           platform: 'klaviyo',
           api_key,
           is_connected: true,

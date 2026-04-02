@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import { getIntegration, getVisitorsForSync, getAudienceContactsForSync } from '@/lib/integrations';
 import { logEvent } from '@/lib/webhook-logger';
@@ -25,6 +25,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { conversion_action_id, conversion_action_name, source_pixel_id, source_audience_id } = req.body;
   const ip = getClientIp(req);
 
@@ -37,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const integration = await getIntegration(user.id, 'google_ads');
+    const integration = await getIntegration(effectiveUserId, 'google_ads');
     if (!integration) {
       return res.status(401).json({ error: 'Google Ads not connected' });
     }
@@ -50,13 +52,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Please select a Google Ads account first' });
     }
 
-    const accessToken = await refreshGoogleTokenIfNeeded(user.id, integrationConfig);
+    const accessToken = await refreshGoogleTokenIfNeeded(effectiveUserId, integrationConfig);
 
     // Create upload record
     const { data: uploadRecord, error: insertError } = await supabaseAdmin
       .from('google_ads_conversion_uploads')
       .insert({
-        user_id: user.id,
+        user_id: effectiveUserId,
         conversion_action_id,
         conversion_action_name,
         source_pixel_id: source_pixel_id || null,
@@ -71,7 +73,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Fetch contacts
     let contacts: Record<string, any>[];
     if (source_pixel_id) {
-      contacts = await getVisitorsForSync(user.id, source_pixel_id);
+      contacts = await getVisitorsForSync(effectiveUserId, source_pixel_id);
     } else {
       contacts = await getAudienceContactsForSync(source_audience_id);
     }

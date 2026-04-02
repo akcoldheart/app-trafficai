@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import { updateIntegrationConfig, getIntegration } from '@/lib/integrations';
 
@@ -12,13 +12,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   // GET: List templates
   if (req.method === 'GET') {
     try {
       const { data, error } = await supabaseAdmin
         .from('ringcentral_sms_templates')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -49,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             updated_at: new Date().toISOString(),
           })
           .eq('id', id)
-          .eq('user_id', user.id)
+          .eq('user_id', effectiveUserId)
           .select()
           .single();
 
@@ -60,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const { data, error } = await supabaseAdmin
           .from('ringcentral_sms_templates')
           .insert({
-            user_id: user.id,
+            user_id: effectiveUserId,
             pixel_id,
             name: name || 'Default Template',
             message_template,
@@ -91,7 +93,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .from('ringcentral_sms_templates')
         .delete()
         .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('user_id', effectiveUserId);
 
       if (error) throw error;
       return res.status(200).json({ success: true });
@@ -108,13 +110,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-      const integration = await getIntegration(user.id, 'ringcentral');
+      const integration = await getIntegration(effectiveUserId, 'ringcentral');
       if (!integration) {
         return res.status(401).json({ error: 'RingCentral not connected' });
       }
 
       const config = (integration.config || {}) as Record<string, unknown>;
-      await updateIntegrationConfig(user.id, 'ringcentral', {
+      await updateIntegrationConfig(effectiveUserId, 'ringcentral', {
         ...config,
         rc_from_number: from_number,
       });

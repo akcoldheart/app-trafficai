@@ -5,6 +5,28 @@ import { buffer } from 'micro';
 import { getStripeConfig } from '@/lib/settings';
 import { logStripeWebhook } from '@/lib/webhook-logger';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function syncTeamSeats(supabase: any, userId: string, planId: string) {
+  try {
+    // Get seat limit for this plan from app_settings
+    const { data: seatSetting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', `team_seats_${planId}`)
+      .single();
+
+    const maxSeats = parseInt(seatSetting?.value || '2', 10);
+
+    // Update team's max_seats if user owns a team
+    await supabase
+      .from('teams')
+      .update({ max_seats: maxSeats, updated_at: new Date().toISOString() })
+      .eq('owner_user_id', userId);
+  } catch (err) {
+    console.error('Error syncing team seats:', err);
+  }
+}
+
 const getServiceClient = () => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -116,6 +138,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             responseData: { plan: planId, updated: updateData?.length || 0 },
           });
 
+          // Sync team seat limit based on new plan
+          await syncTeamSeats(supabase, userId, planId);
+
           // Track referral conversion: if this user was referred, mark as converted
           try {
             const { data: referralRow } = await supabase
@@ -202,6 +227,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               subscriptionId: subscription.id,
               responseData: { status, plan: planId },
             });
+
+            // Sync team seat limit based on updated plan
+            if (status === 'active') {
+              await syncTeamSeats(supabase, userData.id, planId);
+            }
 
             // Recalculate referral commission when subscription price changes
             try {

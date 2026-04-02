@@ -19,7 +19,8 @@ import {
 import { createClient } from '@/lib/supabase/client';
 
 export default function Profile() {
-  const { user, userProfile, refreshUser } = useAuth();
+  const { user, userProfile, teamContext, refreshUser } = useAuth();
+  const isTeamMember = teamContext?.isMember === true;
   const [loading, setLoading] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -362,11 +363,17 @@ export default function Profile() {
               <div className="mb-3">
                 <div className="text-muted small">Account Type</div>
                 <div className="fw-semibold">
-                  <span className="badge bg-primary-lt text-capitalize">
-                    {userProfile?.role || 'User'}
+                  <span className={`badge ${isTeamMember ? 'bg-green-lt' : 'bg-primary-lt'} text-capitalize`}>
+                    {isTeamMember ? 'Team Member' : (userProfile?.role || 'User')}
                   </span>
                 </div>
               </div>
+              {isTeamMember && teamContext?.teamName && (
+                <div className="mb-3">
+                  <div className="text-muted small">Team</div>
+                  <div className="fw-semibold">{teamContext.teamName}</div>
+                </div>
+              )}
               <div className="mb-3">
                 <div className="text-muted small">Member Since</div>
                 <div className="fw-semibold">
@@ -390,61 +397,65 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Referral Program */}
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">
-                <IconUsersGroup className="icon me-2" />
-                Referral Program
-              </h3>
-            </div>
-            <div className="card-body">
-              <p className="text-muted mb-3">
-                Earn commissions by referring new users to Traffic AI.
-              </p>
-              {referralUrl ? (
-                <>
-                  <label className="form-label">Your Referral Link</label>
-                  <div className="input-group mb-3">
-                    <input
-                      type="text"
-                      className="form-control form-control-sm"
-                      value={referralUrl}
-                      readOnly
-                    />
-                    <button
-                      className="btn btn-outline-primary btn-sm"
-                      onClick={copyReferralLink}
-                      title="Copy link"
-                    >
-                      {referralCopied ? <IconCheck size={16} /> : <IconCopy size={16} />}
-                    </button>
+          {/* Referral Program - hidden for team members */}
+          {!isTeamMember && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">
+                  <IconUsersGroup className="icon me-2" />
+                  Referral Program
+                </h3>
+              </div>
+              <div className="card-body">
+                <p className="text-muted mb-3">
+                  Earn commissions by referring new users to Traffic AI.
+                </p>
+                {referralUrl ? (
+                  <>
+                    <label className="form-label">Your Referral Link</label>
+                    <div className="input-group mb-3">
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
+                        value={referralUrl}
+                        readOnly
+                      />
+                      <button
+                        className="btn btn-outline-primary btn-sm"
+                        onClick={copyReferralLink}
+                        title="Copy link"
+                      >
+                        {referralCopied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                      </button>
+                    </div>
+                    <Link href="/account/referrals" className="btn btn-primary btn-sm w-100">
+                      <IconExternalLink size={16} className="me-1" />
+                      View Referral Dashboard
+                    </Link>
+                  </>
+                ) : (
+                  <div className="text-center py-2">
+                    <IconLoader2 size={20} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
                   </div>
-                  <Link href="/account/referrals" className="btn btn-primary btn-sm w-100">
-                    <IconExternalLink size={16} className="me-1" />
-                    View Referral Dashboard
-                  </Link>
-                </>
-              ) : (
-                <div className="text-center py-2">
-                  <IconLoader2 size={20} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Quick Actions */}
-          <div className="card bg-primary-lt">
-            <div className="card-body">
-              <h4 className="mb-2">Need more features?</h4>
-              <p className="text-muted mb-3">
-                Upgrade your plan to unlock more visitors, audiences, and premium features.
-              </p>
-              <Link href="/account/billing" className="btn btn-primary">
-                View Plans
-              </Link>
+          {/* Quick Actions - hidden for team members */}
+          {!isTeamMember && (
+            <div className="card bg-primary-lt">
+              <div className="card-body">
+                <h4 className="mb-2">Need more features?</h4>
+                <p className="text-muted mb-3">
+                  Upgrade your plan to unlock more visitors, audiences, and premium features.
+                </p>
+                <Link href="/account/billing" className="btn btn-primary">
+                  View Plans
+                </Link>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

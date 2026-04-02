@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import { fireTestTrigger, TRIGGER_ORDER } from '@/lib/zapier';
 import type { ZapierTrigger, ZapierConfig } from '@/lib/zapier';
@@ -17,6 +17,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { trigger } = req.body as { trigger: ZapierTrigger };
 
   if (!trigger || !TRIGGER_ORDER.includes(trigger)) {
@@ -27,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data } = await supabaseAdmin
       .from('platform_integrations')
       .select('config')
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .eq('platform', 'zapier')
       .single();
 

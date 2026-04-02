@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { cached } from '@/lib/api-cache';
 
 const supabaseAdmin = createServiceClient(
@@ -23,8 +23,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabase = createClient(req, res);
 
   try {
-    const cacheKey = `user-dashboard-stats:${user.id}`;
-    const data = await cached(cacheKey, CACHE_TTL, () => fetchUserStats(supabase, user.id));
+    const effectiveUserId = await getEffectiveUserId(user.id);
+    const cacheKey = `user-dashboard-stats:${effectiveUserId}`;
+    const data = await cached(cacheKey, CACHE_TTL, () => fetchUserStats(supabase, effectiveUserId));
 
     res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
     return res.status(200).json(data);

@@ -1,19 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
   const supabase = createClient(req, res);
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   if (req.method === 'GET') {
     // Get all websites for the current user
     const { data: websites, error } = await supabase
       .from('user_websites')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .order('is_primary', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -43,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: website, error } = await supabase
       .from('user_websites')
       .insert({
-        user_id: user.id,
+        user_id: effectiveUserId,
         url,
         name: name || null,
         is_primary: is_primary || false,

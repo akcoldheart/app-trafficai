@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdmin = createClient(
@@ -11,11 +11,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   if (req.method === 'GET') {
     const { data, error } = await supabaseAdmin
       .from('platform_integrations')
       .select('config')
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .eq('platform', 'klaviyo')
       .eq('is_connected', true)
       .single();
@@ -38,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: existing } = await supabaseAdmin
       .from('platform_integrations')
       .select('config')
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .eq('platform', 'klaviyo')
       .eq('is_connected', true)
       .single();
@@ -53,7 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { error } = await supabaseAdmin
       .from('platform_integrations')
       .update({ config: updatedConfig, updated_at: new Date().toISOString() })
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .eq('platform', 'klaviyo');
 
     if (error) {

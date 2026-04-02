@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { saveIntegration } from '@/lib/integrations';
 import { logEvent } from '@/lib/webhook-logger';
 import crypto from 'crypto';
@@ -16,6 +16,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { client_id, client_secret } = req.body;
 
   if (!client_id || !client_secret) {
@@ -25,14 +27,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const oauthNonce = crypto.randomBytes(32).toString('hex');
 
-    await saveIntegration(user.id, 'ringcentral', {
+    await saveIntegration(effectiveUserId, 'ringcentral', {
       config: { client_id, client_secret, oauth_nonce: oauthNonce },
     });
 
     const apiBase = 'https://platform.ringcentral.com';
 
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'https://' + req.headers.host}/api/integrations/ringcentral/callback`;
-    const state = Buffer.from(JSON.stringify({ userId: user.id, nonce: oauthNonce })).toString('base64url');
+    const state = Buffer.from(JSON.stringify({ userId: effectiveUserId, nonce: oauthNonce })).toString('base64url');
 
     const authUrl = `${apiBase}/restapi/oauth/authorize?` +
       `response_type=code` +

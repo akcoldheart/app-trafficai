@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, getUserProfile, logAuditAction } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, logAuditAction, getEffectiveUserId } from '@/lib/api-helpers';
 
 function generatePixelCode(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -16,6 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!user) return;
 
   const supabase = createClient(req, res);
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   try {
     if (req.method === 'GET') {
@@ -30,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .order('created_at', { ascending: false });
 
       if (!isAdmin) {
-        query = query.eq('user_id', user.id);
+        query = query.eq('user_id', effectiveUserId);
       }
 
       const { data, error } = await query;
@@ -56,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data, error } = await supabase
         .from('pixels')
         .insert({
-          user_id: user.id,
+          user_id: effectiveUserId,
           name,
           domain,
           pixel_code: pixelCode,

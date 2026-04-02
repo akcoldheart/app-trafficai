@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, getUserProfile, logAuditAction } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, logAuditAction, getEffectiveUserId } from '@/lib/api-helpers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
@@ -16,13 +16,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Get user profile to check role
   const profile = await getUserProfile(user.id, req, res);
   const isAdmin = profile.role === 'admin';
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   try {
     if (req.method === 'GET') {
       // Get single pixel - admin can get any, user can only get their own
       let query = supabase.from('pixels').select('*').eq('id', id);
       if (!isAdmin) {
-        query = query.eq('user_id', user.id);
+        query = query.eq('user_id', effectiveUserId);
       }
 
       const { data, error } = await query.single();
@@ -62,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       let query = supabase.from('pixels').update(updates).eq('id', id);
       if (!isAdmin) {
-        query = query.eq('user_id', user.id);
+        query = query.eq('user_id', effectiveUserId);
       }
 
       const { data, error } = await query.select().single();
@@ -86,7 +87,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // First, check if the pixel exists and user has permission
       let checkQuery = supabase.from('pixels').select('id').eq('id', id);
       if (!isAdmin) {
-        checkQuery = checkQuery.eq('user_id', user.id);
+        checkQuery = checkQuery.eq('user_id', effectiveUserId);
       }
       const { data: pixelCheck } = await checkQuery.single();
 
@@ -103,7 +104,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Now delete the pixel
       let query = supabase.from('pixels').delete().eq('id', id);
       if (!isAdmin) {
-        query = query.eq('user_id', user.id);
+        query = query.eq('user_id', effectiveUserId);
       }
 
       const { error } = await query;

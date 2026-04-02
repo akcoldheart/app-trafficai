@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import type { PlatformType } from '@/lib/integrations';
 
@@ -18,6 +18,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { api_key: clientId, secondary_key: clientSecret } = req.body;
 
   if (!clientId || !clientSecret) {
@@ -29,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await supabaseAdmin
       .from('platform_integrations')
       .upsert({
-        user_id: user.id,
+        user_id: effectiveUserId,
         platform: PLATFORM,
         api_key: clientId,
         config: { client_secret: clientSecret },
@@ -51,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     authUrl.searchParams.set('scope', scopes.join(' '));
     authUrl.searchParams.set('access_type', 'offline');
     authUrl.searchParams.set('prompt', 'consent');
-    authUrl.searchParams.set('state', user.id);
+    authUrl.searchParams.set('state', effectiveUserId);
 
     return res.status(200).json({
       success: true,

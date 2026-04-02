@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, logAuditAction } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId, logAuditAction } from '@/lib/api-helpers';
 import type { IntegrationType, Database } from '@/lib/supabase/types';
 
 type IntegrationUpdate = Database['public']['Tables']['integrations']['Update'];
@@ -10,6 +10,8 @@ const VALID_TYPES: IntegrationType[] = ['facebook', 'google', 'email', 'crm', 'w
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
+
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   const { type } = req.query;
   if (!type || typeof type !== 'string' || !VALID_TYPES.includes(type as IntegrationType)) {
@@ -25,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data, error } = await supabase
         .from('integrations')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .eq('type', integrationType)
         .single();
 
@@ -47,7 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data, error } = await supabase
         .from('integrations')
         .update(updates)
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .eq('type', integrationType)
         .select()
         .single();
@@ -66,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { error } = await supabase
         .from('integrations')
         .update(disconnectUpdate)
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .eq('type', integrationType);
 
       if (error) {

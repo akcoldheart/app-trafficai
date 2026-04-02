@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration } from '@/lib/integrations';
 import { logEvent } from '@/lib/webhook-logger';
 
@@ -21,13 +21,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { ad_account_id } = req.query;
   if (!ad_account_id) {
     return res.status(400).json({ error: 'ad_account_id is required' });
   }
 
   try {
-    const integration = await getIntegration(user.id, 'facebook');
+    const integration = await getIntegration(effectiveUserId, 'facebook');
 
     if (!integration) {
       return res.status(401).json({ error: 'Facebook not connected' });

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
 
@@ -51,6 +51,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { audience_id, list_id, create_new_list, new_list_name } = req.body;
 
   if (!audience_id) {
@@ -61,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { data: rawIntegration } = await supabaseAdmin
     .from('platform_integrations')
     .select('api_key, config')
-    .eq('user_id', user.id)
+    .eq('user_id', effectiveUserId)
     .eq('platform', 'klaviyo')
     .eq('is_connected', true)
     .single();
@@ -215,7 +217,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await supabaseAdmin
       .from('platform_integrations')
       .update({ last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .eq('platform', 'klaviyo');
 
     await logEvent({

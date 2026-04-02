@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser, getUserProfile, createAdminNotification, logAuditAction } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, createAdminNotification, logAuditAction, getEffectiveUserId } from '@/lib/api-helpers';
 
 const supabaseAdmin = createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,6 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!user) return;
 
   const supabase = createClient(req, res);
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   try {
     if (req.method === 'GET') {
@@ -27,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .order('created_at', { ascending: false });
 
       if (!isAdmin) {
-        query = query.eq('user_id', user.id);
+        query = query.eq('user_id', effectiveUserId);
       }
 
       // Filter by status if provided
@@ -113,7 +114,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data, error } = await supabaseAdmin
         .from('audience_requests')
         .insert({
-          user_id: user.id,
+          user_id: effectiveUserId,
           request_type,
           name,
           form_data,

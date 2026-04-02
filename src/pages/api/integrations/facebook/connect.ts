@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { saveIntegration } from '@/lib/integrations';
 import { logEvent } from '@/lib/webhook-logger';
 import crypto from 'crypto';
@@ -15,6 +15,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
+
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   const { app_id, app_secret } = req.body;
 
@@ -52,14 +54,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const oauthNonce = crypto.randomBytes(32).toString('hex');
 
     // Store app credentials + nonce in platform_integrations
-    await saveIntegration(user.id, 'facebook', {
+    await saveIntegration(effectiveUserId, 'facebook', {
       config: { app_id, app_secret, oauth_nonce: oauthNonce },
     });
 
     // Build the OAuth URL for the frontend to redirect to
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'https://' + req.headers.host}/api/integrations/facebook/callback`;
     const scopes = 'ads_management,ads_read';
-    const state = Buffer.from(JSON.stringify({ userId: user.id, nonce: oauthNonce })).toString('base64url');
+    const state = Buffer.from(JSON.stringify({ userId: effectiveUserId, nonce: oauthNonce })).toString('base64url');
 
     const authUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${app_id}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${state}&response_type=code`;
 

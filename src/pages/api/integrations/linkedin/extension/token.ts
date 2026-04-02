@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
@@ -16,11 +16,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   try {
     const { data: integration } = await supabaseAdmin
       .from('platform_integrations')
       .select('config')
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .eq('platform', 'linkedin')
       .eq('is_connected', true)
       .single();
@@ -38,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         config: { ...existingConfig, extension_token: token },
         updated_at: new Date().toISOString(),
       })
-      .eq('user_id', user.id)
+      .eq('user_id', effectiveUserId)
       .eq('platform', 'linkedin');
 
     return res.status(200).json({ success: true, token });

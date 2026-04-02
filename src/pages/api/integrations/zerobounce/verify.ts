@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAndUpdateVisitors } from '@/lib/email-verification';
 import { logEvent } from '@/lib/webhook-logger';
@@ -20,6 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
+
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   const { pixel_id, reverify } = req.body;
 

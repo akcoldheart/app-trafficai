@@ -122,6 +122,16 @@ export default function Settings() {
   const [editingPricing, setEditingPricing] = useState(false);
   const [savingPricing, setSavingPricing] = useState(false);
 
+  // Team seats settings state
+  const [teamSeatsSettings, setTeamSeatsSettings] = useState({
+    team_seats_starter: '2',
+    team_seats_growth: '5',
+    team_seats_professional: '10',
+    team_seats_enterprise: '25',
+  });
+  const [editingTeamSeats, setEditingTeamSeats] = useState(false);
+  const [savingTeamSeats, setSavingTeamSeats] = useState(false);
+
   // Webhook API key state
   const [webhookKeyExists, setWebhookKeyExists] = useState(false);
   const [webhookKeyMasked, setWebhookKeyMasked] = useState('');
@@ -241,6 +251,10 @@ export default function Settings() {
           // Load pricing settings
           if (setting.key.startsWith('plan_')) {
             pricingData[setting.key] = setting.value || '';
+          }
+          // Load team seats settings
+          if (setting.key.startsWith('team_seats_')) {
+            setTeamSeatsSettings(prev => ({ ...prev, [setting.key]: setting.value || '' }));
           }
         });
 
@@ -546,6 +560,31 @@ export default function Settings() {
       alert((error as Error).message);
     } finally {
       setSavingPricing(false);
+    }
+  };
+
+  const handleSaveTeamSeatsSettings = async () => {
+    setSavingTeamSeats(true);
+    try {
+      for (const [key, value] of Object.entries(teamSeatsSettings)) {
+        const response = await fetch(`/api/admin/settings/${key}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || `Failed to save ${key}`);
+        }
+      }
+
+      setEditingTeamSeats(false);
+      fetchAdminSettings();
+    } catch (error) {
+      alert((error as Error).message);
+    } finally {
+      setSavingTeamSeats(false);
     }
   };
 
@@ -1983,6 +2022,100 @@ export default function Settings() {
                           <div className="fw-bold">${parseInt(pricingSettings.plan_professional_monthly_price || '0').toLocaleString()}<span className="text-muted fw-normal">/mo</span></div>
                           <div className="text-muted small">${parseInt(pricingSettings.plan_professional_yearly_price || '0').toLocaleString()}/mo annually</div>
                         </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Team Seats Configuration */}
+              <div className="card">
+                <div className="card-header">
+                  <div className="d-flex align-items-center justify-content-between w-100">
+                    <h3 className="card-title mb-0">Team Seats per Plan</h3>
+                    {!editingTeamSeats && (
+                      <button
+                        className="btn btn-sm btn-outline-primary"
+                        onClick={() => setEditingTeamSeats(true)}
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="card-body">
+                  {editingTeamSeats ? (
+                    <div>
+                      <div className="row g-3 mb-3">
+                        <div className="col-md-3">
+                          <label className="form-label">Starter</label>
+                          <input type="number" className="form-control" min="1"
+                            value={teamSeatsSettings.team_seats_starter}
+                            onChange={(e) => setTeamSeatsSettings({ ...teamSeatsSettings, team_seats_starter: e.target.value })}
+                          />
+                        </div>
+                        <div className="col-md-3">
+                          <label className="form-label">Growth</label>
+                          <input type="number" className="form-control" min="1"
+                            value={teamSeatsSettings.team_seats_growth}
+                            onChange={(e) => setTeamSeatsSettings({ ...teamSeatsSettings, team_seats_growth: e.target.value })}
+                          />
+                        </div>
+                        <div className="col-md-3">
+                          <label className="form-label">Professional</label>
+                          <input type="number" className="form-control" min="1"
+                            value={teamSeatsSettings.team_seats_professional}
+                            onChange={(e) => setTeamSeatsSettings({ ...teamSeatsSettings, team_seats_professional: e.target.value })}
+                          />
+                        </div>
+                        <div className="col-md-3">
+                          <label className="form-label">Enterprise</label>
+                          <input type="number" className="form-control" min="1"
+                            value={teamSeatsSettings.team_seats_enterprise}
+                            onChange={(e) => setTeamSeatsSettings({ ...teamSeatsSettings, team_seats_enterprise: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="d-flex gap-2">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={handleSaveTeamSeatsSettings}
+                          disabled={savingTeamSeats}
+                        >
+                          {savingTeamSeats ? (
+                            <><IconLoader2 className="icon-tabler-loading me-1" size={14} /> Saving...</>
+                          ) : (
+                            <><IconCheck size={14} className="me-1" /> Save</>
+                          )}
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setEditingTeamSeats(false);
+                            fetchAdminSettings();
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="row text-center">
+                      <div className="col-3">
+                        <div className="fw-bold h3 mb-0">{teamSeatsSettings.team_seats_starter}</div>
+                        <div className="text-muted small">Starter</div>
+                      </div>
+                      <div className="col-3">
+                        <div className="fw-bold h3 mb-0">{teamSeatsSettings.team_seats_growth}</div>
+                        <div className="text-muted small">Growth</div>
+                      </div>
+                      <div className="col-3">
+                        <div className="fw-bold h3 mb-0">{teamSeatsSettings.team_seats_professional}</div>
+                        <div className="text-muted small">Professional</div>
+                      </div>
+                      <div className="col-3">
+                        <div className="fw-bold h3 mb-0">{teamSeatsSettings.team_seats_enterprise}</div>
+                        <div className="text-muted small">Enterprise</div>
                       </div>
                     </div>
                   )}

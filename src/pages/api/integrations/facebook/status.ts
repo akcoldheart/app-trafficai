@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegrationStatus, disconnectIntegration } from '@/lib/integrations';
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
@@ -20,14 +20,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   if (req.method === 'GET') {
     try {
       const [integration, importsResult] = await Promise.all([
-        getIntegrationStatus(user.id, PLATFORM),
+        getIntegrationStatus(effectiveUserId, PLATFORM),
         supabaseAdmin
           .from('facebook_audience_imports')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', effectiveUserId)
           .order('created_at', { ascending: false })
           .limit(20),
       ]);
@@ -57,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'DELETE') {
     try {
-      await disconnectIntegration(user.id, PLATFORM);
+      await disconnectIntegration(effectiveUserId, PLATFORM);
 
       await logEvent({
         type: 'api',

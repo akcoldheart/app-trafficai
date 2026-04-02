@@ -78,8 +78,14 @@ async function fetchAdminStats() {
   ]);
 
   const allPixels = pixelsResult.data || [];
-  const allUsers = allUsersResult.data || [];
   const recentVisitors = recentVisitorsResult.data || [];
+
+  // Exclude team members from user counts (they are sub-accounts)
+  const { data: teamMembersData } = await supabase
+    .from('team_members')
+    .select('user_id');
+  const teamMemberIds = new Set((teamMembersData || []).map((m: { user_id: string }) => m.user_id));
+  const allUsers = (allUsersResult.data || []).filter((u: { id: string }) => !teamMemberIds.has(u.id));
   const totalVisitors = totalVisitorsResult.count || 0;
   const identifiedVisitors = identifiedVisitorsResult.count || 0;
   const enrichedVisitors = enrichedVisitorsResult.count || 0;

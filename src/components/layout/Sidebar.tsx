@@ -23,6 +23,7 @@ import {
   IconCreditCard,
   IconWebhook,
   IconPlug,
+  IconUsersGroup,
 } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
@@ -56,9 +57,10 @@ const getIcon = (iconName: string) => {
 
 export default function Sidebar() {
   const router = useRouter();
-  const { user, userProfile, userMenuItems } = useAuth();
+  const { user, userProfile, userMenuItems, teamContext } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const isAdmin = userProfile?.role === 'admin';
+  const isTeamMember = teamContext?.isMember === true;
 
   // Use database-driven menu items (already sorted by display_order in AuthContext)
   const visibleMenuItems = useMemo(() => {
@@ -208,7 +210,7 @@ export default function Sidebar() {
                   <IconUser size={18} />
                   <span>My Profile</span>
                 </Link>
-                {!isAdmin && (
+                {!isAdmin && !isTeamMember && (
                   <Link
                     href="/account/billing"
                     className="sidebar-user-menu-item"
@@ -216,6 +218,16 @@ export default function Sidebar() {
                   >
                     <IconCreditCard size={18} />
                     <span>Billing & Plan</span>
+                  </Link>
+                )}
+                {!isAdmin && !isTeamMember && (
+                  <Link
+                    href="/account/team"
+                    className="sidebar-user-menu-item"
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    <IconUsersGroup size={18} />
+                    <span>Team</span>
                   </Link>
                 )}
                 <div className="sidebar-user-menu-divider" />

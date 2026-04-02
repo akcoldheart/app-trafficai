@@ -1,11 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser, getUserApiKey, logAuditAction } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserApiKey, logAuditAction, getEffectiveUserId } from '@/lib/api-helpers';
 
 const TRAFFIC_AI_API_URL = process.env.TRAFFIC_AI_API_URL;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
+
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   const { id } = req.query;
 
@@ -14,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Get user's API key
-  const apiKey = await getUserApiKey(user.id, req, res);
+  const apiKey = await getUserApiKey(effectiveUserId, req, res);
   if (!apiKey) {
     return res.status(403).json({ error: 'No API key assigned. Please contact admin.' });
   }

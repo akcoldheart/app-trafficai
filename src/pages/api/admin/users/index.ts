@@ -32,11 +32,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const usersWithApiKeyIds = new Set(apiKeys?.map(k => k.user_id) || []);
 
-      // Add has_api_key flag to each user
-      const usersWithStatus = users?.map(u => ({
-        ...u,
-        has_api_key: usersWithApiKeyIds.has(u.id),
-      })) || [];
+      // Get all team member user IDs to exclude them from the global list
+      const { data: teamMembers } = await supabaseAdmin
+        .from('team_members')
+        .select('user_id, team_id');
+      const teamMemberIds = new Set(teamMembers?.map(m => m.user_id) || []);
+
+      // Get team info: owner -> member count
+      const { data: teams } = await supabaseAdmin
+        .from('teams')
+        .select('id, owner_user_id');
+      const teamByOwner = new Map((teams || []).map(t => [t.owner_user_id, t.id]));
+
+      // Count members per team
+      const memberCountByTeam = new Map<string, number>();
+      for (const m of teamMembers || []) {
+        memberCountByTeam.set(m.team_id, (memberCountByTeam.get(m.team_id) || 0) + 1);
+      }
+
+      // Add has_api_key flag and team_member_count, filter out team members (sub-accounts)
+      const usersWithStatus = (users || [])
+        .filter(u => !teamMemberIds.has(u.id))
+        .map(u => {
+          const teamId = teamByOwner.get(u.id);
+          return {
+            ...u,
+            has_api_key: usersWithApiKeyIds.has(u.id),
+            team_member_count: teamId ? (memberCountByTeam.get(teamId) || 0) : 0,
+          };
+        });
 
       await logAuditAction(user.id, 'list_users', req, res);
       return res.status(200).json({ users: usersWithStatus });

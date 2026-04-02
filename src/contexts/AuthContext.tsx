@@ -5,11 +5,22 @@ import { createClient } from '@/lib/supabase/client';
 import type { Role, MenuItem } from '@/lib/supabase/types';
 import type { UserProfile } from '@/lib/auth';
 
+export interface TeamContext {
+  teamId: string | null;
+  teamName: string | null;
+  isOwner: boolean;
+  isMember: boolean;
+  teamRole: 'owner' | 'admin' | 'member' | null;
+  memberCount: number;
+  maxSeats: number;
+}
+
 interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
   userRole: Role | null;
   userMenuItems: MenuItem[];
+  teamContext: TeamContext | null;
   session: Session | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -21,6 +32,7 @@ const AuthContext = createContext<AuthContextType>({
   userProfile: null,
   userRole: null,
   userMenuItems: [],
+  teamContext: null,
   session: null,
   loading: true,
   signOut: async () => {},
@@ -32,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userRole, setUserRole] = useState<Role | null>(null);
   const [userMenuItems, setUserMenuItems] = useState<MenuItem[]>([]);
+  const [teamContext, setTeamContext] = useState<TeamContext | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -42,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     profile: UserProfile | null;
     role: Role | null;
     menuItems: MenuItem[];
+    teamContext: TeamContext | null;
   }> => {
     try {
       // Use the assign-role API endpoint which uses service role to bypass RLS
@@ -63,10 +77,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile: data.profile as UserProfile,
         role: data.role as Role,
         menuItems: (data.menuItems || []) as MenuItem[],
+        teamContext: data.teamContext as TeamContext | null,
       };
     } catch (error) {
       console.error('Error fetching user data:', error);
-      return { profile: null, role: null, menuItems: [] };
+      return { profile: null, role: null, menuItems: [], teamContext: null };
     }
   };
 
@@ -79,10 +94,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          const { profile, role, menuItems } = await fetchUserData(session.user.id);
-          setUserProfile(profile);
-          setUserRole(role);
-          setUserMenuItems(menuItems);
+          const userData = await fetchUserData(session.user.id);
+          setUserProfile(userData.profile);
+          setUserRole(userData.role);
+          setUserMenuItems(userData.menuItems);
+          setTeamContext(userData.teamContext);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -121,14 +137,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
-          const { profile, role, menuItems } = await fetchUserData(session.user.id);
-          setUserProfile(profile);
-          setUserRole(role);
-          setUserMenuItems(menuItems);
+          const userData = await fetchUserData(session.user.id);
+          setUserProfile(userData.profile);
+          setUserRole(userData.role);
+          setUserMenuItems(userData.menuItems);
+          setTeamContext(userData.teamContext);
         } else {
           setUserProfile(null);
           setUserRole(null);
           setUserMenuItems([]);
+          setTeamContext(null);
         }
 
         setLoading(false);
@@ -153,6 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserProfile(null);
     setUserRole(null);
     setUserMenuItems([]);
+    setTeamContext(null);
     setSession(null);
 
     if (typeof window !== 'undefined') {
@@ -187,10 +206,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = async () => {
     if (user) {
-      const { profile, role, menuItems } = await fetchUserData(user.id);
-      setUserProfile(profile);
-      setUserRole(role);
-      setUserMenuItems(menuItems);
+      const userData = await fetchUserData(user.id);
+      setUserProfile(userData.profile);
+      setUserRole(userData.role);
+      setUserMenuItems(userData.menuItems);
+      setTeamContext(userData.teamContext);
     }
   };
 
@@ -199,6 +219,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userProfile,
     userRole,
     userMenuItems,
+    teamContext,
     session,
     loading,
     signOut,

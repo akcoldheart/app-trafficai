@@ -1,12 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, getUserProfile, createAdminNotification, logAuditAction } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, createAdminNotification, logAuditAction, getEffectiveUserId } from '@/lib/api-helpers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
   const supabase = createClient(req, res);
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   try {
     if (req.method === 'GET') {
@@ -21,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .order('created_at', { ascending: false });
 
       if (!isAdmin) {
-        query = query.eq('user_id', user.id);
+        query = query.eq('user_id', effectiveUserId);
       }
 
       // Filter by status if provided
@@ -54,7 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data, error } = await supabase
         .from('pixel_requests')
         .insert({
-          user_id: user.id,
+          user_id: effectiveUserId,
           name,
           domain,
           data_points: Array.isArray(data_points) ? data_points : [],

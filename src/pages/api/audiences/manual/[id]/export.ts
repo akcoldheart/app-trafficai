@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser, getUserProfile } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, getEffectiveUserId } from '@/lib/api-helpers';
 
 export const config = {
   maxDuration: 120,
@@ -58,6 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const profile = await getUserProfile(user.id, req, res);
     const isAdmin = profile.role === 'admin';
+    const effectiveUserId = await getEffectiveUserId(user.id);
 
     const { data: request, error } = await supabaseAdmin
       .from('audience_requests')
@@ -70,12 +71,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Non-admins: verify ownership or assignment
-    if (!isAdmin && request.user_id !== user.id) {
+    if (!isAdmin && request.user_id !== effectiveUserId) {
       const { data: assignment } = await supabaseAdmin
         .from('audience_assignments')
         .select('id')
         .eq('audience_id', id)
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .single();
 
       if (!assignment) {

@@ -89,7 +89,6 @@ export default function Signup() {
             // Don't block signup if attribution fails
           }
         }
-        // Redirect directly to dashboard
         router.push('/');
       } else if (data.user) {
         // User created but needs email verification

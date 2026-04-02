@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 import { getIntegration, getVisitorsForSync, getAudienceContactsForSync } from '@/lib/integrations';
 
@@ -12,12 +12,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   if (req.method === 'GET') {
     try {
       const { data: campaigns, error } = await supabaseAdmin
         .from('linkedin_campaigns')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', effectiveUserId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -72,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       // Check LinkedIn integration
-      const integration = await getIntegration(user.id, 'linkedin');
+      const integration = await getIntegration(effectiveUserId, 'linkedin');
 
       if (!integration || !integration.is_connected) {
         return res.status(400).json({ error: 'No active LinkedIn account found. Connect your LinkedIn account first.' });
@@ -88,7 +90,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .select('user_id')
           .eq('id', source_pixel_id)
           .single();
-        const pixelOwnerId = pixelData?.user_id || user.id;
+        const pixelOwnerId = pixelData?.user_id || effectiveUserId;
         contacts = await getVisitorsForSync(pixelOwnerId, source_pixel_id);
       } else {
         contacts = await getAudienceContactsForSync(source_audience_id);
@@ -107,7 +109,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             sample_linkedin_urls: contacts.slice(0, 5).map((c: any) => c.linkedin_url || null),
             source_pixel_id: source_pixel_id || null,
             source_audience_id: source_audience_id || null,
-            user_id: user.id,
+            user_id: effectiveUserId,
           },
         });
       }
@@ -116,7 +118,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data: campaign, error: campaignError } = await supabaseAdmin
         .from('linkedin_campaigns')
         .insert({
-          user_id: user.id,
+          user_id: effectiveUserId,
           pixel_id: source_pixel_id || null,
           audience_id: source_audience_id || null,
           name,
