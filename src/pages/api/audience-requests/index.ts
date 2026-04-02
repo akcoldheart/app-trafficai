@@ -22,7 +22,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const isAdmin = profile.role === 'admin';
 
       // Build query - admins see all, users see only their own
-      let query = supabase
+      // Use admin client to bypass RLS (team members need to see owner's data)
+      let query = supabaseAdmin
         .from('audience_requests')
         .select('*, user:users!audience_requests_user_id_fkey(email)')
         .order('created_at', { ascending: false });
@@ -56,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const { data: assignments } = await supabaseAdmin
           .from('audience_assignments')
           .select('audience_id')
-          .eq('user_id', user.id);
+          .eq('user_id', effectiveUserId);
 
         if (assignments && assignments.length > 0) {
           const assignedIds = assignments.map(a => a.audience_id);
