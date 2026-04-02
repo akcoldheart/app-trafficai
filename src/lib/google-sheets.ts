@@ -100,8 +100,11 @@ export async function createSpreadsheet(
   });
 
   if (!createResp.ok) {
-    const err = await createResp.json().catch(() => ({}));
-    throw new Error(`Failed to create spreadsheet: ${(err as Record<string, unknown>).error || createResp.statusText}`);
+    const err = await createResp.json().catch(() => null);
+    const errObj = err?.error;
+    const message = typeof errObj === 'string' ? errObj : errObj?.message || createResp.statusText;
+    console.error('Google Sheets API error:', JSON.stringify(err));
+    throw new Error(`Failed to create spreadsheet: ${message} (${createResp.status})`);
   }
 
   const spreadsheet = await createResp.json();
