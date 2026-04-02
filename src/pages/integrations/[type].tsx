@@ -235,6 +235,7 @@ export default function IntegrationDetailPage() {
         if (type === 'salesforce') body.instance_url = secondaryField.trim();
         else if (type === 'shopify') body.shop_domain = secondaryField.trim();
         else if (type === 'activecampaign') body.api_url = secondaryField.trim();
+        else body.secondary_key = secondaryField.trim();
       }
 
       const response = await fetch(`/api/integrations/${type}/connect`, {
