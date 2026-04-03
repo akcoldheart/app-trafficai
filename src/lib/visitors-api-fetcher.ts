@@ -376,6 +376,9 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
   totalFetched: number;
   totalUpserted: number;
   uniqueVisitors?: number;
+  newInserted?: number;
+  existingUpdated?: number;
+  fetchMode?: string;
   dbErrors?: string[];
   error?: string;
 }> {
@@ -473,6 +476,21 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     const fetchMode = lastFetchedAt ? 'incremental' : 'full';
     console.log(`[visitors-api-fetcher] Pixel ${pixel.id} (${fetchMode}): ${totalFetched} fetched → ${uniqueRows.length} unique visitors`);
 
+    // Count existing visitors to determine new vs updated after upsert
+    const visitorIds = uniqueRows.map(r => r.visitor_id);
+    let existingCount = 0;
+    for (let i = 0; i < visitorIds.length; i += 500) {
+      const chunk = visitorIds.slice(i, i + 500);
+      const { count } = await supabaseAdmin
+        .from('visitors')
+        .select('id', { count: 'exact', head: true })
+        .eq('pixel_id', pixel.id)
+        .in('visitor_id', chunk);
+      existingCount += count || 0;
+    }
+    const newInserted = uniqueRows.length - existingCount;
+    const existingUpdated = existingCount;
+
     // Batch upsert all rows using the unique constraint on (visitor_id, pixel_id)
     // This handles both inserts and updates in a single operation, much faster than
     // individual row updates which were causing Vercel timeout on large pixels
@@ -521,7 +539,7 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       type: 'api',
       event_name: 'visitors_api_sync',
       status: totalUpserted > 0 ? 'success' : 'info',
-      message: `Visitors sync completed for pixel ${pixel.id} (${fetchMode}): ${totalFetched} fetched, ${uniqueRows.length} unique, ${totalUpserted} upserted`,
+      message: `Visitors sync completed for pixel ${pixel.id} (${fetchMode}): ${totalFetched} fetched, ${newInserted} new, ${existingUpdated} updated`,
       request_data: {
         pixel_id: pixel.id,
         api_url: pixel.visitors_api_url,
@@ -530,7 +548,10 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       response_data: {
         total_fetched: totalFetched,
         unique_visitors: uniqueRows.length,
+        new_inserted: newInserted,
+        existing_updated: existingUpdated,
         total_upserted: totalUpserted,
+        fetch_mode: fetchMode,
       },
       user_id: pixel.user_id,
     });
@@ -543,6 +564,9 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       totalFetched,
       totalUpserted,
       uniqueVisitors: uniqueRows.length,
+      newInserted,
+      existingUpdated,
+      fetchMode,
       dbErrors: dbErrors.length > 0 ? dbErrors : undefined,
     };
   } catch (err) {

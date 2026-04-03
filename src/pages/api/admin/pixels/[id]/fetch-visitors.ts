@@ -59,6 +59,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         totalFetched: result.totalFetched,
         totalUpserted: result.totalUpserted,
         uniqueVisitors: result.uniqueVisitors,
+        newInserted: result.newInserted,
+        existingUpdated: result.existingUpdated,
+        fetchMode: result.fetchMode,
         dbErrors: result.dbErrors,
       });
     }
@@ -68,6 +71,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       totalFetched: result.totalFetched,
       totalUpserted: result.totalUpserted,
       uniqueVisitors: result.uniqueVisitors,
+      newInserted: result.newInserted,
+      existingUpdated: result.existingUpdated,
+      fetchMode: result.fetchMode,
       dbErrors: result.dbErrors,
     });
   } catch (error) {
