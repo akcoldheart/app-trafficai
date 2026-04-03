@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { fetchVisitorsFromApi } from '@/lib/visitors-api-fetcher';
+import { logEvent } from '@/lib/webhook-logger';
 
 export const config = { maxDuration: 300 };
 
@@ -92,6 +93,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (error) {
         console.error('Error fetching pixels for cron:', error);
+        await logEvent({
+          type: 'api',
+          event_name: 'visitors_api_sync',
+          status: 'error',
+          message: `Cron failed: could not query pixels table`,
+          error_details: error.message,
+        });
         return res.status(500).json({ error: 'Failed to fetch pixels' });
       }
       if (!page || page.length === 0) break;
@@ -101,6 +109,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (allPixels.length === 0) {
+      await logEvent({
+        type: 'api',
+        event_name: 'visitors_api_sync',
+        status: 'warning',
+        message: 'Cron ran but found 0 active pixels with visitors_api_url configured',
+      });
       return res.status(200).json({ success: true, message: 'No pixels with API URLs configured', results: [] });
     }
 
@@ -154,6 +168,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (error) {
     console.error('Cron fetch-visitors error:', error);
+    await logEvent({
+      type: 'api',
+      event_name: 'visitors_api_sync',
+      status: 'error',
+      message: 'Cron fetch-visitors crashed unexpectedly',
+      error_details: (error as Error).message,
+    });
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
