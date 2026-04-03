@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get the pixel and verify it has a visitors API URL
     const { data: pixel, error: pixelError } = await supabase
       .from('pixels')
-      .select('id, user_id, visitors_api_url')
+      .select('id, user_id, visitors_api_url, visitors_api_last_fetched_at')
       .eq('id', id)
       .single();
 
@@ -40,6 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       id: pixel.id,
       user_id: pixel.user_id,
       visitors_api_url: pixel.visitors_api_url,
+      visitors_api_last_fetched_at: pixel.visitors_api_last_fetched_at,
     });
 
     await logAuditAction(
@@ -58,8 +59,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         totalFetched: result.totalFetched,
         totalUpserted: result.totalUpserted,
         uniqueVisitors: result.uniqueVisitors,
-        newInserted: result.newInserted,
-        existingUpdated: result.existingUpdated,
         dbErrors: result.dbErrors,
       });
     }
@@ -69,8 +68,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       totalFetched: result.totalFetched,
       totalUpserted: result.totalUpserted,
       uniqueVisitors: result.uniqueVisitors,
-      newInserted: result.newInserted,
-      existingUpdated: result.existingUpdated,
       dbErrors: result.dbErrors,
     });
   } catch (error) {

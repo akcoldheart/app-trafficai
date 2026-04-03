@@ -1,7 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
-import { addProfilesToKlaviyo, formatPhoneE164 as formatPhoneKlaviyo } from '@/pages/api/integrations/klaviyo/sync-visitors';
-import { verifyAndUpdateVisitors, getZeroBounceConfig, isEmailSyncable } from '@/lib/email-verification';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -77,6 +75,7 @@ interface PixelForFetch {
   id: string;
   user_id: string;
   visitors_api_url: string;
+  visitors_api_last_fetched_at?: string | null;
 }
 
 function getFirstValue(value: string | null | undefined): string | null {
@@ -119,6 +118,29 @@ function buildHeaders(apiUrl: string, apiKey: string): Record<string, string> {
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+function getEventTimestamp(contact: ApiContact): string | null {
+  const ts = contact.EVENT_TIMESTAMP as string || contact.EVENT_DATE as string || contact.ACTIVITY_START_DATE as string;
+  return ts || null;
+}
+
+// Check if any contact in the batch has an EVENT_TIMESTAMP older than the cutoff
+function hasReachedCutoff(contacts: ApiContact[], cutoffIso: string): boolean {
+  for (const contact of contacts) {
+    const ts = getEventTimestamp(contact);
+    if (ts && ts < cutoffIso) return true;
+  }
+  return false;
+}
+
+// Return only contacts with EVENT_TIMESTAMP newer than the cutoff
+function filterNewContacts(contacts: ApiContact[], cutoffIso: string): ApiContact[] {
+  return contacts.filter(contact => {
+    const ts = getEventTimestamp(contact);
+    if (!ts) return true; // keep records without timestamps
+    return ts >= cutoffIso;
+  });
+}
 
 async function fetchWithRetry(
   url: string,
@@ -354,8 +376,6 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
   totalFetched: number;
   totalUpserted: number;
   uniqueVisitors?: number;
-  newInserted?: number;
-  existingUpdated?: number;
   dbErrors?: string[];
   error?: string;
 }> {
@@ -370,8 +390,12 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
 
     const headers = buildHeaders(pixel.visitors_api_url, apiKey);
 
+    // Use larger page size (200 vs default 50) to reduce API round-trips
+    const apiUrl = new URL(pixel.visitors_api_url);
+    apiUrl.searchParams.set('page_size', '200');
+
     // Fetch first page
-    const firstResponse = await fetchWithRetry(pixel.visitors_api_url, { method: 'GET', headers });
+    const firstResponse = await fetchWithRetry(apiUrl.toString(), { method: 'GET', headers });
 
     if (!firstResponse.ok) {
       const errorText = await firstResponse.text();
@@ -379,20 +403,36 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     }
 
     const firstData = await firstResponse.json();
-    const totalPages = Number(firstData.total_pages || firstData.TotalPages || firstData.totalPages || 1);
+    const recalcTotalPages = Number(firstData.total_pages || firstData.TotalPages || firstData.totalPages || 1);
     const currentPage = Number(firstData.page || firstData.Page || firstData.current_page || 1);
 
     let allContacts: ApiContact[] = extractContacts(firstData);
 
-    // Fetch remaining pages in batches of 2 with delays to avoid rate limits
-    if (totalPages > 1 && currentPage === 1) {
-      const batchSize = 2;
-      for (let batchStart = 2; batchStart <= totalPages; batchStart += batchSize) {
-        const batchEnd = Math.min(batchStart + batchSize - 1, totalPages);
+    // Incremental fetch: API returns records newest-first (by EVENT_TIMESTAMP desc).
+    // If we have a last_fetched_at timestamp, stop fetching once we hit records older
+    // than that — they were already processed in a previous run. This reduces a pixel
+    // with 8000+ records from 43 pages down to 1-2 pages on hourly syncs.
+    const lastFetchedAt = pixel.visitors_api_last_fetched_at || null;
+    let reachedOldRecords = false;
+
+    // Check if first page already contains old records
+    if (lastFetchedAt) {
+      reachedOldRecords = hasReachedCutoff(allContacts, lastFetchedAt);
+      if (reachedOldRecords) {
+        // Trim contacts to only include records newer than last fetch
+        allContacts = filterNewContacts(allContacts, lastFetchedAt);
+      }
+    }
+
+    // Fetch remaining pages — stop early if we hit already-seen records
+    if (recalcTotalPages > 1 && currentPage === 1 && !reachedOldRecords) {
+      const batchSize = 3;
+      for (let batchStart = 2; batchStart <= recalcTotalPages; batchStart += batchSize) {
+        const batchEnd = Math.min(batchStart + batchSize - 1, recalcTotalPages);
         const pagePromises = [];
 
         for (let page = batchStart; page <= batchEnd; page++) {
-          const nextPageUrl = new URL(pixel.visitors_api_url);
+          const nextPageUrl = new URL(apiUrl.toString());
           nextPageUrl.searchParams.set('page', String(page));
           pagePromises.push(
             fetchWithRetry(nextPageUrl.toString(), { method: 'GET', headers })
@@ -402,13 +442,24 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
         }
 
         const batchResults = await Promise.all(pagePromises);
+        let stopFetching = false;
         for (const records of batchResults) {
-          allContacts = allContacts.concat(records);
+          if (lastFetchedAt && hasReachedCutoff(records, lastFetchedAt)) {
+            allContacts = allContacts.concat(filterNewContacts(records, lastFetchedAt));
+            stopFetching = true;
+          } else {
+            allContacts = allContacts.concat(records);
+          }
+        }
+
+        if (stopFetching) {
+          console.log(`[visitors-api-fetcher] Pixel ${pixel.id}: stopped at page ~${batchEnd}/${recalcTotalPages} (reached already-synced records)`);
+          break;
         }
 
         // Small delay between page batches to stay under rate limits
-        if (batchStart + batchSize <= totalPages) {
-          await sleep(500);
+        if (batchStart + batchSize <= recalcTotalPages) {
+          await sleep(300);
         }
       }
     }
@@ -419,113 +470,50 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     // The API returns multiple event records per person, so we aggregate them
     const uniqueRows = aggregateContactEvents(allContacts, pixel.id, pixel.user_id);
 
-    // Fetch ALL existing visitor_ids for this pixel to split into insert vs update
-    // Paginate to avoid Supabase default 1000-row limit
-    let existingVisitors: { id: string; visitor_id: string }[] = [];
-    let from = 0;
-    const PAGE = 1000;
-    while (true) {
-      const { data: page } = await supabaseAdmin
-        .from('visitors')
-        .select('id, visitor_id')
-        .eq('pixel_id', pixel.id)
-        .range(from, from + PAGE - 1);
-      if (!page || page.length === 0) break;
-      existingVisitors = existingVisitors.concat(page);
-      if (page.length < PAGE) break;
-      from += PAGE;
-    }
+    const fetchMode = lastFetchedAt ? 'incremental' : 'full';
+    console.log(`[visitors-api-fetcher] Pixel ${pixel.id} (${fetchMode}): ${totalFetched} fetched → ${uniqueRows.length} unique visitors`);
 
-    const existingMap = new Map<string, string>();
-    for (const v of (existingVisitors || [])) {
-      existingMap.set(v.visitor_id, v.id);
-    }
-
-    const toInsert = uniqueRows.filter(r => !existingMap.has(r.visitor_id));
-    const toUpdate = uniqueRows.filter(r => existingMap.has(r.visitor_id));
-
-    console.log(`[visitors-api-fetcher] Pixel ${pixel.id}: ${totalFetched} fetched → ${uniqueRows.length} unique visitors → ${toInsert.length} new, ${toUpdate.length} existing`);
-
-    // Batch insert new records
+    // Batch upsert all rows using the unique constraint on (visitor_id, pixel_id)
+    // This handles both inserts and updates in a single operation, much faster than
+    // individual row updates which were causing Vercel timeout on large pixels
     const BATCH_SIZE = 200;
-    const insertErrors: string[] = [];
-    for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
-      const batch = toInsert.slice(i, i + BATCH_SIZE);
-      const { error: insertError } = await supabaseAdmin
+    const dbErrors: string[] = [];
+
+    for (let i = 0; i < uniqueRows.length; i += BATCH_SIZE) {
+      const batch = uniqueRows.slice(i, i + BATCH_SIZE);
+      const { error: upsertError, count } = await supabaseAdmin
         .from('visitors')
-        .insert(batch);
+        .upsert(batch, {
+          onConflict: 'visitor_id,pixel_id',
+          ignoreDuplicates: false,
+          count: 'exact',
+        });
 
-      if (insertError) {
-        const errMsg = `Insert error at offset ${i}: ${insertError.message} (code: ${insertError.code}, details: ${insertError.details})`;
+      if (upsertError) {
+        const errMsg = `Upsert error at offset ${i}: ${upsertError.message} (code: ${upsertError.code}, details: ${upsertError.details})`;
         console.error(`[visitors-api-fetcher] ${errMsg}`);
-        insertErrors.push(errMsg);
+        dbErrors.push(errMsg);
       } else {
-        totalUpserted += batch.length;
+        totalUpserted += count || batch.length;
       }
-
     }
 
-    // Update existing records in parallel batches of 50
-    const updateErrors: string[] = [];
-    for (let i = 0; i < toUpdate.length; i += 50) {
-      const batch = toUpdate.slice(i, i + 50);
-      const results = await Promise.all(
-        batch.map(row => {
-          const dbId = existingMap.get(row.visitor_id)!;
-          return supabaseAdmin
-            .from('visitors')
-            .update({
-              email: row.email,
-              first_name: row.first_name,
-              last_name: row.last_name,
-              full_name: row.full_name,
-              company: row.company,
-              job_title: row.job_title,
-              linkedin_url: row.linkedin_url,
-              city: row.city,
-              state: row.state,
-              country: row.country,
-              ip_address: row.ip_address,
-              first_seen_at: row.first_seen_at,
-              last_seen_at: row.last_seen_at,
-              total_pageviews: row.total_pageviews,
-              total_sessions: row.total_sessions,
-              total_time_on_site: row.total_time_on_site,
-              max_scroll_depth: row.max_scroll_depth,
-              total_clicks: row.total_clicks,
-              form_submissions: row.form_submissions,
-              lead_score: row.lead_score,
-              is_enriched: true,
-              enriched_at: row.enriched_at,
-              enrichment_source: 'visitors_api',
-              enrichment_data: row.enrichment_data,
-              metadata: row.metadata,
-              updated_at: row.updated_at,
-            })
-            .eq('id', dbId)
-            .then(({ error }) => {
-              if (error) {
-                updateErrors.push(`Update ${row.visitor_id}: ${error.message} (code: ${error.code})`);
-              }
-              return !error;
-            });
-        })
-      );
-      totalUpserted += results.filter(Boolean).length;
+    if (dbErrors.length > 0) {
+      console.error(`[visitors-api-fetcher] DB errors for pixel ${pixel.id}:`, dbErrors);
     }
 
-    if (insertErrors.length > 0 || updateErrors.length > 0) {
-      console.error(`[visitors-api-fetcher] DB errors for pixel ${pixel.id}:`, { insertErrors, updateErrors });
+    // Update pixel fetch status
+    const updateFields: Record<string, unknown> = {
+      visitors_api_last_fetched_at: new Date().toISOString(),
+      visitors_api_last_fetch_status: `success: ${totalUpserted} visitors synced (${fetchMode})`,
+    };
+    // Only update events_count on full fetches (incremental only has new records)
+    if (!lastFetchedAt) {
+      updateFields.events_count = totalFetched;
     }
-
-    // Update pixel fetch status and events count
     await supabaseAdmin
       .from('pixels')
-      .update({
-        visitors_api_last_fetched_at: new Date().toISOString(),
-        visitors_api_last_fetch_status: `success: ${totalUpserted} visitors synced`,
-        events_count: totalFetched,
-      })
+      .update(updateFields)
       .eq('id', pixel.id);
 
     // Log success to system_logs
@@ -533,190 +521,29 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       type: 'api',
       event_name: 'visitors_api_sync',
       status: totalUpserted > 0 ? 'success' : 'info',
-      message: `Visitors sync completed for pixel ${pixel.id}: ${totalFetched} fetched, ${toInsert.length} new, ${toUpdate.length} updated`,
+      message: `Visitors sync completed for pixel ${pixel.id} (${fetchMode}): ${totalFetched} fetched, ${uniqueRows.length} unique, ${totalUpserted} upserted`,
       request_data: {
         pixel_id: pixel.id,
         api_url: pixel.visitors_api_url,
-        total_pages: totalPages,
+        total_pages: recalcTotalPages,
       },
       response_data: {
         total_fetched: totalFetched,
         unique_visitors: uniqueRows.length,
-        new_inserted: toInsert.length,
-        existing_updated: toUpdate.length,
         total_upserted: totalUpserted,
       },
       user_id: pixel.user_id,
     });
 
-    // Auto-verify new visitor emails via ZeroBounce (if enabled)
-    // Then auto-sync ONLY verified visitors to Klaviyo list
-    if (toInsert.length > 0) {
-      // Step 1: Verify emails via ZeroBounce before syncing to Klaviyo
-      let zbConfig: Record<string, unknown> | null = null;
-      const visitorsWithEmail = toInsert.filter(v => v.email);
+    // ZeroBounce + Klaviyo auto-sync is handled separately by the push-klaviyo-events cron
+    // which runs every 30 minutes and picks up new/updated visitors incrementally.
+    // This avoids duplicating that logic here and keeps the sync fast.
 
-      if (visitorsWithEmail.length > 0) {
-        try {
-          zbConfig = await getZeroBounceConfig(pixel.user_id);
-
-          // Only verify if ZeroBounce is actually connected AND auto_verify is enabled
-          if (zbConfig && zbConfig.auto_verify !== false) {
-            // Need DB IDs for the newly inserted visitors — fetch them
-            const { data: newDbVisitors } = await supabaseAdmin
-              .from('visitors')
-              .select('id, email')
-              .eq('pixel_id', pixel.id)
-              .in('visitor_id', visitorsWithEmail.map(v => v.visitor_id));
-
-            if (newDbVisitors && newDbVisitors.length > 0) {
-              const toVerify = newDbVisitors
-                .filter((v): v is { id: string; email: string } => !!v.email);
-
-              if (toVerify.length > 0) {
-                const verifyResult = await verifyAndUpdateVisitors(toVerify, pixel.user_id);
-
-                // Only log if verification actually happened (had API key and processed emails)
-                if (verifyResult.verified > 0) {
-                  console.log(`[visitors-api-fetcher] ZeroBounce verified ${verifyResult.verified} emails for pixel ${pixel.id}: ${verifyResult.valid} valid, ${verifyResult.invalid} invalid, ${verifyResult.unknown} unknown`);
-
-                  await logEvent({
-                    type: 'api',
-                    event_name: 'zerobounce_auto_verify',
-                    status: 'success',
-                    message: `Auto-verified ${verifyResult.verified} emails: ${verifyResult.valid} valid, ${verifyResult.invalid} invalid`,
-                    user_id: pixel.user_id,
-                    response_data: verifyResult,
-                  });
-                }
-              }
-            }
-          }
-        } catch (zbErr) {
-          // Don't fail the visitor fetch if ZeroBounce verification fails
-          console.error(`[visitors-api-fetcher] ZeroBounce verification error for pixel ${pixel.id}:`, (zbErr as Error).message);
-        }
-      }
-
-      // Step 2: Sync to Klaviyo (filtering out invalid emails if ZeroBounce is configured)
-      try {
-        const { data: klaviyoIntegration } = await supabaseAdmin
-          .from('platform_integrations')
-          .select('api_key, config')
-          .eq('user_id', pixel.user_id)
-          .eq('platform', 'klaviyo')
-          .eq('is_connected', true)
-          .single();
-
-        if (klaviyoIntegration) {
-          const kConfig = (klaviyoIntegration.config || {}) as Record<string, unknown>;
-          const autoSyncEnabled = kConfig.auto_sync_visitors === true;
-          const defaultListId = kConfig.default_list_id as string | undefined;
-
-          if (autoSyncEnabled && defaultListId) {
-            const autoSyncPixelId = kConfig.auto_sync_pixel_id as string | undefined;
-            if (!autoSyncPixelId || autoSyncPixelId === pixel.id) {
-              // If ZeroBounce is configured, re-fetch email_status for newly inserted visitors
-              // to filter out invalid emails before syncing to Klaviyo
-              let emailStatusMap = new Map<string, string | null>();
-              if (zbConfig) {
-                const { data: verifiedVisitors } = await supabaseAdmin
-                  .from('visitors')
-                  .select('email, email_status')
-                  .eq('pixel_id', pixel.id)
-                  .in('visitor_id', toInsert.filter(v => v.email).map(v => v.visitor_id));
-
-                if (verifiedVisitors) {
-                  for (const v of verifiedVisitors) {
-                    if (v.email) emailStatusMap.set(v.email, v.email_status);
-                  }
-                }
-              }
-
-              // Build Klaviyo profiles, filtering out invalid emails
-              const newProfiles = toInsert
-                .filter(v => {
-                  if (!v.email) return false;
-                  // If ZeroBounce is configured, check email status
-                  if (zbConfig) {
-                    const status = emailStatusMap.get(v.email) || null;
-                    return isEmailSyncable(status, zbConfig);
-                  }
-                  return true;
-                })
-                .map(visitor => {
-                  const meta = (visitor.metadata || {}) as Record<string, unknown>;
-                  const phone = meta?.phone || meta?.PHONE || meta?.Phone || meta?.phone_number || meta?.MOBILE_PHONE || undefined;
-                  const formattedPhone = phone ? formatPhoneKlaviyo(String(phone)) : undefined;
-                  return {
-                    type: 'profile' as const,
-                    attributes: {
-                      email: visitor.email!,
-                      first_name: visitor.first_name || (visitor.full_name ? visitor.full_name.split(' ')[0] : undefined),
-                      last_name: visitor.last_name || (visitor.full_name ? visitor.full_name.split(' ').slice(1).join(' ') : undefined),
-                      organization: visitor.company || undefined,
-                      title: visitor.job_title || undefined,
-                      phone_number: formattedPhone,
-                      location: {
-                        city: visitor.city || undefined,
-                        region: visitor.state || undefined,
-                        country: visitor.country || undefined,
-                      },
-                      properties: {
-                        source: 'Traffic AI',
-                        linkedin_url: visitor.linkedin_url || undefined,
-                        lead_score: visitor.lead_score || undefined,
-                        total_pageviews: visitor.total_pageviews || undefined,
-                        total_sessions: visitor.total_sessions || undefined,
-                        first_seen_at: visitor.first_seen_at || undefined,
-                        last_seen_at: visitor.last_seen_at || undefined,
-                      },
-                      subscriptions: {
-                        email: { marketing: { consent: 'SUBSCRIBED' as const } },
-                        ...(formattedPhone ? { sms: { marketing: { consent: 'SUBSCRIBED' as const } } } : {}),
-                      },
-                    },
-                  };
-                });
-
-              const filteredOut = toInsert.filter(v => v.email).length - newProfiles.length;
-
-              if (newProfiles.length > 0) {
-                await addProfilesToKlaviyo(klaviyoIntegration.api_key, defaultListId, newProfiles);
-
-                // Update last synced timestamp
-                await supabaseAdmin
-                  .from('platform_integrations')
-                  .update({ last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-                  .eq('user_id', pixel.user_id)
-                  .eq('platform', 'klaviyo');
-
-                await logEvent({
-                  type: 'api',
-                  event_name: 'klaviyo_auto_sync_visitors',
-                  status: 'success',
-                  message: `Auto-synced ${newProfiles.length} new visitors to Klaviyo list${filteredOut > 0 ? ` (${filteredOut} filtered by email verification)` : ''}`,
-                  user_id: pixel.user_id,
-                  response_data: { synced: newProfiles.length, filtered_out: filteredOut, triggered_by_new: toInsert.length },
-                });
-              }
-            }
-          }
-        }
-      } catch (syncErr) {
-        // Don't fail the visitor fetch if Klaviyo sync fails
-        console.error(`[visitors-api-fetcher] Klaviyo auto-sync error for pixel ${pixel.id}:`, (syncErr as Error).message);
-      }
-    }
-
-    const allDbErrors = [...insertErrors, ...updateErrors];
     return {
       totalFetched,
       totalUpserted,
       uniqueVisitors: uniqueRows.length,
-      newInserted: toInsert.length,
-      existingUpdated: toUpdate.length,
-      dbErrors: allDbErrors.length > 0 ? allDbErrors : undefined,
+      dbErrors: dbErrors.length > 0 ? dbErrors : undefined,
     };
   } catch (err) {
     const errorMessage = (err as Error).message;

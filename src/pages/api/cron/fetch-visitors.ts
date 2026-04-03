@@ -125,13 +125,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const startTime = Date.now();
     let skippedDueToTimeout = 0;
 
-    // Stagger pixel syncs with a 3-second delay between each to avoid
-    // overwhelming the AudienceLab API and hitting rate limits (429s)
+    // Each pixel runs to full completion (no mid-pixel truncation).
+    // Time budget is only checked BETWEEN pixels to skip remaining ones if needed.
     for (let i = 0; i < pixels.length; i++) {
-      // Check if we're running low on time before starting next pixel
-      if (Date.now() - startTime > MAX_PROCESSING_MS) {
+      const elapsed = Date.now() - startTime;
+      // Need at least 60s remaining to start another pixel
+      if (elapsed > MAX_PROCESSING_MS - 60_000) {
         skippedDueToTimeout = pixels.length - i;
-        console.warn(`[cron/fetch-visitors] Timeout approaching after ${i} pixels, skipping remaining ${skippedDueToTimeout}. They will be prioritized in the next run.`);
+        console.warn(`[cron/fetch-visitors] Timeout approaching after ${i} pixels (${Math.round(elapsed/1000)}s elapsed), skipping remaining ${skippedDueToTimeout}. They will be prioritized in the next run.`);
         break;
       }
 
@@ -139,19 +140,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Wait between pixels (skip delay for the first one)
       if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
-      const result = await fetchVisitorsFromApi({
-        id: pixel.id,
-        user_id: pixel.user_id,
-        visitors_api_url: pixel.visitors_api_url!,
-      });
+      try {
+        const result = await fetchVisitorsFromApi({
+          id: pixel.id,
+          user_id: pixel.user_id,
+          visitors_api_url: pixel.visitors_api_url!,
+          visitors_api_last_fetched_at: pixel.visitors_api_last_fetched_at,
+        });
 
-      results.push({
-        pixel_id: pixel.id,
-        ...result,
-      });
+        results.push({
+          pixel_id: pixel.id,
+          ...result,
+        });
+      } catch (pixelErr) {
+        console.error(`[cron/fetch-visitors] Pixel ${pixel.id} failed:`, (pixelErr as Error).message);
+        results.push({
+          pixel_id: pixel.id,
+          totalFetched: 0,
+          totalUpserted: 0,
+          error: (pixelErr as Error).message,
+        });
+      }
     }
 
     const totalSuccess = results.filter(r => !r.error).length;
