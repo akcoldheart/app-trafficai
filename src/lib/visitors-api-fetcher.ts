@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { logEvent } from '@/lib/webhook-logger';
+import { verifyAndUpdateVisitors, getZeroBounceConfig } from '@/lib/email-verification';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -556,9 +557,54 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       user_id: pixel.user_id,
     });
 
-    // ZeroBounce + Klaviyo auto-sync is handled separately by the push-klaviyo-events cron
+    // Auto-verify new visitor emails via ZeroBounce (if enabled)
+    if (newInserted > 0) {
+      try {
+        const zbConfig = await getZeroBounceConfig(pixel.user_id);
+        if (zbConfig && zbConfig.auto_verify !== false) {
+          // Fetch DB records for newly inserted visitors that have emails
+          const newVisitorIds = uniqueRows
+            .filter(r => r.email)
+            .slice(0, newInserted) // only new ones
+            .map(r => r.visitor_id);
+
+          if (newVisitorIds.length > 0) {
+            const { data: newDbVisitors } = await supabaseAdmin
+              .from('visitors')
+              .select('id, email')
+              .eq('pixel_id', pixel.id)
+              .in('visitor_id', newVisitorIds);
+
+            if (newDbVisitors && newDbVisitors.length > 0) {
+              const toVerify = newDbVisitors
+                .filter((v): v is { id: string; email: string } => !!v.email);
+
+              if (toVerify.length > 0) {
+                const verifyResult = await verifyAndUpdateVisitors(toVerify, pixel.user_id);
+
+                if (verifyResult.verified > 0) {
+                  console.log(`[visitors-api-fetcher] ZeroBounce verified ${verifyResult.verified} emails for pixel ${pixel.id}: ${verifyResult.valid} valid, ${verifyResult.invalid} invalid`);
+
+                  await logEvent({
+                    type: 'api',
+                    event_name: 'zerobounce_auto_verify',
+                    status: 'success',
+                    message: `Auto-verified ${verifyResult.verified} emails: ${verifyResult.valid} valid, ${verifyResult.invalid} invalid`,
+                    user_id: pixel.user_id,
+                    response_data: verifyResult,
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (zbErr) {
+        console.error(`[visitors-api-fetcher] ZeroBounce verification error for pixel ${pixel.id}:`, (zbErr as Error).message);
+      }
+    }
+
+    // Klaviyo auto-sync is handled separately by the push-klaviyo-events cron
     // which runs every 30 minutes and picks up new/updated visitors incrementally.
-    // This avoids duplicating that logic here and keeps the sync fast.
 
     return {
       totalFetched,
