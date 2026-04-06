@@ -53,6 +53,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const fbData = await fbResp.json();
 
     if (!fbResp.ok) {
+      const fbErrorMsg = fbData.error?.message || '';
+      const isTokenInvalid = fbData.error?.type === 'OAuthException' ||
+        fbErrorMsg.toLowerCase().includes('access token') ||
+        fbData.error?.code === 190;
+
       await logEvent({
         type: 'api',
         event_name: 'facebook_ad_accounts',
@@ -60,9 +65,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         message: 'Failed to fetch Facebook ad accounts',
         user_id: user.id,
         ip_address: getClientIp(req),
-        error_details: fbData.error?.message,
+        error_details: fbErrorMsg,
       });
-      return res.status(400).json({ error: 'Failed to fetch ad accounts', details: fbData.error?.message });
+
+      if (isTokenInvalid) {
+        return res.status(401).json({
+          error: 'Your Facebook access token is invalid or has expired. Please reconnect your Facebook account.',
+          token_expired: true,
+          details: fbErrorMsg,
+        });
+      }
+
+      return res.status(400).json({ error: 'Failed to fetch ad accounts', details: fbErrorMsg });
     }
 
     const accounts = (fbData.data || []).map((a: any) => ({

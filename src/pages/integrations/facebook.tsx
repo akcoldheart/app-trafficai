@@ -112,6 +112,8 @@ export default function FacebookIntegrationPage() {
       const data = await resp.json();
       if (resp.ok) {
         setAdAccounts(data.ad_accounts || []);
+      } else if (data.token_expired) {
+        setError(data.error || 'Your Facebook access token is invalid or has expired. Please reconnect your Facebook account.');
       }
     } catch (error) {
       console.error('Error fetching ad accounts:', error);
