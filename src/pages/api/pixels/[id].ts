@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, getUserProfile, logAuditAction, getEffectiveUserId } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, logAuditAction, getEffectiveUserId, checkIsAdmin } from '@/lib/api-helpers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Get user profile to check role
   const profile = await getUserProfile(user.id, req, res);
-  const isAdmin = profile.role === 'admin';
+  const isAdmin = await checkIsAdmin(profile);
   const effectiveUserId = await getEffectiveUserId(user.id);
 
   try {

@@ -75,6 +75,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const supabase = getServiceClient();
 
+  // Idempotency guard: skip if this event was already processed
+  const { data: existingLog } = await supabase
+    .from('system_logs')
+    .select('id')
+    .eq('type', 'stripe')
+    .eq('event_name', event.type)
+    .eq('status', 'success')
+    .contains('request_data', { event_id: event.id })
+    .limit(1);
+
+  if (existingLog && existingLog.length > 0) {
+    console.log(`Stripe webhook ${event.id} already processed, skipping`);
+    return res.status(200).json({ received: true, duplicate: true });
+  }
+
   try {
     switch (event.type) {
       case 'checkout.session.completed': {

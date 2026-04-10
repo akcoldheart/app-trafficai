@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser, getUserProfile, getEffectiveUserId } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, getEffectiveUserId, checkIsAdmin } from '@/lib/api-helpers';
 
 export const config = {
   maxDuration: 120,
@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Check if user is admin
   const profile = await getUserProfile(user.id, req, res);
-  const isAdmin = profile.role === 'admin';
+  const isAdmin = await checkIsAdmin(profile);
 
   const effectiveUserId = await getEffectiveUserId(user.id);
 

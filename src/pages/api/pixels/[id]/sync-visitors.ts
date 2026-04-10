@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, getUserProfile, getEffectiveUserId } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, getEffectiveUserId, checkIsAdmin } from '@/lib/api-helpers';
 import { fetchVisitorsFromApi } from '@/lib/visitors-api-fetcher';
 
 // Allow up to 5 minutes for large syncs (3000+ contacts)
@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const supabase = createClient(req, res);
   const profile = await getUserProfile(user.id, req, res);
-  const isAdmin = profile.role === 'admin';
+  const isAdmin = await checkIsAdmin(profile);
   const effectiveUserId = await getEffectiveUserId(user.id);
 
   try {

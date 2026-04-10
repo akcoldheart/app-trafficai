@@ -361,7 +361,31 @@ export function clearTeamContextCache(userId?: string) {
 }
 
 /**
- * Check if user is an admin
+ * Check if user is an admin using role_id (preferred) with string fallback.
+ * This is the recommended way to check admin status from an already-fetched profile.
+ */
+export async function checkIsAdmin(profile: UserProfile): Promise<boolean> {
+  // Check role_id first (database-driven RBAC)
+  if (profile.role_id) {
+    const supabase = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const { data: roleData } = await supabase
+      .from('roles')
+      .select('name')
+      .eq('id', profile.role_id)
+      .single();
+
+    return roleData?.name === 'admin';
+  }
+
+  // Fallback to string role for backward compatibility
+  return profile.role === 'admin';
+}
+
+/**
+ * Check if user is an admin (legacy — prefer checkIsAdmin with profile)
  */
 export async function isUserAdmin(
   userId: string,

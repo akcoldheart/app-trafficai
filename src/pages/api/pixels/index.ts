@@ -1,6 +1,21 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, getUserProfile, logAuditAction, getEffectiveUserId } from '@/lib/api-helpers';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { getAuthenticatedUser, getUserProfile, logAuditAction, getEffectiveUserId, checkIsAdmin } from '@/lib/api-helpers';
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+// Default pixel limits per plan (overridable via app_settings pixel_limit_{plan})
+const DEFAULT_PIXEL_LIMITS: Record<string, number> = {
+  trial: 1,
+  starter: 3,
+  growth: 5,
+  professional: 10,
+  enterprise: 50,
+};
 
 function generatePixelCode(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -17,13 +32,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const supabase = createClient(req, res);
   const effectiveUserId = await getEffectiveUserId(user.id);
+  const profile = await getUserProfile(user.id, req, res);
+  const isAdmin = await checkIsAdmin(profile);
 
   try {
     if (req.method === 'GET') {
-      // Check if user is admin
-      const profile = await getUserProfile(user.id, req, res);
-      const isAdmin = profile.role === 'admin';
-
       // Admins see all pixels, users see only their own
       let query = supabase
         .from('pixels')
@@ -50,6 +63,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (!name || !domain) {
         return res.status(400).json({ error: 'Name and domain are required' });
+      }
+
+      // Enforce pixel limit per plan (admins bypass)
+      if (!isAdmin) {
+        // Get user's current plan
+        const { data: userData } = await supabaseAdmin
+          .from('users')
+          .select('plan')
+          .eq('id', effectiveUserId)
+          .single();
+        const userPlan = userData?.plan || 'trial';
+
+        // Check app_settings for custom limit, fall back to defaults
+        const { data: limitSetting } = await supabaseAdmin
+          .from('app_settings')
+          .select('value')
+          .eq('key', `pixel_limit_${userPlan}`)
+          .single();
+
+        const maxPixels = limitSetting ? parseInt(limitSetting.value, 10) : (DEFAULT_PIXEL_LIMITS[userPlan] || 1);
+
+        // Count existing pixels for this user
+        const { count: currentCount } = await supabaseAdmin
+          .from('pixels')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', effectiveUserId);
+
+        if ((currentCount || 0) >= maxPixels) {
+          return res.status(403).json({
+            error: `Pixel limit reached. Your ${userPlan} plan allows up to ${maxPixels} pixels. Please upgrade to add more.`,
+          });
+        }
       }
 
       const pixelCode = generatePixelCode();

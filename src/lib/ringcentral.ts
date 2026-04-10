@@ -207,6 +207,6 @@ export function isWithinTimeWindow(filters: Record<string, any>): boolean {
     const currentTime = formatter.format(now); // "HH:MM"
     return currentTime >= start && currentTime <= end;
   } catch {
-    return true; // If timezone is invalid, allow sending
+    return false; // If timezone is invalid, block sending to prevent messages outside intended hours
   }
 }

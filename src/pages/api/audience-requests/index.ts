@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser, getUserProfile, createAdminNotification, logAuditAction, getEffectiveUserId } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, createAdminNotification, logAuditAction, getEffectiveUserId, checkIsAdmin } from '@/lib/api-helpers';
 
 const supabaseAdmin = createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'GET') {
       // Get user's role to determine access level
       const profile = await getUserProfile(user.id, req, res);
-      const isAdmin = profile.role === 'admin';
+      const isAdmin = await checkIsAdmin(profile);
 
       // Build query - admins see all, users see only their own
       // Use admin client to bypass RLS (team members need to see owner's data)
