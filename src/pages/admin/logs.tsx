@@ -95,16 +95,19 @@ export default function AdminLogs() {
     }
   }, [page, typeFilter, statusFilter, searchTerm]);
 
-  useEffect(() => {
-    if (!authLoading && userProfile?.role !== 'admin') {
-      router.push('/');
-      return;
-    }
+  const isAdmin = userProfile?.role === 'admin';
 
-    if (!authLoading && userProfile?.role === 'admin') {
+  useEffect(() => {
+    if (!authLoading && !isAdmin) {
+      router.push('/');
+    }
+  }, [authLoading, isAdmin, router]);
+
+  useEffect(() => {
+    if (!authLoading && isAdmin) {
       fetchLogs();
     }
-  }, [authLoading, userProfile, router, fetchLogs]);
+  }, [authLoading, isAdmin, fetchLogs]);
 
   const handleClearLogs = async (olderThan?: number) => {
     const actionKey = olderThan ? `older_${olderThan}` : 'all';
