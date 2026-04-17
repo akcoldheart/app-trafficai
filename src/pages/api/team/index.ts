@@ -52,15 +52,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      // Get owner profile
+      // Get owner profile and plan
       const { data: ownerProfile } = await supabaseAdmin
         .from('users')
-        .select('email, full_name')
+        .select('email, full_name, plan')
         .eq('id', user.id)
         .single();
 
+      // Dynamically resolve max seats from admin settings based on owner's current plan
+      const planKey = `team_seats_${ownerProfile?.plan || 'starter'}`;
+      const { data: seatSetting } = await supabaseAdmin
+        .from('app_settings')
+        .select('value')
+        .eq('key', planKey)
+        .single();
+
+      const dynamicMaxSeats = seatSetting ? parseInt(seatSetting.value, 10) : ownedTeam.max_seats;
+
+      // Update the stored max_seats if it differs from the current setting
+      if (dynamicMaxSeats !== ownedTeam.max_seats) {
+        await supabaseAdmin
+          .from('teams')
+          .update({ max_seats: dynamicMaxSeats })
+          .eq('id', ownedTeam.id);
+      }
+
       return res.status(200).json({
-        team: ownedTeam,
+        team: { ...ownedTeam, max_seats: dynamicMaxSeats },
         role: 'owner',
         members: memberProfiles || [],
         owner: {
@@ -70,7 +88,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
         seatUsage: {
           used: (memberProfiles?.length || 0) + 1, // +1 for owner
-          max: ownedTeam.max_seats,
+          max: dynamicMaxSeats,
         },
       });
     }
@@ -90,12 +108,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .single();
 
       if (team) {
-        // Fetch owner profile
+        // Fetch owner profile and plan
         const { data: ownerProfile } = await supabaseAdmin
           .from('users')
-          .select('id, email, full_name')
+          .select('id, email, full_name, plan')
           .eq('id', team.owner_user_id)
           .single();
+
+        // Dynamically resolve max seats from admin settings based on owner's current plan
+        const planKey = `team_seats_${ownerProfile?.plan || 'starter'}`;
+        const { data: seatSetting } = await supabaseAdmin
+          .from('app_settings')
+          .select('value')
+          .eq('key', planKey)
+          .single();
+
+        const dynamicMaxSeats = seatSetting ? parseInt(seatSetting.value, 10) : team.max_seats;
+
+        if (dynamicMaxSeats !== team.max_seats) {
+          await supabaseAdmin
+            .from('teams')
+            .update({ max_seats: dynamicMaxSeats })
+            .eq('id', team.id);
+        }
 
         // Fetch other members
         const { data: members } = await supabaseAdmin
@@ -120,13 +155,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         return res.status(200).json({
-          team,
+          team: { ...team, max_seats: dynamicMaxSeats },
           role: membership.role,
           members: memberProfiles || [],
           owner: ownerProfile,
           seatUsage: {
             used: (memberProfiles?.length || 0) + 1,
-            max: team.max_seats,
+            max: dynamicMaxSeats,
           },
         });
       }

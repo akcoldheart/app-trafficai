@@ -39,6 +39,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ error: 'You do not own a team' });
     }
 
+    // Dynamically resolve max seats from admin settings based on owner's current plan
+    const { data: ownerProfile } = await supabaseAdmin
+      .from('users')
+      .select('plan')
+      .eq('id', user.id)
+      .single();
+
+    const planKey = `team_seats_${ownerProfile?.plan || 'starter'}`;
+    const { data: seatSetting } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', planKey)
+      .single();
+
+    const maxSeats = seatSetting ? parseInt(seatSetting.value, 10) : team.max_seats;
+
     // Check seat limit
     const { count: memberCount } = await supabaseAdmin
       .from('team_members')
@@ -46,9 +62,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq('team_id', team.id);
 
     const totalUsed = (memberCount || 0) + 1; // +1 for owner
-    if (totalUsed >= team.max_seats) {
+    if (totalUsed >= maxSeats) {
       return res.status(400).json({
-        error: `Team seat limit reached (${team.max_seats}). Upgrade your plan to add more members.`,
+        error: `Team seat limit reached (${maxSeats}). Upgrade your plan to add more members.`,
       });
     }
 
