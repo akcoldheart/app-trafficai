@@ -124,6 +124,7 @@ export default function Settings() {
 
   // Team seats settings state
   const [teamSeatsSettings, setTeamSeatsSettings] = useState({
+    team_seats_trial: '1',
     team_seats_starter: '2',
     team_seats_growth: '5',
     team_seats_professional: '10',
@@ -2047,28 +2048,35 @@ export default function Settings() {
                   {editingTeamSeats ? (
                     <div>
                       <div className="row g-3 mb-3">
-                        <div className="col-md-3">
+                        <div className="col">
+                          <label className="form-label">Trial</label>
+                          <input type="number" className="form-control" min="1"
+                            value={teamSeatsSettings.team_seats_trial}
+                            onChange={(e) => setTeamSeatsSettings({ ...teamSeatsSettings, team_seats_trial: e.target.value })}
+                          />
+                        </div>
+                        <div className="col">
                           <label className="form-label">Starter</label>
                           <input type="number" className="form-control" min="1"
                             value={teamSeatsSettings.team_seats_starter}
                             onChange={(e) => setTeamSeatsSettings({ ...teamSeatsSettings, team_seats_starter: e.target.value })}
                           />
                         </div>
-                        <div className="col-md-3">
+                        <div className="col">
                           <label className="form-label">Growth</label>
                           <input type="number" className="form-control" min="1"
                             value={teamSeatsSettings.team_seats_growth}
                             onChange={(e) => setTeamSeatsSettings({ ...teamSeatsSettings, team_seats_growth: e.target.value })}
                           />
                         </div>
-                        <div className="col-md-3">
+                        <div className="col">
                           <label className="form-label">Professional</label>
                           <input type="number" className="form-control" min="1"
                             value={teamSeatsSettings.team_seats_professional}
                             onChange={(e) => setTeamSeatsSettings({ ...teamSeatsSettings, team_seats_professional: e.target.value })}
                           />
                         </div>
-                        <div className="col-md-3">
+                        <div className="col">
                           <label className="form-label">Enterprise</label>
                           <input type="number" className="form-control" min="1"
                             value={teamSeatsSettings.team_seats_enterprise}
@@ -2101,19 +2109,23 @@ export default function Settings() {
                     </div>
                   ) : (
                     <div className="row text-center">
-                      <div className="col-3">
+                      <div className="col">
+                        <div className="fw-bold h3 mb-0">{teamSeatsSettings.team_seats_trial}</div>
+                        <div className="text-muted small">Trial</div>
+                      </div>
+                      <div className="col">
                         <div className="fw-bold h3 mb-0">{teamSeatsSettings.team_seats_starter}</div>
                         <div className="text-muted small">Starter</div>
                       </div>
-                      <div className="col-3">
+                      <div className="col">
                         <div className="fw-bold h3 mb-0">{teamSeatsSettings.team_seats_growth}</div>
                         <div className="text-muted small">Growth</div>
                       </div>
-                      <div className="col-3">
+                      <div className="col">
                         <div className="fw-bold h3 mb-0">{teamSeatsSettings.team_seats_professional}</div>
                         <div className="text-muted small">Professional</div>
                       </div>
-                      <div className="col-3">
+                      <div className="col">
                         <div className="fw-bold h3 mb-0">{teamSeatsSettings.team_seats_enterprise}</div>
                         <div className="text-muted small">Enterprise</div>
                       </div>
