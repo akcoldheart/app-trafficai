@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Dynamically resolve max seats from admin settings based on owner's current plan
     const { data: ownerProfile } = await supabaseAdmin
       .from('users')
-      .select('plan')
+      .select('plan, trial_ends_at')
       .eq('id', user.id)
       .single();
 
@@ -103,13 +103,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Wait briefly for the auth trigger to create the users row
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Update the user's full_name in users table
+    // Sync plan + trial_ends_at from the team owner so the member inherits
+    // the owner's subscription. The handle_new_user() trigger seeded them with
+    // plan='trial' + 7-day trial_ends_at; without this overwrite the member
+    // would appear trial-expired a week later (migration 065).
+    const memberUpdates: Record<string, unknown> = {
+      plan: ownerProfile?.plan ?? 'trial',
+      trial_ends_at: ownerProfile?.trial_ends_at ?? null,
+    };
     if (fullName) {
-      await supabaseAdmin
-        .from('users')
-        .update({ full_name: fullName })
-        .eq('id', newUserId);
+      memberUpdates.full_name = fullName;
     }
+    await supabaseAdmin
+      .from('users')
+      .update(memberUpdates)
+      .eq('id', newUserId);
 
     // Add as team member
     const { error: memberError } = await supabaseAdmin

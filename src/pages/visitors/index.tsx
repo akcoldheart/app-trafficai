@@ -96,11 +96,13 @@ interface VisitorDetails {
 }
 
 export default function Visitors() {
-  const { userProfile } = useAuth();
+  const { userProfile, teamContext } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
 
   const isPlanExpired = useMemo(() => {
     if (!userProfile) return false;
+    // Team members inherit the owner's plan; their own trial fields are stale.
+    if (teamContext?.isMember) return false;
     const currentPlan = userProfile.plan || 'trial';
     if (currentPlan !== 'trial') return false;
     const trialEnd = userProfile.trial_ends_at
@@ -110,7 +112,7 @@ export default function Visitors() {
         : null;
     if (!trialEnd) return false;
     return trialEnd.getTime() <= Date.now();
-  }, [userProfile]);
+  }, [userProfile, teamContext]);
 
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [pixels, setPixels] = useState<Pixel[]>([]);
