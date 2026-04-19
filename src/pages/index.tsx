@@ -194,39 +194,56 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="col-lg-5 d-none d-lg-block">
-              <div className="row text-white text-center" style={{ marginRight: '2rem' }}>
+              <div
+                className="d-flex text-white text-center align-items-stretch justify-content-end"
+                style={{ marginRight: '2rem', gap: '0.5rem' }}
+              >
                 {isAdmin ? (
                   <>
-                    <div className="col-3">
-                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.totalUsers || 0}</div>
-                      <div className="opacity-75 small">Users</div>
+                    <div className="flex-fill px-2 py-1" style={{ minWidth: 0 }}>
+                      <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.25rem, 1.9vw, 1.875rem)', lineHeight: 1.1 }}>
+                        {stats?.overview.totalUsers || 0}
+                      </div>
+                      <div className="opacity-75 small text-nowrap">Users</div>
                     </div>
-                    <div className="col-3">
-                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.activePixels || 0}</div>
-                      <div className="opacity-75 small">Pixels</div>
+                    <div className="flex-fill px-2 py-1 border-start border-light border-opacity-25" style={{ minWidth: 0 }}>
+                      <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.25rem, 1.9vw, 1.875rem)', lineHeight: 1.1 }}>
+                        {stats?.overview.activePixels || 0}
+                      </div>
+                      <div className="opacity-75 small text-nowrap">Pixels</div>
                     </div>
-                    <div className="col-3">
-                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.totalVisitors?.toLocaleString() || 0}</div>
-                      <div className="opacity-75 small">Visitors</div>
+                    <div className="flex-fill px-2 py-1 border-start border-light border-opacity-25" style={{ minWidth: 0 }}>
+                      <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.25rem, 1.9vw, 1.875rem)', lineHeight: 1.1 }}>
+                        {stats?.overview.totalVisitors?.toLocaleString() || 0}
+                      </div>
+                      <div className="opacity-75 small text-nowrap">Visitors</div>
                     </div>
-                    <div className="col-3">
-                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.totalEvents?.toLocaleString() || 0}</div>
-                      <div className="opacity-75 small">Events</div>
+                    <div className="flex-fill px-2 py-1 border-start border-light border-opacity-25" style={{ minWidth: 0 }}>
+                      <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.25rem, 1.9vw, 1.875rem)', lineHeight: 1.1 }}>
+                        {stats?.overview.totalEvents?.toLocaleString() || 0}
+                      </div>
+                      <div className="opacity-75 small text-nowrap">Events</div>
                     </div>
                   </>
                 ) : (
                   <>
-                    <div className="col-4">
-                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.totalVisitors?.toLocaleString() || 0}</div>
-                      <div className="opacity-75 small">Total Visitors</div>
+                    <div className="flex-fill px-2 py-1" style={{ minWidth: 0 }}>
+                      <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.5rem, 2.2vw, 2.25rem)', lineHeight: 1.1 }}>
+                        {stats?.overview.totalVisitors?.toLocaleString() || 0}
+                      </div>
+                      <div className="opacity-75 small text-nowrap">Total Visitors</div>
                     </div>
-                    <div className="col-4">
-                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.totalEvents?.toLocaleString() || 0}</div>
-                      <div className="opacity-75 small">Total Events</div>
+                    <div className="flex-fill px-2 py-1 border-start border-light border-opacity-25" style={{ minWidth: 0 }}>
+                      <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.5rem, 2.2vw, 2.25rem)', lineHeight: 1.1 }}>
+                        {stats?.overview.totalEvents?.toLocaleString() || 0}
+                      </div>
+                      <div className="opacity-75 small text-nowrap">Total Events</div>
                     </div>
-                    <div className="col-4">
-                      <div className="display-6 fw-bold" style={{ whiteSpace: 'nowrap' }}>{stats?.overview.avgLeadScore || 0}</div>
-                      <div className="opacity-75 small">Avg Score</div>
+                    <div className="flex-fill px-2 py-1 border-start border-light border-opacity-25" style={{ minWidth: 0 }}>
+                      <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.5rem, 2.2vw, 2.25rem)', lineHeight: 1.1 }}>
+                        {stats?.overview.avgLeadScore || 0}
+                      </div>
+                      <div className="opacity-75 small text-nowrap">Avg Score</div>
                     </div>
                   </>
                 )}
