@@ -3,7 +3,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser, getUserProfile, getEffectiveUserId, checkIsAdmin } from '@/lib/api-helpers';
 
 export const config = {
-  maxDuration: 120,
+  maxDuration: 300,
 };
 
 const supabaseAdmin = createServiceClient(
@@ -95,21 +95,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let allContacts: Record<string, unknown>[] = [];
 
     if (contactCount && contactCount > 0) {
-      // Fetch in batches of 1000
+      // Keyset pagination by id (uses PK index, avoids sort+offset blowup on large audiences)
       const BATCH = 1000;
-      for (let offset = 0; offset < contactCount; offset += BATCH) {
-        const { data: batch } = await supabaseAdmin
+      let lastId: string | null = null;
+      while (true) {
+        let query = supabaseAdmin
           .from('audience_contacts')
           .select('*')
           .eq('audience_id', id)
-          .order('created_at', { ascending: true })
-          .range(offset, offset + BATCH - 1);
+          .order('id', { ascending: true })
+          .limit(BATCH);
+        if (lastId) query = query.gt('id', lastId);
 
-        if (batch) {
-          for (const row of batch) {
-            allContacts.push(flattenContactRow(row));
-          }
+        const { data: batch, error: batchError } = await query;
+        if (batchError) {
+          console.error('Export batch fetch error:', batchError);
+          return res.status(500).json({ error: 'Failed to fetch contacts' });
         }
+        if (!batch || batch.length === 0) break;
+
+        for (const row of batch) {
+          allContacts.push(flattenContactRow(row));
+        }
+        lastId = batch[batch.length - 1].id as string;
+        if (batch.length < BATCH) break;
       }
     } else {
       // Fallback: old JSON storage
