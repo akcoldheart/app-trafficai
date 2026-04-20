@@ -4,6 +4,9 @@ import { getAuthenticatedUser, getUserProfile, getEffectiveUserId, checkIsAdmin 
 
 export const config = {
   maxDuration: 300,
+  api: {
+    responseLimit: false,
+  },
 };
 
 const supabaseAdmin = createServiceClient(
@@ -85,6 +88,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const audienceName = request.name || 'Audience';
+    const filename = `${audienceName.replace(/[^a-z0-9]/gi, '_')}_export.csv`;
 
     // Check audience_contacts table first (new storage)
     const { count: contactCount } = await supabaseAdmin
@@ -92,75 +96,124 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select('id', { count: 'exact', head: true })
       .eq('audience_id', id);
 
-    let allContacts: Record<string, unknown>[] = [];
+    const sortColumns = (cols: Set<string>) => {
+      cols.delete('uuid');
+      return Array.from(cols).sort((a, b) => {
+        const ai = EXPORT_PRIORITY.indexOf(a);
+        const bi = EXPORT_PRIORITY.indexOf(b);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        return a.localeCompare(b);
+      });
+    };
 
-    if (contactCount && contactCount > 0) {
-      // Keyset pagination by id (uses PK index, avoids sort+offset blowup on large audiences)
-      const BATCH = 1000;
+    // Legacy path: contacts stored as JSON blob in audience_requests.form_data
+    if (!contactCount || contactCount === 0) {
+      const formData = request.form_data as Record<string, unknown>;
+      const manualAudience = formData?.manual_audience as Record<string, unknown>;
+      const legacyContacts = (manualAudience?.contacts || []) as Record<string, unknown>[];
+
+      if (legacyContacts.length === 0) {
+        return res.status(400).json({ error: 'No data to export' });
+      }
+
+      const columns = new Set<string>();
+      legacyContacts.forEach((r) => Object.keys(r).forEach((k) => columns.add(k)));
+      const sorted = sortColumns(columns);
+
+      const header = ['"S.No."', ...sorted.map((c) => escapeCsvValue(formatColumnName(c)))].join(',');
+      const rows = legacyContacts.map((r, i) => [`"${i + 1}"`, ...sorted.map((c) => escapeCsvValue(r[c]))].join(','));
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.status(200).send([header, ...rows].join('\n'));
+    }
+
+    // Streaming path for audience_contacts table.
+    // Two-pass keyset pagination: pass 1 discovers columns, pass 2 streams rows.
+    // Memory stays bounded to ~1 batch regardless of audience size.
+    const BATCH = 1000;
+
+    // Pass 1: discover all columns (select only needed fields — data JSONB + known text cols)
+    const columnProjection =
+      'id, data, email, full_name, first_name, last_name, company, job_title, phone, city, state, country, linkedin_url, seniority, department';
+    const columns = new Set<string>();
+    {
       let lastId: string | null = null;
       while (true) {
-        let query = supabaseAdmin
+        let q = supabaseAdmin
           .from('audience_contacts')
-          .select('*')
+          .select(columnProjection)
           .eq('audience_id', id)
           .order('id', { ascending: true })
           .limit(BATCH);
-        if (lastId) query = query.gt('id', lastId);
-
-        const { data: batch, error: batchError } = await query;
+        if (lastId) q = q.gt('id', lastId);
+        const { data: batch, error: batchError } = await q;
         if (batchError) {
-          console.error('Export batch fetch error:', batchError);
-          return res.status(500).json({ error: 'Failed to fetch contacts' });
+          console.error('Export column-discovery error:', batchError);
+          return res.status(500).json({ error: 'Failed to discover export columns' });
         }
         if (!batch || batch.length === 0) break;
-
         for (const row of batch) {
-          allContacts.push(flattenContactRow(row));
+          const flat = flattenContactRow(row as Record<string, unknown>);
+          for (const k of Object.keys(flat)) columns.add(k);
         }
         lastId = batch[batch.length - 1].id as string;
         if (batch.length < BATCH) break;
       }
-    } else {
-      // Fallback: old JSON storage
-      const formData = request.form_data as Record<string, unknown>;
-      const manualAudience = formData?.manual_audience as Record<string, unknown>;
-      allContacts = (manualAudience?.contacts || []) as Record<string, unknown>[];
     }
 
-    if (allContacts.length === 0) {
-      return res.status(400).json({ error: 'No data to export' });
-    }
-
-    // Collect all columns
-    const allColumns = new Set<string>();
-    allContacts.forEach((r) => Object.keys(r).forEach((k) => allColumns.add(k)));
-    allColumns.delete('uuid');
-
-    const sortedColumns = Array.from(allColumns).sort((a, b) => {
-      const ai = EXPORT_PRIORITY.indexOf(a);
-      const bi = EXPORT_PRIORITY.indexOf(b);
-      if (ai !== -1 && bi !== -1) return ai - bi;
-      if (ai !== -1) return -1;
-      if (bi !== -1) return 1;
-      return a.localeCompare(b);
-    });
-
-    // Build CSV
-    const headerRow = ['"S.No."', ...sortedColumns.map(c => escapeCsvValue(formatColumnName(c)))].join(',');
-    const dataRows = allContacts.map((record, i) => {
-      const values = sortedColumns.map(col => escapeCsvValue(record[col]));
-      return [`"${i + 1}"`, ...values].join(',');
-    });
-
-    const csv = [headerRow, ...dataRows].join('\n');
-
-    const filename = `${audienceName.replace(/[^a-z0-9]/gi, '_')}_export.csv`;
+    const sorted = sortColumns(columns);
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return res.status(200).send(csv);
+    res.setHeader('Transfer-Encoding', 'chunked');
+    res.status(200);
+
+    const headerRow = ['"S.No."', ...sorted.map((c) => escapeCsvValue(formatColumnName(c)))].join(',');
+    res.write(headerRow);
+    if (typeof (res as unknown as { flushHeaders?: () => void }).flushHeaders === 'function') {
+      (res as unknown as { flushHeaders: () => void }).flushHeaders();
+    }
+
+    // Pass 2: stream rows
+    let sno = 0;
+    let lastId: string | null = null;
+    while (true) {
+      let q = supabaseAdmin
+        .from('audience_contacts')
+        .select('*')
+        .eq('audience_id', id)
+        .order('id', { ascending: true })
+        .limit(BATCH);
+      if (lastId) q = q.gt('id', lastId);
+      const { data: batch, error: batchError } = await q;
+      if (batchError) {
+        console.error('Export row-stream error:', batchError);
+        res.end();
+        return;
+      }
+      if (!batch || batch.length === 0) break;
+
+      const chunkLines: string[] = [];
+      for (const row of batch) {
+        sno++;
+        const flat = flattenContactRow(row as Record<string, unknown>);
+        const values = sorted.map((c) => escapeCsvValue(flat[c]));
+        chunkLines.push([`"${sno}"`, ...values].join(','));
+      }
+      res.write('\n' + chunkLines.join('\n'));
+      lastId = batch[batch.length - 1].id as string;
+      if (batch.length < BATCH) break;
+    }
+
+    res.end();
   } catch (error) {
     console.error('Export error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    res.end();
   }
 }
