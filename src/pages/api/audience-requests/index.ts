@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser, getUserProfile, createAdminNotification, logAuditAction, getEffectiveUserId, checkIsAdmin } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, createAdminNotification, logAuditAction, getEffectiveUserId, checkIsAdmin, assertCanDeleteTeamResources } from '@/lib/api-helpers';
 
 const supabaseAdmin = createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -101,8 +101,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Invalid request type' });
       }
 
-      // For delete requests, require audience_id in form_data
+      // For delete requests, require audience_id in form_data and block team members
       if (request_type === 'delete') {
+        if (!(await assertCanDeleteTeamResources(user.id, res))) return;
+
         const audienceId = (form_data as Record<string, unknown>)?.audience_id;
         if (!audienceId) {
           return res.status(400).json({ error: 'audience_id is required for delete requests' });

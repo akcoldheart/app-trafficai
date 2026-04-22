@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser, getUserProfile, getEffectiveUserId, logAuditAction, checkIsAdmin } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, getEffectiveUserId, logAuditAction, checkIsAdmin, assertCanDeleteTeamResources } from '@/lib/api-helpers';
 
 const supabaseAdmin = createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,6 +19,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (!id || typeof id !== 'string') {
     return res.status(400).json({ error: 'Audience ID is required' });
+  }
+
+  if (req.method === 'DELETE') {
+    if (!(await assertCanDeleteTeamResources(user.id, res))) return;
   }
 
   try {

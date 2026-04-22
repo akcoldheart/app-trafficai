@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, getUserProfile, logAuditAction, getEffectiveUserId, checkIsAdmin } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserProfile, logAuditAction, getEffectiveUserId, checkIsAdmin, assertCanDeleteTeamResources } from '@/lib/api-helpers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
@@ -82,6 +82,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'DELETE') {
+      // Block team members from deleting shared resources
+      if (!(await assertCanDeleteTeamResources(user.id, res))) return;
+
       // Delete pixel - admin can delete any, user can only delete their own
 
       // First, check if the pixel exists and user has permission

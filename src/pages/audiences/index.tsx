@@ -59,6 +59,7 @@ export default function Audiences() {
   const router = useRouter();
   const { userProfile, teamContext } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
+  const isTeamMemberRestricted = teamContext?.teamRole === 'member';
 
   const isPlanExpired = useMemo(() => {
     if (!userProfile) return false;
@@ -1291,17 +1292,19 @@ export default function Audiences() {
                                         <IconUserShare className="icon icon-sm" />
                                       </button>
                                     )}
-                                    <button
-                                      className="btn btn-sm btn-outline-danger"
-                                      onClick={() => {
-                                        setDeleteId(id);
-                                        setDeleteName(audience.name || 'Unnamed Audience');
-                                        setDeleteIsManual(!!audience.isManual);
-                                        setShowDeleteModal(true);
-                                      }}
-                                    >
-                                      <IconTrash className="icon icon-sm" />
-                                    </button>
+                                    {!isTeamMemberRestricted && (
+                                      <button
+                                        className="btn btn-sm btn-outline-danger"
+                                        onClick={() => {
+                                          setDeleteId(id);
+                                          setDeleteName(audience.name || 'Unnamed Audience');
+                                          setDeleteIsManual(!!audience.isManual);
+                                          setShowDeleteModal(true);
+                                        }}
+                                      >
+                                        <IconTrash className="icon icon-sm" />
+                                      </button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>

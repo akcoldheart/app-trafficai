@@ -374,7 +374,7 @@ export default function TeamPage() {
                                     <option value="admin">Admin</option>
                                   </select>
                                   {updatingRoleId === member.id && (
-                                    <IconLoader2 className="icon-tabler-loading ms-2" size={16} />
+                                    <IconLoader2 className="ms-2" size={16} style={{ animation: 'spin 1s linear infinite' }} />
                                   )}
                                 </div>
                               ) : (
@@ -515,8 +515,8 @@ export default function TeamPage() {
                         <div className="mt-3 text-muted" style={{ fontSize: '13px' }}>
                           This creates a login account for the team member. Share the email and password with them so they can log in.
                           <br />
-                          <strong>Member:</strong> Can view and use shared data but cannot delete resources.{' '}
-                          <strong>Admin:</strong> Same as Member with additional permissions.
+                          <strong>Member:</strong> Can view shared data and submit pixel/audience requests, but cannot delete pixels or audiences.{' '}
+                          <strong>Admin:</strong> Full access — same permissions as the team owner.
                         </div>
                       </form>
                     </div>
@@ -552,6 +552,7 @@ export default function TeamPage() {
           )}
         </div>
       </div>
+      <style jsx>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </Layout>
   );
 }

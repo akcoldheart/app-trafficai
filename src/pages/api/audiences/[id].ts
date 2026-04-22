@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser, getUserApiKey, logAuditAction, getEffectiveUserId } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getUserApiKey, logAuditAction, getEffectiveUserId, assertCanDeleteTeamResources } from '@/lib/api-helpers';
 
 const TRAFFIC_AI_API_URL = process.env.TRAFFIC_AI_API_URL;
 
@@ -46,6 +46,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'DELETE') {
+      if (!(await assertCanDeleteTeamResources(user.id, res))) return;
+
       // Delete audience
       const response = await fetch(`${TRAFFIC_AI_API_URL}/audiences/${id}`, {
         method: 'DELETE',

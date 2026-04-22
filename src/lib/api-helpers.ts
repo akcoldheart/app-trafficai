@@ -350,6 +350,26 @@ export async function getTeamContext(userId: string): Promise<TeamContext> {
 }
 
 /**
+ * Block team members (role='member') from destructive actions.
+ * Team admins are treated like the team owner and pass through.
+ * Solo users (no team) also pass through.
+ * Returns true if the caller may proceed; false after writing a 403 response.
+ */
+export async function assertCanDeleteTeamResources(
+  userId: string,
+  res: NextApiResponse
+): Promise<boolean> {
+  const ctx = await getTeamContext(userId);
+  if (ctx.isTeamMember && ctx.teamRole === 'member') {
+    res.status(403).json({
+      error: 'Team members cannot delete shared resources. Ask your team owner or admin.',
+    });
+    return false;
+  }
+  return true;
+}
+
+/**
  * Clear team context cache for a user (call after team membership changes)
  */
 export function clearTeamContextCache(userId?: string) {

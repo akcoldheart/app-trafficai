@@ -39,8 +39,9 @@ interface UserOption {
 
 export default function Pixels() {
   const router = useRouter();
-  const { userProfile } = useAuth();
+  const { userProfile, teamContext } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
+  const isTeamMemberRestricted = teamContext?.teamRole === 'member';
 
   const [pixels, setPixels] = useState<Pixel[]>([]);
   const [pixelRequests, setPixelRequests] = useState<PixelRequest[]>([]);
@@ -1007,9 +1008,11 @@ export default function Pixels() {
                   </div>
                 </div>
                 <div className="card-actions">
-                  <button className="btn btn-ghost-danger btn-sm" onClick={() => handleDeletePixel(selectedPixel.id)}>
-                    <IconTrash size={16} className="me-1" />Delete
-                  </button>
+                  {!isTeamMemberRestricted && (
+                    <button className="btn btn-ghost-danger btn-sm" onClick={() => handleDeletePixel(selectedPixel.id)}>
+                      <IconTrash size={16} className="me-1" />Delete
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="card-body">
