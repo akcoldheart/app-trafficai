@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import {
@@ -59,6 +59,7 @@ export default function Sidebar() {
   const router = useRouter();
   const { user, userProfile, userMenuItems, teamContext } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   const isAdmin = userProfile?.role === 'admin';
   const isTeamMember = teamContext?.isMember === true;
 
@@ -66,6 +67,35 @@ export default function Sidebar() {
   const visibleMenuItems = useMemo(() => {
     return userMenuItems;
   }, [userMenuItems]);
+
+  // Poll unread chat conversation count for admins
+  const fetchUnreadChatCount = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const res = await fetch('/api/chat/conversations/unread');
+      if (!res.ok) return;
+      const data = await res.json();
+      setUnreadChatCount(data.count || 0);
+    } catch {
+      // ignore network errors — badge just won't update this tick
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setUnreadChatCount(0);
+      return;
+    }
+    fetchUnreadChatCount();
+    const interval = setInterval(fetchUnreadChatCount, 30000);
+    return () => clearInterval(interval);
+  }, [isAdmin, fetchUnreadChatCount]);
+
+  // Refresh count on route change so navigating into/out of /chat reflects read state
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetchUnreadChatCount();
+  }, [isAdmin, router.asPath, fetchUnreadChatCount]);
 
   // Get display name from user metadata or email
   const getUserDisplayName = () => {
@@ -172,16 +202,30 @@ export default function Sidebar() {
         {/* Sidebar Menu */}
         <div className="collapse navbar-collapse" id="sidebar-menu">
           <ul className="navbar-nav pt-lg-3" data-tour="sidebar-nav">
-            {visibleMenuItems.map((item) => (
-              <li key={item.id} className={`nav-item ${isActive(item.href) ? 'active' : ''}`}>
-                <Link href={item.href} className={`nav-link ${isActive(item.href) ? 'active' : ''}`} data-tour={`nav-${item.href === '/' ? 'dashboard' : item.href.replace(/^\//, '').replace(/\//g, '-')}`}>
-                  <span className="nav-link-icon d-md-none d-lg-inline-block">
-                    {getIcon(item.icon)}
-                  </span>
-                  <span className="nav-link-title">{item.name}</span>
-                </Link>
-              </li>
-            ))}
+            {visibleMenuItems.map((item) => {
+              const showChatBadge = isAdmin && item.href === '/chat' && unreadChatCount > 0;
+              return (
+                <li key={item.id} className={`nav-item ${isActive(item.href) ? 'active' : ''}`}>
+                  <Link href={item.href} className={`nav-link ${isActive(item.href) ? 'active' : ''}`} data-tour={`nav-${item.href === '/' ? 'dashboard' : item.href.replace(/^\//, '').replace(/\//g, '-')}`}>
+                    <span className="nav-link-icon d-md-none d-lg-inline-block">
+                      {getIcon(item.icon)}
+                    </span>
+                    <span className="nav-link-title d-flex align-items-center justify-content-between w-100">
+                      <span>{item.name}</span>
+                      {showChatBadge && (
+                        <span
+                          className="badge bg-danger text-white ms-2"
+                          style={{ fontSize: '11px', minWidth: '20px', padding: '3px 6px' }}
+                          title={`${unreadChatCount} unread ${unreadChatCount === 1 ? 'message' : 'messages'}`}
+                        >
+                          {unreadChatCount > 99 ? '99+' : unreadChatCount}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
 
           {/* User Profile Section at Bottom */}
