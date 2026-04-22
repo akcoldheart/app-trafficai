@@ -210,10 +210,7 @@ export default function Sidebar() {
                     <span className="nav-link-icon d-md-none d-lg-inline-block">
                       {getIcon(item.icon)}
                     </span>
-                    <span
-                      className="nav-link-title"
-                      style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-                    >
+                    <span className="nav-link-title">
                       <span>{item.name}</span>
                       {showChatBadge && (
                         <span

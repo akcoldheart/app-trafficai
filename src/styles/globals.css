@@ -120,6 +120,10 @@ body {
 
 .navbar-vertical .nav-link .nav-link-title {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
 }
 
 /* Sidebar styling for purple theme (legacy support) */
