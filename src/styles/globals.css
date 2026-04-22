@@ -256,6 +256,14 @@ body {
   cursor: pointer;
 }
 
+/* Global spin keyframes — used by inline `animation: 'spin 1s linear infinite'`
+   on IconLoader2 spinners across the app. Defined globally (not inside styled-jsx)
+   so the keyframe name is not scoped and inline styles can reference it by name. */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Sidebar logo visibility fix - make black logo white on dark sidebar */
 .navbar-vertical .navbar-brand-image,
 .navbar-vertical.navbar-dark .navbar-brand-image,

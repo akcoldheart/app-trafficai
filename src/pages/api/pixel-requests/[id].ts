@@ -1,6 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, getUserProfile, logAuditAction, checkIsAdmin } from '@/lib/api-helpers';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { getAuthenticatedUser, getUserProfile, logAuditAction, checkIsAdmin, getEffectiveUserId } from '@/lib/api-helpers';
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
@@ -11,14 +16,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Request ID is required' });
   }
 
-  const supabase = createClient(req, res);
   const profile = await getUserProfile(user.id, req, res);
   const isAdmin = await checkIsAdmin(profile);
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   try {
     if (req.method === 'GET') {
-      // Get single pixel request
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('pixel_requests')
         .select('*, user:users!pixel_requests_user_id_fkey(email)')
         .eq('id', id)
@@ -32,8 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: 'Failed to fetch pixel request' });
       }
 
-      // Check access
-      if (!isAdmin && data.user_id !== user.id) {
+      if (!isAdmin && data.user_id !== effectiveUserId) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
@@ -41,8 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'DELETE') {
-      // Only allow deleting own pending requests (or admin can delete any)
-      const { data: existing, error: fetchError } = await supabase
+      const { data: existing, error: fetchError } = await supabaseAdmin
         .from('pixel_requests')
         .select('user_id, status')
         .eq('id', id)
@@ -55,9 +57,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: 'Failed to fetch pixel request' });
       }
 
-      // Check permissions
       if (!isAdmin) {
-        if (existing.user_id !== user.id) {
+        if (existing.user_id !== effectiveUserId) {
           return res.status(403).json({ error: 'Access denied' });
         }
         if (existing.status !== 'pending') {
@@ -65,7 +66,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('pixel_requests')
         .delete()
         .eq('id', id);

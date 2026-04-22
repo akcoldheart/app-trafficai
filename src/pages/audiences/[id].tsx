@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
 import { TrafficAPI } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   IconArrowLeft, IconRefresh, IconTrash, IconDownload, IconEye,
   IconUser, IconMail, IconPhone, IconBuilding, IconBrandLinkedin,
@@ -17,6 +18,8 @@ interface AudienceRecord {
 export default function AudienceView() {
   const router = useRouter();
   const { id } = router.query;
+  const { teamContext } = useAuth();
+  const isTeamMemberRestricted = teamContext?.teamRole === 'member';
 
   const [audienceName, setAudienceName] = useState('Audience');
   const [records, setRecords] = useState<AudienceRecord[]>([]);
@@ -255,10 +258,12 @@ export default function AudienceView() {
                 <IconArrowLeft className="icon" />
                 Back to Audiences
               </Link>
-              <button className="btn btn-outline-danger" onClick={() => setShowDeleteModal(true)}>
-                <IconTrash className="icon" />
-                Delete
-              </button>
+              {!isTeamMemberRestricted && (
+                <button className="btn btn-outline-danger" onClick={() => setShowDeleteModal(true)}>
+                  <IconTrash className="icon" />
+                  Delete
+                </button>
+              )}
             </div>
           </div>
         </div>
