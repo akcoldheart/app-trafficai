@@ -210,12 +210,12 @@ export default function Sidebar() {
                     <span className="nav-link-icon d-md-none d-lg-inline-block">
                       {getIcon(item.icon)}
                     </span>
-                    <span className="nav-link-title d-flex align-items-center justify-content-between w-100">
+                    <span className="nav-link-title d-inline-flex align-items-center">
                       <span>{item.name}</span>
                       {showChatBadge && (
                         <span
                           className="badge bg-danger text-white ms-2"
-                          style={{ fontSize: '11px', minWidth: '20px', padding: '3px 6px' }}
+                          style={{ fontSize: '11px', minWidth: '20px', padding: '3px 6px', lineHeight: 1 }}
                           title={`${unreadChatCount} unread ${unreadChatCount === 1 ? 'message' : 'messages'}`}
                         >
                           {unreadChatCount > 99 ? '99+' : unreadChatCount}
