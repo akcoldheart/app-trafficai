@@ -118,12 +118,31 @@ body {
   opacity: 1;
 }
 
+/* Sidebar label — do NOT stretch. We want `[icon] Messages [badge]` tight-packed.
+   Tabler/Bootstrap default would be content-sized, but previous customization tried
+   flex: 1 which stretched the span and pushed any trailing badge to the far right. */
 .navbar-vertical .nav-link .nav-link-title {
-  flex: 1;
-  display: flex;
+  flex: 0 1 auto !important;
+}
+
+/* Unread-message badge sits as a direct sibling of .nav-link-title, inheriting the
+   parent .nav-link's flex gap (0.75rem). Keep the pill compact and vertically centered. */
+.navbar-vertical .nav-link .sidebar-unread-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 0.5rem;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: -4px;
+  background: #e03131;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 10px;
+  white-space: nowrap;
 }
 
 /* Sidebar styling for purple theme (legacy support) */
