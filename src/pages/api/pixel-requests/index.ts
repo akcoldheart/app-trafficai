@@ -1,12 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createClient } from '@/lib/supabase/api';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser, getUserProfile, createAdminNotification, logAuditAction, getEffectiveUserId, checkIsAdmin } from '@/lib/api-helpers';
+
+const supabaseAdmin = createServiceClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
-  const supabase = createClient(req, res);
   const effectiveUserId = await getEffectiveUserId(user.id);
 
   try {
@@ -16,7 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const isAdmin = await checkIsAdmin(profile);
 
       // Build query - admins see all, users see only their own
-      let query = supabase
+      // Use admin client to bypass RLS (team members need to see owner's data)
+      let query = supabaseAdmin
         .from('pixel_requests')
         .select('*, user:users!pixel_requests_user_id_fkey(email)')
         .order('created_at', { ascending: false });
@@ -52,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Get user email for notification
       const profile = await getUserProfile(user.id, req, res);
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('pixel_requests')
         .insert({
           user_id: effectiveUserId,
