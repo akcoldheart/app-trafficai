@@ -8,7 +8,7 @@ const supabaseAdmin = createClient(
 );
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'DELETE') {
+  if (req.method !== 'DELETE' && req.method !== 'PATCH') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -40,15 +40,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    // Allow: team owner removing a member, OR member removing themselves (leaving)
     const isOwner = team.owner_user_id === user.id;
     const isSelf = membership.user_id === user.id;
 
+    if (req.method === 'PATCH') {
+      if (!isOwner) {
+        return res.status(403).json({ error: 'Only the team owner can change member roles' });
+      }
+
+      const { role } = (req.body ?? {}) as { role?: string };
+      if (role !== 'admin' && role !== 'member') {
+        return res.status(400).json({ error: 'Role must be "admin" or "member"' });
+      }
+
+      const { data: updated, error } = await supabaseAdmin
+        .from('team_members')
+        .update({ role })
+        .eq('id', memberId)
+        .select('id, role')
+        .single();
+
+      if (error) {
+        console.error('Error updating team member role:', error);
+        return res.status(500).json({ error: 'Failed to update member role' });
+      }
+
+      clearTeamContextCache(membership.user_id);
+
+      return res.status(200).json({
+        success: true,
+        member: updated,
+        message: 'Member role updated',
+      });
+    }
+
+    // DELETE: allow team owner removing a member, OR member removing themselves (leaving)
     if (!isOwner && !isSelf) {
       return res.status(403).json({ error: 'Only the team owner can remove members' });
     }
 
-    // Remove the member
     const { error } = await supabaseAdmin
       .from('team_members')
       .delete()
@@ -59,7 +89,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ error: 'Failed to remove member' });
     }
 
-    // Clear team context cache for the removed user
     clearTeamContextCache(membership.user_id);
 
     return res.status(200).json({
@@ -67,7 +96,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       message: isSelf ? 'You have left the team' : 'Member removed from team',
     });
   } catch (error) {
-    console.error('Error removing team member:', error);
+    console.error('Error updating team member:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

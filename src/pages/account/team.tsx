@@ -49,6 +49,7 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
   const [creatingTeam, setCreatingTeam] = useState(false);
 
   // Add member form
@@ -134,6 +135,31 @@ export default function TeamPage() {
       setMessage({ type: 'error', text: 'Failed to add member' });
     } finally {
       setAddingMember(false);
+    }
+  };
+
+  const updateMemberRole = async (memberId: string, role: 'admin' | 'member') => {
+    setUpdatingRoleId(memberId);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/team/members/${memberId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage({ type: 'error', text: data.error || 'Failed to update role' });
+        return;
+      }
+
+      setMessage({ type: 'success', text: data.message || 'Member role updated' });
+      await fetchTeamData();
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update role' });
+    } finally {
+      setUpdatingRoleId(null);
     }
   };
 
@@ -335,9 +361,27 @@ export default function TeamPage() {
                             <td>{member.full_name || 'No name'}</td>
                             <td className="text-muted">{member.email}</td>
                             <td>
-                              <span className={`badge ${member.role === 'admin' ? 'bg-blue-lt' : 'bg-green-lt'}`}>
-                                {member.role === 'admin' ? 'Admin' : 'Member'}
-                              </span>
+                              {isOwner ? (
+                                <div className="d-flex align-items-center">
+                                  <select
+                                    className="form-select form-select-sm"
+                                    style={{ width: 'auto', minWidth: '110px' }}
+                                    value={member.role}
+                                    onChange={(e) => updateMemberRole(member.id, e.target.value as 'admin' | 'member')}
+                                    disabled={updatingRoleId === member.id || removingId === member.id}
+                                  >
+                                    <option value="member">Member</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
+                                  {updatingRoleId === member.id && (
+                                    <IconLoader2 className="icon-tabler-loading ms-2" size={16} />
+                                  )}
+                                </div>
+                              ) : (
+                                <span className={`badge ${member.role === 'admin' ? 'bg-blue-lt' : 'bg-green-lt'}`}>
+                                  {member.role === 'admin' ? 'Admin' : 'Member'}
+                                </span>
+                              )}
                             </td>
                             <td className="text-muted">
                               {new Date(member.joined_at).toLocaleDateString()}
