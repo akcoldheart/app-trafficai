@@ -87,14 +87,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'PUT') {
-    const { status, operating_hours_start, operating_hours_end, operating_timezone, daily_limit } = req.body;
+    const { name, status, operating_hours_start, operating_hours_end, operating_timezone, daily_limit } = req.body;
     const updates: Record<string, any> = { updated_at: new Date().toISOString() };
 
+    if (typeof name === 'string' && name.trim()) updates.name = name.trim();
     if (status && ['active', 'paused', 'completed'].includes(status)) updates.status = status;
     if (operating_hours_start) updates.operating_hours_start = operating_hours_start;
     if (operating_hours_end) updates.operating_hours_end = operating_hours_end;
     if (operating_timezone) updates.operating_timezone = operating_timezone;
-    if (daily_limit !== undefined) updates.daily_limit = Math.min(daily_limit, 30);
+    if (daily_limit !== undefined) updates.daily_limit = Math.min(Math.max(1, parseInt(String(daily_limit)) || 1), 30);
     if (req.body.connection_message !== undefined) updates.connection_message = req.body.connection_message;
 
     try {

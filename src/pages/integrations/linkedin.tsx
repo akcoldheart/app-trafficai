@@ -24,6 +24,8 @@ import {
   IconSearch,
   IconChevronLeft,
   IconChevronRight,
+  IconPencil,
+  IconDeviceFloppy,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 
@@ -403,6 +405,66 @@ export default function LinkedInIntegrationPage() {
   };
 
   const [retrying, setRetrying] = useState<string | null>(null);
+
+  // Edit campaign
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    operating_hours_start: '09:00',
+    operating_hours_end: '17:00',
+    operating_timezone: 'America/New_York',
+    daily_limit: 25,
+    connection_message: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const startEditCampaign = (campaign: Campaign, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingCampaignId(campaign.id);
+    setEditForm({
+      name: campaign.name,
+      operating_hours_start: campaign.operating_hours_start?.slice(0, 5) || '09:00',
+      operating_hours_end: campaign.operating_hours_end?.slice(0, 5) || '17:00',
+      operating_timezone: campaign.operating_timezone || 'America/New_York',
+      daily_limit: campaign.daily_limit || 25,
+      connection_message: campaign.connection_message || '',
+    });
+  };
+
+  const cancelEditCampaign = () => {
+    setEditingCampaignId(null);
+  };
+
+  const handleSaveEdit = async (campaignId: string) => {
+    if (!editForm.name.trim()) {
+      showToast('Campaign name is required', 'error');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const resp = await fetch(`/api/integrations/linkedin/campaigns/${campaignId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          operating_hours_start: editForm.operating_hours_start,
+          operating_hours_end: editForm.operating_hours_end,
+          operating_timezone: editForm.operating_timezone,
+          daily_limit: editForm.daily_limit,
+          connection_message: editForm.connection_message.trim() || null,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to update campaign');
+      showToast('Campaign updated', 'success');
+      setEditingCampaignId(null);
+      fetchCampaigns();
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const handleRetryFailed = async (campaignId: string, contactId?: string) => {
     setRetrying(contactId || campaignId);
@@ -811,6 +873,13 @@ export default function LinkedInIntegrationPage() {
                                     </button>
                                   ) : null}
                                   <button
+                                    className="btn btn-ghost-primary btn-icon btn-sm"
+                                    title="Edit"
+                                    onClick={(e) => startEditCampaign(campaign, e)}
+                                  >
+                                    <IconPencil size={16} />
+                                  </button>
+                                  <button
                                     className="btn btn-ghost-danger btn-icon btn-sm"
                                     title="Delete"
                                     onClick={() => handleCampaignAction(campaign.id, 'delete')}
@@ -827,6 +896,114 @@ export default function LinkedInIntegrationPage() {
                                     <div className="progress-bar bg-green" style={{ width: `${(stats.accepted / stats.total) * 100}%` }} />
                                     <div className="progress-bar bg-blue" style={{ width: `${(stats.sent / stats.total) * 100}%` }} />
                                     <div className="progress-bar bg-red" style={{ width: `${((stats.declined + stats.error) / stats.total) * 100}%` }} />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Edit form */}
+                              {editingCampaignId === campaign.id && (
+                                <div style={{ borderTop: '1px solid var(--tblr-border-color)', padding: 16, backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
+                                  <h4 className="mb-3">
+                                    <IconPencil size={16} className="me-2" />
+                                    Edit Campaign
+                                  </h4>
+
+                                  <div className="mb-3">
+                                    <label className="form-label fw-bold">Campaign Name</label>
+                                    <input
+                                      type="text"
+                                      className="form-control"
+                                      value={editForm.name}
+                                      onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                                      disabled={savingEdit}
+                                    />
+                                  </div>
+
+                                  <div className="row mb-3">
+                                    <div className="col-md-4">
+                                      <label className="form-label fw-bold">Start Time</label>
+                                      <input
+                                        type="time"
+                                        className="form-control"
+                                        value={editForm.operating_hours_start}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, operating_hours_start: e.target.value }))}
+                                        disabled={savingEdit}
+                                      />
+                                    </div>
+                                    <div className="col-md-4">
+                                      <label className="form-label fw-bold">End Time</label>
+                                      <input
+                                        type="time"
+                                        className="form-control"
+                                        value={editForm.operating_hours_end}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, operating_hours_end: e.target.value }))}
+                                        disabled={savingEdit}
+                                      />
+                                    </div>
+                                    <div className="col-md-4">
+                                      <label className="form-label fw-bold">Timezone</label>
+                                      <select
+                                        className="form-select"
+                                        value={editForm.operating_timezone}
+                                        onChange={(e) => setEditForm(prev => ({ ...prev, operating_timezone: e.target.value }))}
+                                        disabled={savingEdit}
+                                      >
+                                        {TIMEZONES.map(tz => (
+                                          <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  <div className="mb-3">
+                                    <label className="form-label fw-bold">Daily Limit (max 30)</label>
+                                    <input
+                                      type="number"
+                                      className="form-control"
+                                      style={{ maxWidth: 120 }}
+                                      min={1}
+                                      max={30}
+                                      value={editForm.daily_limit}
+                                      onChange={(e) => setEditForm(prev => ({ ...prev, daily_limit: Math.min(30, Math.max(1, parseInt(e.target.value) || 1)) }))}
+                                      disabled={savingEdit}
+                                    />
+                                  </div>
+
+                                  <div className="mb-3">
+                                    <label className="form-label fw-bold">Connection Message (optional)</label>
+                                    <textarea
+                                      className="form-control"
+                                      rows={4}
+                                      placeholder="Hi {first_name}, I'd love to connect..."
+                                      value={editForm.connection_message}
+                                      onChange={(e) => setEditForm(prev => ({ ...prev, connection_message: e.target.value }))}
+                                      disabled={savingEdit}
+                                      maxLength={300}
+                                    />
+                                    <div className="form-hint mt-1">
+                                      Max 300 characters. Variables: {'{first_name}'}, {'{last_name}'}, {'{company}'}, {'{job_title}'}. Leave empty for no message.
+                                    </div>
+                                  </div>
+
+                                  <div className="d-flex gap-2">
+                                    <button
+                                      className="btn btn-primary"
+                                      onClick={() => handleSaveEdit(campaign.id)}
+                                      disabled={!editForm.name.trim() || savingEdit}
+                                    >
+                                      {savingEdit ? (
+                                        <><IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} /> Saving...</>
+                                      ) : (
+                                        <><IconDeviceFloppy size={16} className="me-1" /> Save Changes</>
+                                      )}
+                                    </button>
+                                    <button
+                                      className="btn btn-outline-secondary"
+                                      onClick={cancelEditCampaign}
+                                      disabled={savingEdit}
+                                    >
+                                      <IconX size={16} className="me-1" /> Cancel
+                                    </button>
                                   </div>
                                 </div>
                               )}
