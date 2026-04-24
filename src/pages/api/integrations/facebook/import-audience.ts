@@ -169,10 +169,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const createData = await createResp.json();
 
     if (!createResp.ok || !createData.id) {
-      const errorMsg = createData.error?.message || 'Failed to create audience';
+      const fbErr = createData.error || {};
+      const errorMsg = fbErr.error_user_msg || fbErr.message || 'Failed to create audience';
+      const errorDetails = `${errorMsg} [code=${fbErr.code ?? 'n/a'} subcode=${fbErr.error_subcode ?? 'n/a'} type=${fbErr.type ?? 'n/a'} trace=${fbErr.fbtrace_id ?? 'n/a'}]`;
+
       await supabaseAdmin
         .from('facebook_audience_imports')
-        .update({ status: 'failed', error_message: errorMsg })
+        .update({ status: 'failed', error_message: errorDetails })
         .eq('id', importRecord.id);
 
       await logEvent({
@@ -183,10 +186,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         user_id: user.id,
         ip_address: ip,
         request_data: { ad_account_id, audience_name },
-        error_details: errorMsg,
+        error_details: errorDetails,
       });
 
-      return res.status(400).json({ error: 'Failed to create Facebook audience', details: errorMsg });
+      return res.status(400).json({ error: 'Failed to create Facebook audience', details: errorDetails });
     }
 
     const fbAudienceId = createData.id;
@@ -219,8 +222,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         if (!uploadResp.ok) {
           const uploadData = await uploadResp.json();
+          const fbErr = uploadData.error || {};
+          const msg = fbErr.error_user_msg || fbErr.message || 'Upload failed';
           failedBatches++;
-          batchErrors.push(`Batch ${batchNumber}: ${uploadData.error?.message || 'Upload failed'}`);
+          batchErrors.push(`Batch ${batchNumber}: ${msg} [code=${fbErr.code ?? 'n/a'} subcode=${fbErr.error_subcode ?? 'n/a'} trace=${fbErr.fbtrace_id ?? 'n/a'}]`);
         } else {
           successfulUploads += batch.length;
         }

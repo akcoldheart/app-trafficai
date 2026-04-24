@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq('platform', 'facebook');
 
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'https://' + req.headers.host}/api/integrations/facebook/callback`;
-    const scopes = 'ads_management,ads_read';
+    const scopes = 'ads_management,ads_read,business_management';
     const state = Buffer.from(JSON.stringify({ userId: effectiveUserId, nonce: oauthNonce })).toString('base64url');
 
     const authUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scopes}&state=${state}&response_type=code`;
