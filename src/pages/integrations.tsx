@@ -36,6 +36,19 @@ function hex(color: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function formatRelative(iso: string | null): string {
+  if (!iso) return 'Ready to sync';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Synced just now';
+  if (mins < 60) return `Synced ${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Synced ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `Synced ${days}d ago`;
+  return `Synced ${new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+}
+
 export default function IntegrationsHub() {
   const [loading, setLoading] = useState(true);
   const [connectedPlatforms, setConnectedPlatforms] = useState<ConnectedStatus[]>([]);
@@ -69,10 +82,11 @@ export default function IntegrationsHub() {
 
   const allIntegrations = INTEGRATION_ORDER.map(key => INTEGRATION_CONFIGS[key]).filter(Boolean);
   const connectedCount = allIntegrations.filter(c => isConnected(c.key)).length;
+  const unconnectedIntegrations = allIntegrations.filter(c => !isConnected(c.key));
 
-  const categoryCounts = INTEGRATION_ORDER.reduce((acc, key) => {
-    const cat = INTEGRATION_CONFIGS[key]?.category;
-    if (cat) acc[cat] = (acc[cat] || 0) + 1;
+  // Category counts reflect only the unconnected (discover) set
+  const categoryCounts = unconnectedIntegrations.reduce((acc, cfg) => {
+    acc[cfg.category] = (acc[cfg.category] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
@@ -80,13 +94,17 @@ export default function IntegrationsHub() {
     .map(id => ({
       id,
       label: CATEGORY_LABELS[id],
-      count: id === 'all' ? allIntegrations.length : (categoryCounts[id] || 0),
+      count: id === 'all' ? unconnectedIntegrations.length : (categoryCounts[id] || 0),
     }))
     .filter(c => c.count > 0);
 
-  const filtered = activeCategory === 'all'
-    ? allIntegrations
-    : allIntegrations.filter(c => c.category === activeCategory);
+  const connectedInFilter = activeCategory === 'all'
+    ? allIntegrations.filter(c => isConnected(c.key))
+    : allIntegrations.filter(c => isConnected(c.key) && c.category === activeCategory);
+
+  const unconnectedInFilter = activeCategory === 'all'
+    ? unconnectedIntegrations
+    : unconnectedIntegrations.filter(c => c.category === activeCategory);
 
   return (
     <Layout title="Integrations" pageTitle="Integrations" pagePretitle="Settings">
@@ -117,43 +135,6 @@ export default function IntegrationsHub() {
           </div>
         </div>
 
-        {/* Category tabs */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 24 }}>
-          {categories.map(cat => {
-            const active = activeCategory === cat.id;
-            return (
-              <button key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{
-                appearance: 'none',
-                background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
-                border: `1px solid ${active ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.07)'}`,
-                borderRadius: 7,
-                padding: '5px 12px',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                color: active ? '#e8e8f0' : '#666',
-                fontSize: 13,
-                fontWeight: active ? 600 : 400,
-                transition: 'all 0.14s',
-              }}>
-                {cat.label}
-                <span style={{
-                  background: active ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.05)',
-                  borderRadius: 5,
-                  padding: '0px 7px',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: active ? '#c8c8dc' : '#4a4a5a',
-                  lineHeight: '20px',
-                }}>
-                  {cat.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
         {/* Loading skeleton */}
         {loading && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
@@ -169,209 +150,387 @@ export default function IntegrationsHub() {
           </div>
         )}
 
-        {/* Cards grid */}
-        {!loading && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
-            gap: 12,
-          }}>
-            {filtered.map(config => {
-              const connected = isConnected(config.key);
-              const lastSynced = getLastSynced(config.key);
-              const hovered = hoveredCard === config.key;
+        {/* Your Stack — connected integrations */}
+        {!loading && connectedInFilter.length > 0 && (
+          <section aria-labelledby="stack-heading" style={{ marginBottom: 36 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div>
+                <h2 id="stack-heading" style={{
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: '#ededf5',
+                  margin: 0,
+                  letterSpacing: '-0.01em',
+                }}>
+                  Your Stack
+                </h2>
+                <div style={{ fontSize: 12, color: '#5a5a6e', marginTop: 3 }}>
+                  Tools you&apos;ve connected
+                </div>
+              </div>
+              <div style={{
+                fontSize: 11.5,
+                color: '#5a5a6e',
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                textTransform: 'uppercase',
+              }}>
+                {connectedInFilter.length} active
+              </div>
+            </div>
 
-              return (
-                <Link
-                  key={config.key}
-                  href={`/integrations/${config.key}`}
-                  style={{ textDecoration: 'none', display: 'block', outline: 'none' }}
-                  onMouseEnter={() => setHoveredCard(config.key)}
-                  onMouseLeave={() => setHoveredCard(null)}
-                >
-                  <div style={{
-                    position: 'relative',
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                    border: `1px solid ${hovered
-                      ? (connected ? hex(config.color, 0.35) : 'rgba(255,255,255,0.13)')
-                      : (connected ? hex(config.color, 0.2) : 'rgba(255,255,255,0.07)')}`,
-                    background: hovered
-                      ? (connected ? hex(config.color, 0.05) : 'rgba(255,255,255,0.035)')
-                      : 'rgba(255,255,255,0.025)',
-                    transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
-                    boxShadow: hovered
-                      ? `0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px ${connected ? hex(config.color, 0.15) : 'transparent'}`
-                      : '0 1px 3px rgba(0,0,0,0.2)',
-                    transition: 'all 0.2s cubic-bezier(0.2, 0, 0, 1)',
-                  }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))',
+              gap: 10,
+            }}>
+              {connectedInFilter.map((config, idx) => {
+                const hovered = hoveredCard === config.key;
+                const lastSynced = getLastSynced(config.key);
 
-                    {/* Top accent line (connected only) */}
-                    {connected && (
+                return (
+                  <Link
+                    key={config.key}
+                    href={`/integrations/${config.key}`}
+                    style={{
+                      textDecoration: 'none',
+                      display: 'block',
+                      outline: 'none',
+                      animation: `fadeUp 0.4s cubic-bezier(0.2,0,0,1) ${idx * 0.04}s both`,
+                    }}
+                    onMouseEnter={() => setHoveredCard(config.key)}
+                    onMouseLeave={() => setHoveredCard(null)}
+                  >
+                    <div style={{
+                      position: 'relative',
+                      borderRadius: 10,
+                      overflow: 'hidden',
+                      border: `1px solid ${hovered ? hex(config.color, 0.3) : hex(config.color, 0.16)}`,
+                      background: hovered ? hex(config.color, 0.04) : 'rgba(255,255,255,0.025)',
+                      transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+                      boxShadow: hovered
+                        ? `0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px ${hex(config.color, 0.12)}`
+                        : '0 1px 2px rgba(0,0,0,0.2)',
+                      transition: 'all 0.18s cubic-bezier(0.2, 0, 0, 1)',
+                    }}>
+                      {/* Top accent */}
                       <div style={{
                         position: 'absolute',
                         top: 0, left: 0, right: 0,
                         height: 2,
                         background: `linear-gradient(90deg, ${config.color}, ${hex(config.color, 0.4)})`,
-                        borderRadius: '12px 12px 0 0',
                       }} />
-                    )}
 
-                    {/* Card body */}
-                    <div style={{ padding: '20px 20px 15px' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+                      <div style={{ padding: '14px 14px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                          {/* Small logo */}
+                          <div style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 9,
+                            background: `linear-gradient(145deg, ${config.color}, ${hex(config.color, 0.75)})`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            boxShadow: `0 3px 10px ${hex(config.color, 0.3)}`,
+                          }}>
+                            <span style={{
+                              color: config.color === '#FFE01B' ? '#1a1200' : '#fff',
+                              fontWeight: 800,
+                              fontSize: config.letterIcon.length > 2 ? 9 : config.letterIcon.length > 1 ? 11 : 16,
+                              letterSpacing: config.letterIcon.length > 1 ? '-0.5px' : '0',
+                              fontFamily: "'SF Pro Display', system-ui, -apple-system, sans-serif",
+                              lineHeight: 1,
+                            }}>
+                              {config.letterIcon}
+                            </span>
+                          </div>
 
-                        {/* Logo — solid brand color bg, white letter */}
+                          {/* Name + sync meta */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              fontSize: 14,
+                              fontWeight: 600,
+                              color: '#ededf5',
+                              lineHeight: 1.2,
+                              marginBottom: 4,
+                              letterSpacing: '-0.01em',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}>
+                              {config.name}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{
+                                width: 6, height: 6, borderRadius: '50%',
+                                background: '#2fcb72',
+                                boxShadow: '0 0 0 2px rgba(47,203,114,0.2)',
+                                flexShrink: 0,
+                              }} />
+                              <span style={{
+                                fontSize: 11.5,
+                                color: '#6e6e82',
+                                fontWeight: 500,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}>
+                                {formatRelative(lastSynced)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', marginBottom: 10 }} />
+
+                        {/* Configure CTA */}
                         <div style={{
-                          width: 52,
-                          height: 52,
-                          borderRadius: 12,
-                          background: `linear-gradient(145deg, ${config.color}, ${hex(config.color, 0.75)})`,
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          boxShadow: `0 4px 14px ${hex(config.color, 0.35)}`,
-                          transition: 'box-shadow 0.2s ease',
-                          ...(hovered ? { boxShadow: `0 6px 20px ${hex(config.color, 0.5)}` } : {}),
+                          justifyContent: 'flex-end',
                         }}>
-                          <span style={{
-                            color: config.color === '#FFE01B' ? '#1a1200' : '#fff',
-                            fontWeight: 800,
-                            fontSize: config.letterIcon.length > 2 ? 11 : config.letterIcon.length > 1 ? 14 : 22,
-                            letterSpacing: config.letterIcon.length > 1 ? '-0.5px' : '0',
-                            fontFamily: "'SF Pro Display', system-ui, -apple-system, sans-serif",
-                            lineHeight: 1,
-                          }}>
-                            {config.letterIcon}
-                          </span>
-                        </div>
-
-                        {/* Name + description */}
-                        <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
                           <div style={{
-                            fontSize: 15,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            fontSize: 12,
                             fontWeight: 600,
-                            color: '#ededf5',
-                            lineHeight: 1.25,
-                            marginBottom: 4,
-                            letterSpacing: '-0.01em',
-                          }}>
-                            {config.name}
-                          </div>
-                          <div style={{
-                            fontSize: 12.5,
-                            color: '#5a5a6e',
-                            lineHeight: 1.45,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}>
-                            {config.description}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Feature chips */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                        {config.features.map(f => (
-                          <span key={f} style={{
-                            background: 'rgba(255,255,255,0.04)',
-                            border: '1px solid rgba(255,255,255,0.07)',
-                            borderRadius: 5,
-                            padding: '2px 8px',
-                            fontSize: 11,
-                            color: '#5a5a72',
-                            fontWeight: 500,
+                            color: hovered ? '#c8c8dc' : '#606070',
+                            transition: 'color 0.15s',
                             letterSpacing: '0.01em',
                           }}>
-                            {FEATURE_LABELS[f] || f}
-                          </span>
-                        ))}
+                            Configure
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M5 12h14M12 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                        </div>
                       </div>
                     </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
-                    {/* Divider */}
-                    <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0 20px' }} />
+        {/* Discover more — not-connected integrations */}
+        {!loading && (
+          <section aria-labelledby="discover-heading">
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+              <h2 id="discover-heading" style={{
+                fontSize: 15,
+                fontWeight: 600,
+                color: '#ededf5',
+                margin: 0,
+                letterSpacing: '-0.01em',
+              }}>
+                {connectedInFilter.length > 0 ? 'Discover more integrations' : 'All integrations'}
+              </h2>
+            </div>
 
-                    {/* Card footer */}
-                    <div style={{
-                      padding: '12px 20px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
+            {/* Category tabs */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 18 }}>
+              {categories.map(cat => {
+                const active = activeCategory === cat.id;
+                return (
+                  <button key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{
+                    appearance: 'none',
+                    background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    border: `1px solid ${active ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.07)'}`,
+                    borderRadius: 7,
+                    padding: '5px 12px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    color: active ? '#e8e8f0' : '#666',
+                    fontSize: 13,
+                    fontWeight: active ? 600 : 400,
+                    transition: 'all 0.14s',
+                  }}>
+                    {cat.label}
+                    <span style={{
+                      background: active ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.05)',
+                      borderRadius: 5,
+                      padding: '0px 7px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: active ? '#c8c8dc' : '#4a4a5a',
+                      lineHeight: '20px',
                     }}>
-                      {/* Status */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <div style={{
-                          width: 7, height: 7, borderRadius: '50%',
-                          background: connected ? '#2fcb72' : '#2e2e3e',
-                          boxShadow: connected ? '0 0 0 2px rgba(47,203,114,0.2)' : 'none',
-                          flexShrink: 0,
-                        }} />
-                        <span style={{
-                          fontSize: 12.5,
-                          color: connected ? '#3ddc84' : '#3e3e52',
-                          fontWeight: 500,
-                        }}>
-                          {connected ? (
-                            <>
-                              Connected
-                              {lastSynced && (
-                                <span style={{ color: 'rgba(61,220,132,0.5)', marginLeft: 6 }}>
-                                  · {new Date(lastSynced).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                </span>
-                              )}
-                            </>
-                          ) : 'Not connected'}
-                        </span>
-                      </div>
+                      {cat.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
-                      {/* CTA button */}
-                      {connected ? (
-                        <div style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 5,
-                          fontSize: 12.5,
-                          fontWeight: 600,
-                          color: hovered ? '#c0c0d0' : '#606070',
-                          transition: 'color 0.15s',
-                          letterSpacing: '0.01em',
-                        }}>
-                          Configure
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M5 12h14M12 5l7 7-7 7" />
-                          </svg>
+            {unconnectedInFilter.length === 0 ? (
+              <div style={{
+                padding: '40px 20px',
+                textAlign: 'center',
+                color: '#5a5a6e',
+                fontSize: 13,
+                border: '1px dashed rgba(255,255,255,0.08)',
+                borderRadius: 12,
+                background: 'rgba(255,255,255,0.015)',
+              }}>
+                You&apos;ve connected every integration in this category. Nice work.
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
+                gap: 12,
+              }}>
+                {unconnectedInFilter.map(config => {
+                  const hovered = hoveredCard === config.key;
+
+                  return (
+                    <Link
+                      key={config.key}
+                      href={`/integrations/${config.key}`}
+                      style={{ textDecoration: 'none', display: 'block', outline: 'none' }}
+                      onMouseEnter={() => setHoveredCard(config.key)}
+                      onMouseLeave={() => setHoveredCard(null)}
+                    >
+                      <div style={{
+                        position: 'relative',
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        border: `1px solid ${hovered ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.07)'}`,
+                        background: hovered ? 'rgba(255,255,255,0.035)' : 'rgba(255,255,255,0.025)',
+                        transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
+                        boxShadow: hovered
+                          ? '0 12px 40px rgba(0,0,0,0.4)'
+                          : '0 1px 3px rgba(0,0,0,0.2)',
+                        transition: 'all 0.2s cubic-bezier(0.2, 0, 0, 1)',
+                      }}>
+                        <div style={{ padding: '20px 20px 15px' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+                            {/* Logo */}
+                            <div style={{
+                              width: 52,
+                              height: 52,
+                              borderRadius: 12,
+                              background: `linear-gradient(145deg, ${config.color}, ${hex(config.color, 0.75)})`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              boxShadow: `0 4px 14px ${hex(config.color, 0.35)}`,
+                              transition: 'box-shadow 0.2s ease',
+                              ...(hovered ? { boxShadow: `0 6px 20px ${hex(config.color, 0.5)}` } : {}),
+                            }}>
+                              <span style={{
+                                color: config.color === '#FFE01B' ? '#1a1200' : '#fff',
+                                fontWeight: 800,
+                                fontSize: config.letterIcon.length > 2 ? 11 : config.letterIcon.length > 1 ? 14 : 22,
+                                letterSpacing: config.letterIcon.length > 1 ? '-0.5px' : '0',
+                                fontFamily: "'SF Pro Display', system-ui, -apple-system, sans-serif",
+                                lineHeight: 1,
+                              }}>
+                                {config.letterIcon}
+                              </span>
+                            </div>
+
+                            {/* Name + description */}
+                            <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                              <div style={{
+                                fontSize: 15,
+                                fontWeight: 600,
+                                color: '#ededf5',
+                                lineHeight: 1.25,
+                                marginBottom: 4,
+                                letterSpacing: '-0.01em',
+                              }}>
+                                {config.name}
+                              </div>
+                              <div style={{
+                                fontSize: 12.5,
+                                color: '#5a5a6e',
+                                lineHeight: 1.45,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}>
+                                {config.description}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Feature chips */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                            {config.features.map(f => (
+                              <span key={f} style={{
+                                background: 'rgba(255,255,255,0.04)',
+                                border: '1px solid rgba(255,255,255,0.07)',
+                                borderRadius: 5,
+                                padding: '2px 8px',
+                                fontSize: 11,
+                                color: '#5a5a72',
+                                fontWeight: 500,
+                                letterSpacing: '0.01em',
+                              }}>
+                                {FEATURE_LABELS[f] || f}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                      ) : (
+
+                        {/* Divider */}
+                        <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0 20px' }} />
+
+                        {/* Footer */}
                         <div style={{
-                          display: 'inline-flex',
+                          padding: '12px 20px',
+                          display: 'flex',
                           alignItems: 'center',
-                          gap: 5,
-                          background: hovered ? hex(config.color, 0.12) : 'rgba(255,255,255,0.04)',
-                          border: `1px solid ${hovered ? hex(config.color, 0.4) : 'rgba(255,255,255,0.1)'}`,
-                          borderRadius: 6,
-                          padding: '5px 11px 5px 12px',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: hovered ? config.color : '#7a7a90',
-                          transition: 'all 0.18s ease',
-                          letterSpacing: '0.01em',
-                          cursor: 'pointer',
+                          justifyContent: 'space-between',
                         }}>
-                          Connect
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M5 12h14M12 5l7 7-7 7" />
-                          </svg>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <div style={{
+                              width: 7, height: 7, borderRadius: '50%',
+                              background: '#2e2e3e',
+                              flexShrink: 0,
+                            }} />
+                            <span style={{ fontSize: 12.5, color: '#3e3e52', fontWeight: 500 }}>
+                              Not connected
+                            </span>
+                          </div>
+
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            background: hovered ? hex(config.color, 0.12) : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${hovered ? hex(config.color, 0.4) : 'rgba(255,255,255,0.1)'}`,
+                            borderRadius: 6,
+                            padding: '5px 11px 5px 12px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: hovered ? config.color : '#7a7a90',
+                            transition: 'all 0.18s ease',
+                            letterSpacing: '0.01em',
+                            cursor: 'pointer',
+                          }}>
+                            Connect
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M5 12h14M12 5l7 7-7 7" />
+                            </svg>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         )}
       </div>
 
@@ -379,6 +538,10 @@ export default function IntegrationsHub() {
         @keyframes pulse {
           0%, 100% { opacity: 0.5; }
           50% { opacity: 1; }
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </Layout>
