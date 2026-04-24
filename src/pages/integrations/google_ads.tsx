@@ -96,6 +96,7 @@ export default function GoogleAdsIntegrationPage() {
   const [showSecret, setShowSecret] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
   const showToast = (message: string, type: Toast['type'] = 'info') => {
@@ -301,6 +302,39 @@ export default function GoogleAdsIntegrationPage() {
       showToast((error as Error).message, 'error');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleClearHistory = async (type: 'imports' | 'conversions', scope: 'failed' | 'all') => {
+    const records = type === 'imports' ? imports : conversions;
+    const failedCount = records.filter((r) => r.status === 'failed').length;
+    if (scope === 'failed' && failedCount === 0) {
+      showToast('No failed entries to clear', 'info');
+      return;
+    }
+    const label = type === 'imports' ? 'import' : 'upload';
+    const message = scope === 'all'
+      ? `Clear all ${records.length} ${label} history entries? This cannot be undone.`
+      : `Clear ${failedCount} failed ${label}${failedCount === 1 ? '' : 's'} from history?`;
+    if (!confirm(message)) return;
+
+    const key = `${type}:${scope}`;
+    setClearingHistory(key);
+    try {
+      const resp = await fetch(`/api/integrations/google_ads/imports?type=${type}&scope=${scope}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to clear history');
+
+      if (type === 'imports') {
+        setImports((prev) => (scope === 'all' ? [] : prev.filter((r) => r.status !== 'failed')));
+      } else {
+        setConversions((prev) => (scope === 'all' ? [] : prev.filter((r) => r.status !== 'failed')));
+      }
+      showToast(`Cleared ${data.deleted ?? 0} ${scope === 'all' ? 'entries' : 'failed entries'}`, 'success');
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setClearingHistory(null);
     }
   };
 
@@ -619,7 +653,39 @@ export default function GoogleAdsIntegrationPage() {
                       {imports.length > 0 && (
                         <>
                           <hr className="my-3" />
-                          <h4 className="mb-2">Import History</h4>
+                          <div className="d-flex justify-content-between align-items-center mb-2">
+                            <h4 className="mb-0">Import History</h4>
+                            <div className="d-flex gap-2">
+                              {imports.some((r) => r.status === 'failed') && (
+                                <button
+                                  className="btn btn-outline-secondary btn-sm"
+                                  onClick={() => handleClearHistory('imports', 'failed')}
+                                  disabled={clearingHistory !== null}
+                                  title="Remove failed entries from history"
+                                >
+                                  {clearingHistory === 'imports:failed' ? (
+                                    <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                                  ) : (
+                                    <IconTrash size={14} className="me-1" />
+                                  )}
+                                  Clear Failed
+                                </button>
+                              )}
+                              <button
+                                className="btn btn-outline-danger btn-sm"
+                                onClick={() => handleClearHistory('imports', 'all')}
+                                disabled={clearingHistory !== null}
+                                title="Clear all import history"
+                              >
+                                {clearingHistory === 'imports:all' ? (
+                                  <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                                ) : (
+                                  <IconTrash size={14} className="me-1" />
+                                )}
+                                Clear All
+                              </button>
+                            </div>
+                          </div>
                           <div className="table-responsive">
                             <table className="table table-vcenter">
                               <thead>
@@ -743,7 +809,39 @@ export default function GoogleAdsIntegrationPage() {
                       {conversions.length > 0 && (
                         <>
                           <hr className="my-3" />
-                          <h4 className="mb-2">Upload History</h4>
+                          <div className="d-flex justify-content-between align-items-center mb-2">
+                            <h4 className="mb-0">Upload History</h4>
+                            <div className="d-flex gap-2">
+                              {conversions.some((r) => r.status === 'failed') && (
+                                <button
+                                  className="btn btn-outline-secondary btn-sm"
+                                  onClick={() => handleClearHistory('conversions', 'failed')}
+                                  disabled={clearingHistory !== null}
+                                  title="Remove failed entries from history"
+                                >
+                                  {clearingHistory === 'conversions:failed' ? (
+                                    <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                                  ) : (
+                                    <IconTrash size={14} className="me-1" />
+                                  )}
+                                  Clear Failed
+                                </button>
+                              )}
+                              <button
+                                className="btn btn-outline-danger btn-sm"
+                                onClick={() => handleClearHistory('conversions', 'all')}
+                                disabled={clearingHistory !== null}
+                                title="Clear all upload history"
+                              >
+                                {clearingHistory === 'conversions:all' ? (
+                                  <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                                ) : (
+                                  <IconTrash size={14} className="me-1" />
+                                )}
+                                Clear All
+                              </button>
+                            </div>
+                          </div>
                           <div className="table-responsive">
                             <table className="table table-vcenter">
                               <thead>

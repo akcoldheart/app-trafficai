@@ -72,6 +72,7 @@ export default function FacebookIntegrationPage() {
   const [audienceName, setAudienceName] = useState('');
   const [importing, setImporting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState<'failed' | 'all' | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
   // App credentials form
@@ -243,6 +244,31 @@ export default function FacebookIntegrationPage() {
       showToast((error as Error).message, 'error');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleClearHistory = async (scope: 'failed' | 'all') => {
+    const failedCount = imports.filter((i) => i.status === 'failed').length;
+    if (scope === 'failed' && failedCount === 0) {
+      showToast('No failed imports to clear', 'info');
+      return;
+    }
+    const message = scope === 'all'
+      ? `Clear all ${imports.length} import history entries? This cannot be undone.`
+      : `Clear ${failedCount} failed import${failedCount === 1 ? '' : 's'} from history?`;
+    if (!confirm(message)) return;
+
+    setClearingHistory(scope);
+    try {
+      const resp = await fetch(`/api/integrations/facebook/imports?scope=${scope}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to clear history');
+      setImports((prev) => (scope === 'all' ? [] : prev.filter((i) => i.status !== 'failed')));
+      showToast(`Cleared ${data.deleted ?? 0} ${scope === 'all' ? 'entries' : 'failed entries'}`, 'success');
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setClearingHistory(null);
     }
   };
 
@@ -565,10 +591,42 @@ export default function FacebookIntegrationPage() {
                     <>
                       <hr className="my-3" />
                       <div className="mb-4">
-                        <h4 className="mb-2">
-                          <IconUsers size={18} className="me-2" />
-                          Import History
-                        </h4>
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <h4 className="mb-0">
+                            <IconUsers size={18} className="me-2" />
+                            Import History
+                          </h4>
+                          <div className="d-flex gap-2">
+                            {imports.some((i) => i.status === 'failed') && (
+                              <button
+                                className="btn btn-outline-secondary btn-sm"
+                                onClick={() => handleClearHistory('failed')}
+                                disabled={clearingHistory !== null}
+                                title="Remove failed entries from history"
+                              >
+                                {clearingHistory === 'failed' ? (
+                                  <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                                ) : (
+                                  <IconTrash size={14} className="me-1" />
+                                )}
+                                Clear Failed
+                              </button>
+                            )}
+                            <button
+                              className="btn btn-outline-danger btn-sm"
+                              onClick={() => handleClearHistory('all')}
+                              disabled={clearingHistory !== null}
+                              title="Clear all import history"
+                            >
+                              {clearingHistory === 'all' ? (
+                                <IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                              ) : (
+                                <IconTrash size={14} className="me-1" />
+                              )}
+                              Clear All
+                            </button>
+                          </div>
+                        </div>
                         <div className="table-responsive">
                           <table className="table table-vcenter">
                             <thead>
