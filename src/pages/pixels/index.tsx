@@ -580,10 +580,16 @@ export default function Pixels() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const getDisplayStatus = (pixel: Pixel): PixelStatus => {
+    if (pixel.status === 'active' && !pixel.visitors_api_url) return 'inactive';
+    return pixel.status;
+  };
+
   const getStatusBadgeClass = (status: PixelStatus) => {
     switch (status) {
       case 'active': return 'bg-green-lt text-green';
       case 'pending': return 'bg-yellow-lt text-yellow';
+      case 'inactive': return 'bg-secondary-lt text-secondary';
       default: return 'bg-secondary-lt';
     }
   };
@@ -877,14 +883,14 @@ export default function Pixels() {
                         onClick={() => setSelectedPixel(pixel)}
                         style={{ cursor: 'pointer' }}
                       >
-                        <span className={`avatar avatar-sm me-3 ${pixel.status === 'active' ? 'bg-green-lt' : 'bg-azure-lt'}`}>
+                        <span className={`avatar avatar-sm me-3 ${getDisplayStatus(pixel) === 'active' ? 'bg-green-lt' : 'bg-azure-lt'}`}>
                           <IconCode size={16} />
                         </span>
                         <div className="flex-fill" style={{ minWidth: 0 }}>
                           <div className="d-flex align-items-center">
                             <span className="fw-semibold text-truncate">{pixel.name}</span>
-                            <span className={`badge ms-2 ${getStatusBadgeClass(pixel.status)}`} style={{ fontSize: '10px' }}>
-                              {pixel.status}
+                            <span className={`badge ms-2 ${getStatusBadgeClass(getDisplayStatus(pixel))}`} style={{ fontSize: '10px' }}>
+                              {getDisplayStatus(pixel)}
                             </span>
                           </div>
                           <div className={`text-truncate ${selectedPixel?.id === pixel.id ? 'text-white-50' : 'text-muted'}`} style={{ fontSize: '12px' }}>
@@ -1001,7 +1007,7 @@ export default function Pixels() {
                 <div>
                   <h3 className="card-title d-flex align-items-center">
                     {selectedPixel.name}
-                    <span className={`badge ms-2 ${getStatusBadgeClass(selectedPixel.status)}`}>{selectedPixel.status}</span>
+                    <span className={`badge ms-2 ${getStatusBadgeClass(getDisplayStatus(selectedPixel))}`}>{getDisplayStatus(selectedPixel)}</span>
                   </h3>
                   <div className="text-muted" style={{ fontSize: '13px' }}>
                     <IconWorldWww size={14} className="me-1" />{selectedPixel.domain}
@@ -1108,12 +1114,12 @@ export default function Pixels() {
                     <div className="card card-sm h-100">
                       <div className="card-body py-3">
                         <div className="d-flex align-items-center">
-                          <span className={`avatar ${selectedPixel.status === 'active' ? 'bg-green-lt' : 'bg-yellow-lt'} me-3`}>
-                            {selectedPixel.status === 'active' ? <IconCircleCheck size={20} /> : <IconAlertCircle size={20} />}
+                          <span className={`avatar ${getDisplayStatus(selectedPixel) === 'active' ? 'bg-green-lt' : getDisplayStatus(selectedPixel) === 'inactive' ? 'bg-secondary-lt' : 'bg-yellow-lt'} me-3`}>
+                            {getDisplayStatus(selectedPixel) === 'active' ? <IconCircleCheck size={20} /> : <IconAlertCircle size={20} />}
                           </span>
                           <div>
                             <div className="text-muted" style={{ fontSize: '12px' }}>Status</div>
-                            <div className="fw-semibold text-capitalize">{selectedPixel.status}</div>
+                            <div className="fw-semibold text-capitalize">{getDisplayStatus(selectedPixel)}</div>
                           </div>
                         </div>
                       </div>
