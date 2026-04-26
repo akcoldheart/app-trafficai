@@ -589,7 +589,7 @@ export default function Pixels() {
     switch (status) {
       case 'active': return 'bg-green-lt text-green';
       case 'pending': return 'bg-yellow-lt text-yellow';
-      case 'inactive': return 'bg-secondary-lt text-secondary';
+      case 'inactive': return 'bg-red-lt text-red';
       default: return 'bg-secondary-lt';
     }
   };
@@ -1114,12 +1114,12 @@ export default function Pixels() {
                     <div className="card card-sm h-100">
                       <div className="card-body py-3">
                         <div className="d-flex align-items-center">
-                          <span className={`avatar ${getDisplayStatus(selectedPixel) === 'active' ? 'bg-green-lt' : getDisplayStatus(selectedPixel) === 'inactive' ? 'bg-secondary-lt' : 'bg-yellow-lt'} me-3`}>
+                          <span className={`avatar ${getDisplayStatus(selectedPixel) === 'active' ? 'bg-green-lt' : getDisplayStatus(selectedPixel) === 'inactive' ? 'bg-red-lt text-red' : 'bg-yellow-lt'} me-3`}>
                             {getDisplayStatus(selectedPixel) === 'active' ? <IconCircleCheck size={20} /> : <IconAlertCircle size={20} />}
                           </span>
                           <div>
                             <div className="text-muted" style={{ fontSize: '12px' }}>Status</div>
-                            <div className="fw-semibold text-capitalize">{getDisplayStatus(selectedPixel)}</div>
+                            <div className={`fw-semibold text-capitalize ${getDisplayStatus(selectedPixel) === 'inactive' ? 'text-red' : ''}`}>{getDisplayStatus(selectedPixel)}</div>
                           </div>
                         </div>
                       </div>
