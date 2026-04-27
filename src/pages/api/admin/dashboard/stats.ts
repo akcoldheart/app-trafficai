@@ -58,7 +58,7 @@ async function fetchAdminStats() {
     pixelPerformanceResult,
   ] = await Promise.all([
     // Pixels
-    supabase.from('pixels').select('id, name, domain, status, events_count, user_id'),
+    supabase.from('pixels').select('id, name, domain, status, events_count, user_id, visitors_api_url'),
     // Visitor counts (head-only — just returns count, no row data)
     supabase.from('visitors').select('*', { count: 'exact', head: true }),
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('is_identified', true),
@@ -77,7 +77,15 @@ async function fetchAdminStats() {
     supabase.rpc('get_pixel_performance'),
   ]);
 
-  const allPixels = pixelsResult.data || [];
+  // Match the Pixels tab: a pixel marked 'active' without a visitors_api_url is effectively inactive
+  const allPixels = (pixelsResult.data || []).map((p: { id: string; name: string; domain: string; status: string; events_count: number; user_id: string; visitors_api_url: string | null }) => ({
+    id: p.id,
+    name: p.name,
+    domain: p.domain,
+    status: p.status === 'active' && !p.visitors_api_url ? 'inactive' : p.status,
+    events_count: p.events_count,
+    user_id: p.user_id,
+  }));
   const recentVisitors = recentVisitorsResult.data || [];
 
   // Exclude team members from user counts (they are sub-accounts)

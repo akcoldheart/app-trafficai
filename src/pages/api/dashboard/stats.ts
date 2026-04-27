@@ -44,14 +44,23 @@ async function fetchUserStats(supabase: any, userId: string) {
   yesterday.setDate(yesterday.getDate() - 1);
 
   // Get user's pixels first (needed for event queries)
-  const { data: pixels } = await supabase
+  const { data: rawPixels } = await supabase
     .from('pixels')
-    .select('id, name, domain, status, events_count')
+    .select('id, name, domain, status, events_count, visitors_api_url')
     .eq('user_id', userId);
 
-  const pixelIds = pixels?.map((p: { id: string }) => p.id) || [];
-  const activePixels = pixels?.filter((p: { status: string }) => p.status === 'active').length || 0;
-  const totalEvents = pixels?.reduce((sum: number, p: { events_count: number }) => sum + (p.events_count || 0), 0) || 0;
+  // Match the Pixels tab: a pixel marked 'active' without a visitors_api_url is effectively inactive
+  const pixels = (rawPixels || []).map((p: { id: string; name: string; domain: string; status: string; events_count: number; visitors_api_url: string | null }) => ({
+    id: p.id,
+    name: p.name,
+    domain: p.domain,
+    status: p.status === 'active' && !p.visitors_api_url ? 'inactive' : p.status,
+    events_count: p.events_count,
+  }));
+
+  const pixelIds = pixels.map((p: { id: string }) => p.id);
+  const activePixels = pixels.filter((p: { status: string }) => p.status === 'active').length;
+  const totalEvents = pixels.reduce((sum: number, p: { events_count: number }) => sum + (p.events_count || 0), 0);
   const pixelFilter = pixelIds.length > 0 ? pixelIds : ['00000000-0000-0000-0000-000000000000'];
 
   // Run ALL remaining queries in parallel
@@ -201,6 +210,6 @@ async function fetchUserStats(supabase: any, userId: string) {
     },
     topPages,
     recentVisitors,
-    pixels: pixels || [],
+    pixels,
   };
 }
