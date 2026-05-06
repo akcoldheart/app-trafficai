@@ -31,6 +31,14 @@
     {
       "path": "/api/cron/ringcentral-sms",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-conversions",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/reattribute-conversions",
+      "schedule": "0 3 * * *"
     }
   ]
 }

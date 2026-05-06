@@ -19,6 +19,10 @@ import {
   IconTrophy,
   IconUsers,
   IconAddressBook,
+  IconShoppingCart,
+  IconCash,
+  IconTargetArrow,
+  IconReceipt,
 } from '@tabler/icons-react';
 
 interface DashboardStats {
@@ -40,9 +44,22 @@ interface DashboardStats {
     teamCount?: number;
     userCount?: number;
   };
+  conversions?: {
+    total: number;
+    attributed: number;
+    unmatched: number;
+    revenueAttributed: number;
+    totalRevenue: number;
+    avgOrderValue: number;
+    conversionRate: number;
+    matchRate: number;
+    currency: string;
+    identifiedLast30: number;
+  };
   charts: {
     visitorsByDay: { date: string; day: string; visitors: number }[];
     pageviewsByDay: { date: string; day: string; pageviews: number }[];
+    conversionsByDay?: { date: string; day: string; conversions: number }[];
     activityTypes: { type: string; count: number; percentage: number }[];
   };
   topPages: { page: string; views: number }[];
@@ -480,6 +497,102 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-2 text-muted small">
                   Across {stats?.overview.totalAudiences || 0} audience{(stats?.overview.totalAudiences || 0) !== 1 ? 's' : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conversions Row (non-admin) — shows once an e-commerce integration is connected and orders sync runs */}
+      {!isAdmin && stats?.conversions && stats.conversions.total > 0 && (
+        <div className="row row-deck row-cards mb-4">
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <span className="avatar bg-blue-lt me-3">
+                    <IconShoppingCart size={24} />
+                  </span>
+                  <div>
+                    <div className="subheader text-muted">Conversions (30d)</div>
+                    <div className="h2 mb-0">{stats.conversions.total.toLocaleString()}</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-muted small">
+                  {stats.conversions.attributed.toLocaleString()} attributed · {stats.conversions.unmatched.toLocaleString()} unmatched
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <span className="avatar bg-green-lt me-3">
+                    <IconCash size={24} />
+                  </span>
+                  <div>
+                    <div className="subheader text-muted">Revenue Attributed</div>
+                    <div className="h2 mb-0">
+                      {stats.conversions.revenueAttributed.toLocaleString(undefined, {
+                        style: 'currency',
+                        currency: stats.conversions.currency,
+                        maximumFractionDigits: 0,
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 text-muted small">
+                  of {stats.conversions.totalRevenue.toLocaleString(undefined, {
+                    style: 'currency',
+                    currency: stats.conversions.currency,
+                    maximumFractionDigits: 0,
+                  })} total
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <span className="avatar bg-orange-lt me-3">
+                    <IconTargetArrow size={24} />
+                  </span>
+                  <div>
+                    <div className="subheader text-muted">Conversion Rate</div>
+                    <div className="h2 mb-0">{stats.conversions.conversionRate}%</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-muted small">
+                  {stats.conversions.attributed} of {stats.conversions.identifiedLast30.toLocaleString()} identified visitors
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <span className="avatar bg-yellow-lt me-3">
+                    <IconReceipt size={24} />
+                  </span>
+                  <div>
+                    <div className="subheader text-muted">Avg Order Value</div>
+                    <div className="h2 mb-0">
+                      {stats.conversions.avgOrderValue.toLocaleString(undefined, {
+                        style: 'currency',
+                        currency: stats.conversions.currency,
+                        maximumFractionDigits: 0,
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <Link href="/conversions" className="btn btn-sm btn-outline-yellow w-100">
+                    View Conversions
+                  </Link>
                 </div>
               </div>
             </div>

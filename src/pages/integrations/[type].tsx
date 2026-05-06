@@ -22,6 +22,7 @@ import {
   IconPlus,
   IconX,
   IconList,
+  IconShoppingCart,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 import { INTEGRATION_CONFIGS } from '@/lib/integration-configs';
@@ -47,6 +48,14 @@ interface Audience {
   id: string;
   name: string;
   contact_count?: number;
+}
+
+interface Pixel {
+  id: string;
+  name: string;
+  domain?: string | null;
+  orders_last_fetched_at?: string | null;
+  orders_last_fetch_status?: string | null;
 }
 
 interface Toast {
@@ -85,6 +94,18 @@ export default function IntegrationDetailPage() {
   const [syncingAudience, setSyncingAudience] = useState<string | null>(null);
   const [selectedSyncList, setSelectedSyncList] = useState('');
   const [selectedAudienceList, setSelectedAudienceList] = useState<Record<string, string>>({});
+
+  // Conversions / orders sync state (for Shopify et al.)
+  const [pixels, setPixels] = useState<Pixel[]>([]);
+  const [pixelsLoading, setPixelsLoading] = useState(false);
+  const [attributionPixelId, setAttributionPixelId] = useState<string>('');
+  const [savingAttribution, setSavingAttribution] = useState(false);
+  const [syncingOrders, setSyncingOrders] = useState(false);
+  const [lastOrdersResult, setLastOrdersResult] = useState<{
+    fetched: number;
+    upserted: number;
+    matched: number;
+  } | null>(null);
 
   // Slack/Zapier specific
   const [sendingTest, setSendingTest] = useState(false);
@@ -207,12 +228,38 @@ export default function IntegrationDetailPage() {
     if (config) fetchIntegration();
   }, [config, fetchIntegration]);
 
+  const fetchPixelsForAttribution = useCallback(async () => {
+    try {
+      setPixelsLoading(true);
+      const response = await fetch('/api/pixels');
+      const data = await response.json();
+      if (response.ok && Array.isArray(data.pixels)) {
+        setPixels(data.pixels.map((p: Record<string, unknown>) => ({
+          id: p.id as string,
+          name: (p.name as string) || (p.domain as string) || 'Unnamed pixel',
+          domain: p.domain as string | null,
+          orders_last_fetched_at: p.orders_last_fetched_at as string | null,
+          orders_last_fetch_status: p.orders_last_fetch_status as string | null,
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching pixels:', error);
+    } finally {
+      setPixelsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (integration?.is_connected && config) {
       if (config.features.includes('lists')) fetchLists();
       if (config.features.includes('sync_audiences')) fetchAudiences();
+      if (config.features.includes('conversions')) {
+        fetchPixelsForAttribution();
+        const existing = (integration.config as Record<string, unknown> | undefined)?.orders_attribution_pixel_id as string | undefined;
+        if (existing) setAttributionPixelId(existing);
+      }
     }
-  }, [integration?.is_connected, config, fetchLists, fetchAudiences]);
+  }, [integration?.is_connected, config, fetchLists, fetchAudiences, fetchPixelsForAttribution, integration?.config]);
 
   const handleConnect = async () => {
     if (!config || !type) return;
@@ -396,6 +443,60 @@ export default function IntegrationDetailPage() {
     }
   };
 
+  const handleSaveAttributionPixel = async (pixelId: string) => {
+    if (!type || !integration) return;
+    setSavingAttribution(true);
+    try {
+      const newConfig = {
+        ...(integration.config || {}),
+        orders_attribution_pixel_id: pixelId || null,
+      };
+      const response = await fetch(`/api/integrations/${type}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: newConfig }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to save attribution pixel');
+      setIntegration(data.integration);
+      setAttributionPixelId(pixelId);
+      showToast('Attribution pixel saved', 'success');
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setSavingAttribution(false);
+    }
+  };
+
+  const handleSyncOrders = async (fullResync: boolean = false) => {
+    if (!type) return;
+    if (!attributionPixelId) {
+      showToast('Pick a pixel for orders to be attributed to', 'error');
+      return;
+    }
+    setSyncingOrders(true);
+    try {
+      const response = await fetch(`/api/integrations/${type}/sync-orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pixel_id: attributionPixelId, full_resync: fullResync }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to sync orders');
+      setLastOrdersResult({
+        fetched: data.fetched || 0,
+        upserted: data.upserted || 0,
+        matched: data.matched || 0,
+      });
+      showToast(data.message || `Synced ${data.upserted} orders`, 'success');
+      fetchPixelsForAttribution();
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setSyncingOrders(false);
+    }
+  };
+
   const handleCreateList = async () => {
     if (!newListName.trim() || !type) return;
     setCreatingList(true);
@@ -435,6 +536,8 @@ export default function IntegrationDetailPage() {
   const hasLists = config.features.includes('lists');
   const hasNotifications = config.features.includes('notifications');
   const hasWebhooks = config.features.includes('webhooks');
+  const hasConversions = config.features.includes('conversions');
+  const selectedPixel = pixels.find(p => p.id === attributionPixelId);
 
   return (
     <Layout title={`${config.name} Integration`} pageTitle={config.name} pagePretitle="Integrations">
@@ -505,6 +608,7 @@ export default function IntegrationDetailPage() {
                 <div>
                   <p className="text-muted mb-3">
                     Connect your {config.name} account to {
+                      hasConversions ? 'track orders and attribute revenue to your identified visitors' :
                       hasSync ? 'sync visitors and audiences' :
                       hasNotifications ? 'receive real-time notifications' :
                       hasWebhooks ? 'send events via webhooks' :
@@ -753,7 +857,121 @@ export default function IntegrationDetailPage() {
                     </div>
                   )}
 
-                  {(hasNotifications || hasWebhooks) && (hasSync || hasAudienceSync) && <hr className="my-3" />}
+                  {(hasNotifications || hasWebhooks) && (hasSync || hasAudienceSync || hasConversions) && <hr className="my-3" />}
+
+                  {/* Conversions / Orders Sync */}
+                  {hasConversions && (
+                    <div className="mb-4">
+                      <h4 className="mb-1">
+                        <IconShoppingCart size={18} className="me-2" />
+                        Order Attribution
+                      </h4>
+                      <p className="text-muted small mb-3">
+                        Pull orders from {config.name} and match them against your identified visitors and audience contacts to measure real conversions.
+                      </p>
+
+                      <div className="mb-3">
+                        <label className="form-label fw-bold">Attribution pixel</label>
+                        <p className="text-muted small mb-2">
+                          Orders will be attributed to visitors tracked by this pixel.
+                        </p>
+                        <div className="d-flex gap-2 align-items-center">
+                          <select
+                            className="form-select"
+                            style={{ maxWidth: 400 }}
+                            value={attributionPixelId}
+                            onChange={(e) => handleSaveAttributionPixel(e.target.value)}
+                            disabled={pixelsLoading || savingAttribution}
+                          >
+                            <option value="">
+                              {pixelsLoading ? 'Loading pixels...' : 'Select a pixel...'}
+                            </option>
+                            {pixels.map((pixel) => (
+                              <option key={pixel.id} value={pixel.id}>
+                                {pixel.name}{pixel.domain ? ` (${pixel.domain})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {savingAttribution && (
+                            <IconLoader2 size={16} className="text-muted" style={{ animation: 'spin 1s linear infinite' }} />
+                          )}
+                        </div>
+                        {pixels.length === 0 && !pixelsLoading && (
+                          <div className="text-muted small mt-2">
+                            No pixels found. <Link href="/pixels">Create a pixel</Link> first.
+                          </div>
+                        )}
+                      </div>
+
+                      {selectedPixel && (
+                        <>
+                          <div className="d-flex gap-2 align-items-center mb-2">
+                            <button
+                              className="btn btn-primary"
+                              onClick={() => handleSyncOrders(false)}
+                              disabled={syncingOrders}
+                            >
+                              {syncingOrders ? (
+                                <>
+                                  <IconLoader2 size={16} className="me-1" style={{ animation: 'spin 1s linear infinite' }} />
+                                  Syncing orders...
+                                </>
+                              ) : (
+                                <>
+                                  <IconRefresh size={16} className="me-1" />
+                                  Sync Orders Now
+                                </>
+                              )}
+                            </button>
+                            {selectedPixel.orders_last_fetched_at && (
+                              <button
+                                className="btn btn-outline-secondary btn-sm"
+                                onClick={() => handleSyncOrders(true)}
+                                disabled={syncingOrders}
+                                title="Re-pull all orders and re-run attribution from scratch"
+                              >
+                                Full re-sync
+                              </button>
+                            )}
+                          </div>
+
+                          {selectedPixel.orders_last_fetched_at && (
+                            <div className="text-muted small">
+                              Last synced: {new Date(selectedPixel.orders_last_fetched_at).toLocaleString()}
+                              {selectedPixel.orders_last_fetch_status && selectedPixel.orders_last_fetch_status !== 'success' && (
+                                <span className="text-warning ms-2">({selectedPixel.orders_last_fetch_status})</span>
+                              )}
+                            </div>
+                          )}
+
+                          {lastOrdersResult && (
+                            <div className="mt-3 p-3 rounded" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
+                              <div className="row g-2 text-center">
+                                <div className="col-4">
+                                  <div className="h3 mb-0">{lastOrdersResult.fetched.toLocaleString()}</div>
+                                  <div className="text-muted small">Orders fetched</div>
+                                </div>
+                                <div className="col-4">
+                                  <div className="h3 mb-0">{lastOrdersResult.matched.toLocaleString()}</div>
+                                  <div className="text-muted small">Attributed</div>
+                                </div>
+                                <div className="col-4">
+                                  <div className="h3 mb-0">
+                                    {lastOrdersResult.upserted > 0
+                                      ? `${Math.round((lastOrdersResult.matched / lastOrdersResult.upserted) * 100)}%`
+                                      : '—'}
+                                  </div>
+                                  <div className="text-muted small">Match rate</div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {(hasSync || hasAudienceSync) && <hr className="my-3" />}
+                    </div>
+                  )}
 
                   {/* Sync Visitors */}
                   {hasSync && (
@@ -948,59 +1166,26 @@ export default function IntegrationDetailPage() {
             </div>
             <div className="card-body">
               <div className="space-y-3">
-                <div className="d-flex gap-3">
-                  <div className="flex-shrink-0">
-                    <span className="avatar avatar-sm bg-primary-lt">1</span>
-                  </div>
-                  <div>
-                    <div className="fw-medium small">Connect {config.name}</div>
-                    <div className="text-muted small">Enter your {config.authLabel.toLowerCase()} to get started</div>
-                  </div>
-                </div>
-                {hasSync && (
-                  <div className="d-flex gap-3">
-                    <div className="flex-shrink-0">
-                      <span className="avatar avatar-sm bg-primary-lt">2</span>
+                {[
+                  { title: `Connect ${config.name}`, desc: `Enter your ${config.authLabel.toLowerCase()} to get started`, show: true },
+                  { title: 'Sync visitors', desc: `Push identified visitors from Traffic AI to ${config.name}`, show: hasSync },
+                  { title: 'Export audiences', desc: 'Send audience contacts for campaigns and outreach', show: hasAudienceSync },
+                  { title: 'Track conversions', desc: `Pull orders from ${config.name} and attribute them to your identified visitors`, show: hasConversions },
+                  { title: 'Receive notifications', desc: 'Get alerts when new visitors are identified', show: hasNotifications },
+                  { title: 'Automate workflows', desc: 'Events trigger your Zapier automations', show: hasWebhooks },
+                ]
+                  .filter(step => step.show)
+                  .map((step, i) => (
+                    <div className="d-flex gap-3" key={step.title}>
+                      <div className="flex-shrink-0">
+                        <span className="avatar avatar-sm bg-primary-lt">{i + 1}</span>
+                      </div>
+                      <div>
+                        <div className="fw-medium small">{step.title}</div>
+                        <div className="text-muted small">{step.desc}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="fw-medium small">Sync visitors</div>
-                      <div className="text-muted small">Push identified visitors from Traffic AI to {config.name}</div>
-                    </div>
-                  </div>
-                )}
-                {hasAudienceSync && (
-                  <div className="d-flex gap-3">
-                    <div className="flex-shrink-0">
-                      <span className="avatar avatar-sm bg-primary-lt">{hasSync ? '3' : '2'}</span>
-                    </div>
-                    <div>
-                      <div className="fw-medium small">Export audiences</div>
-                      <div className="text-muted small">Send audience contacts for campaigns and outreach</div>
-                    </div>
-                  </div>
-                )}
-                {hasNotifications && (
-                  <div className="d-flex gap-3">
-                    <div className="flex-shrink-0">
-                      <span className="avatar avatar-sm bg-primary-lt">2</span>
-                    </div>
-                    <div>
-                      <div className="fw-medium small">Receive notifications</div>
-                      <div className="text-muted small">Get alerts when new visitors are identified</div>
-                    </div>
-                  </div>
-                )}
-                {hasWebhooks && (
-                  <div className="d-flex gap-3">
-                    <div className="flex-shrink-0">
-                      <span className="avatar avatar-sm bg-primary-lt">2</span>
-                    </div>
-                    <div>
-                      <div className="fw-medium small">Automate workflows</div>
-                      <div className="text-muted small">Events trigger your Zapier automations</div>
-                    </div>
-                  </div>
-                )}
+                  ))}
               </div>
             </div>
           </div>

@@ -42,6 +42,8 @@ async function fetchUserStats(supabase: any, userId: string) {
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
+  const last30Days = new Date(today);
+  last30Days.setDate(last30Days.getDate() - 30);
 
   // Get user's pixels first (needed for event queries)
   const { data: rawPixels } = await supabase
@@ -79,6 +81,8 @@ async function fetchUserStats(supabase: any, userId: string) {
     topEntryPagesResult,
     ownedAudiencesResult,
     assignedAudiencesResult,
+    conversionsLast30Result,
+    identifiedVisitorsLast30Result,
   ] = await Promise.all([
     // Visitor counts (head-only — no row data transferred)
     supabase.from('visitors').select('*', { count: 'exact', head: true }).eq('user_id', userId),
@@ -110,6 +114,19 @@ async function fetchUserStats(supabase: any, userId: string) {
       .from('audience_assignments')
       .select('audience_id')
       .eq('user_id', userId),
+    // Conversions in the last 30 days (we only need a few fields for the cards)
+    supabaseAdmin
+      .from('conversions')
+      .select('id, ordered_at, total_price, matched_visitor_id, matched_contact_id, currency')
+      .eq('user_id', userId)
+      .gte('ordered_at', last30Days.toISOString()),
+    // Visitors identified in the last 30 days — denominator for conversion rate
+    supabaseAdmin
+      .from('visitors')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_identified', true)
+      .gte('identified_at', last30Days.toISOString()),
   ]);
 
   const totalVisitors = totalVisitorsResult.count || 0;
@@ -181,6 +198,49 @@ async function fetchUserStats(supabase: any, userId: string) {
     totalContacts = count || 0;
   }
 
+  // Conversion stats (last 30 days)
+  const conversions = (conversionsLast30Result.data || []) as Array<{
+    id: string;
+    ordered_at: string;
+    total_price: number | null;
+    matched_visitor_id: string | null;
+    matched_contact_id: string | null;
+    currency: string | null;
+  }>;
+  const totalConversions = conversions.length;
+  const attributedConversions = conversions.filter(c => c.matched_visitor_id || c.matched_contact_id);
+  const attributedCount = attributedConversions.length;
+  const revenueAttributed = attributedConversions.reduce((sum, c) => sum + (Number(c.total_price) || 0), 0);
+  const totalRevenue = conversions.reduce((sum, c) => sum + (Number(c.total_price) || 0), 0);
+  const avgOrderValue = attributedCount > 0 ? revenueAttributed / attributedCount : 0;
+  const identifiedLast30 = identifiedVisitorsLast30Result.count || 0;
+  // Conversion rate = how many of our identified visitors actually placed an attributed order
+  const conversionRate = identifiedLast30 > 0
+    ? Math.round((attributedCount / identifiedLast30) * 1000) / 10  // one decimal
+    : 0;
+  const matchRate = totalConversions > 0
+    ? Math.round((attributedCount / totalConversions) * 100)
+    : 0;
+  // Pick the most common currency for display (Shopify shops are usually single-currency)
+  const currencyCount: Record<string, number> = {};
+  for (const c of conversions) {
+    const cur = c.currency || 'USD';
+    currencyCount[cur] = (currencyCount[cur] || 0) + 1;
+  }
+  const currency = Object.entries(currencyCount).sort((a, b) => b[1] - a[1])[0]?.[0] || 'USD';
+
+  // 7-day conversions sparkline
+  const conversionsByDayMap: Record<string, number> = {};
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    conversionsByDayMap[date.toISOString().split('T')[0]] = 0;
+  }
+  for (const c of conversions) {
+    const dateStr = c.ordered_at.split('T')[0];
+    if (dateStr in conversionsByDayMap) conversionsByDayMap[dateStr]++;
+  }
+
   return {
     overview: {
       totalVisitors,
@@ -195,6 +255,18 @@ async function fetchUserStats(supabase: any, userId: string) {
       totalAudiences,
       totalContacts,
     },
+    conversions: {
+      total: totalConversions,
+      attributed: attributedCount,
+      unmatched: totalConversions - attributedCount,
+      revenueAttributed,
+      totalRevenue,
+      avgOrderValue,
+      conversionRate,    // % of identified visitors who placed attributed orders (last 30d)
+      matchRate,         // % of orders that we attributed to a known visitor/contact
+      currency,
+      identifiedLast30,
+    },
     charts: {
       visitorsByDay: Object.entries(visitorsByDayMap).map(([date, data]) => ({
         date,
@@ -205,6 +277,11 @@ async function fetchUserStats(supabase: any, userId: string) {
         date,
         day: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
         pageviews: data.pageviews,
+      })),
+      conversionsByDay: Object.entries(conversionsByDayMap).map(([date, count]) => ({
+        date,
+        day: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
+        conversions: count,
       })),
       activityTypes,
     },
