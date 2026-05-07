@@ -31,7 +31,7 @@ const CHAT_CONFIG = {
 };
 
 export default function ChatBubble() {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, loading: authLoading } = useAuth();
   const isAdmin = userProfile?.role === 'admin';
 
   const [isOpen, setIsOpen] = useState(false);
@@ -61,14 +61,17 @@ export default function ChatBubble() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Check for existing conversation in localStorage
+  // Check for existing conversation in localStorage.
+  // Wait for auth to settle so the ownership check inside loadConversation
+  // sees the real user.email instead of momentarily-undefined.
   useEffect(() => {
-    if (isAdmin) return;
+    if (isAdmin || authLoading) return;
     const savedConvId = localStorage.getItem('chat_conversation_id');
     if (savedConvId) {
       loadConversation(savedConvId);
     }
-  }, [isAdmin]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, authLoading, user?.email]);
 
   // Subscribe to realtime messages
   useEffect(() => {
@@ -132,6 +135,23 @@ export default function ChatBubble() {
 
       if (!conv) {
         localStorage.removeItem('chat_conversation_id');
+        setShowForm(true);
+        return;
+      }
+
+      // Ownership check: when a user is logged in, the conversation MUST belong
+      // to them. Without this, a stale localStorage entry (e.g. from a previous
+      // user on the same browser, or a tester who impersonated another email)
+      // would let this user see and subscribe to another customer's chat.
+      if (
+        user?.email
+        && conv.customer_email
+        && conv.customer_email.toLowerCase() !== user.email.toLowerCase()
+      ) {
+        console.warn('[ChatBubble] localStorage conversation does not belong to current user, clearing');
+        localStorage.removeItem('chat_conversation_id');
+        setConversation(null);
+        setMessages([]);
         setShowForm(true);
         return;
       }

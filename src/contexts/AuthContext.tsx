@@ -191,6 +191,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (key.startsWith('sb-') && (key.includes('-auth-token') || key.includes('session'))) {
             localStorage.removeItem(key);
           }
+          // Clear per-user chat widget state so the next user on this browser
+          // doesn't inherit the previous user's conversation_id (which would
+          // make them subscribe to and see another customer's chat).
+          if (key === 'chat_conversation_id' || key.startsWith('chat_last_seen_')) {
+            localStorage.removeItem(key);
+          }
         });
 
         // Clear auth-related sessionStorage
