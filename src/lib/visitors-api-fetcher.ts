@@ -428,6 +428,74 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       }
     }
 
+    // Fallback for endpoints whose records lack EVENT_TIMESTAMP/EVENT_DATE/ACTIVITY_START_DATE
+    // (e.g. some /segments/... endpoints). Without timestamps the cutoff check above can't fire,
+    // so the loop would re-fetch every page on every sync. If page 1's visitors are 100%
+    // already in the DB, skip the upsert entirely — we can't prove events are new, and
+    // overwriting existing rows with aggregates from a partial event set would shrink their stats.
+    if (lastFetchedAt && !reachedOldRecords && allContacts.length > 0) {
+      const anyTimestamp = allContacts.some(c => getEventTimestamp(c) !== null);
+      if (!anyTimestamp) {
+        const page1VisitorIds = Array.from(new Set(
+          allContacts.map(c => getContactUuid(c)).filter((id): id is string => !!id)
+        ));
+
+        if (page1VisitorIds.length > 0) {
+          let existingPage1Count = 0;
+          for (let i = 0; i < page1VisitorIds.length; i += 500) {
+            const chunk = page1VisitorIds.slice(i, i + 500);
+            const { count } = await supabaseAdmin
+              .from('visitors')
+              .select('id', { count: 'exact', head: true })
+              .eq('pixel_id', pixel.id)
+              .in('visitor_id', chunk);
+            existingPage1Count += count || 0;
+          }
+
+          if (existingPage1Count === page1VisitorIds.length) {
+            console.log(`[visitors-api-fetcher] Pixel ${pixel.id}: skipping sync — all ${page1VisitorIds.length} page-1 visitors already exist and records lack timestamps`);
+
+            await supabaseAdmin
+              .from('pixels')
+              .update({
+                visitors_api_last_fetched_at: new Date().toISOString(),
+                visitors_api_last_fetch_status: `skipped: all ${page1VisitorIds.length} page-1 visitors already synced (no timestamps to verify new events)`,
+              })
+              .eq('id', pixel.id);
+
+            await logEvent({
+              type: 'api',
+              event_name: 'visitors_api_sync',
+              status: 'info',
+              message: `Visitors sync skipped for pixel ${pixel.id}: all page-1 visitors already exist (no timestamps available)`,
+              request_data: {
+                pixel_id: pixel.id,
+                api_url: pixel.visitors_api_url,
+                total_pages: recalcTotalPages,
+              },
+              response_data: {
+                fetch_mode: 'incremental_skipped',
+                page1_fetched: allContacts.length,
+                page1_unique_visitors: page1VisitorIds.length,
+                page1_existing: existingPage1Count,
+                reason: 'no_timestamps_all_existing',
+              },
+              user_id: pixel.user_id,
+            });
+
+            return {
+              totalFetched: allContacts.length,
+              totalUpserted: 0,
+              uniqueVisitors: page1VisitorIds.length,
+              newInserted: 0,
+              existingUpdated: 0,
+              fetchMode: 'incremental_skipped',
+            };
+          }
+        }
+      }
+    }
+
     // Fetch remaining pages — stop early if we hit already-seen records
     if (recalcTotalPages > 1 && currentPage === 1 && !reachedOldRecords) {
       const batchSize = 3;
