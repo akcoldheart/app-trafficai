@@ -428,74 +428,6 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       }
     }
 
-    // Fallback for endpoints whose records lack EVENT_TIMESTAMP/EVENT_DATE/ACTIVITY_START_DATE
-    // (e.g. some /segments/... endpoints). Without timestamps the cutoff check above can't fire,
-    // so the loop would re-fetch every page on every sync. If page 1's visitors are 100%
-    // already in the DB, skip the upsert entirely — we can't prove events are new, and
-    // overwriting existing rows with aggregates from a partial event set would shrink their stats.
-    if (lastFetchedAt && !reachedOldRecords && allContacts.length > 0) {
-      const anyTimestamp = allContacts.some(c => getEventTimestamp(c) !== null);
-      if (!anyTimestamp) {
-        const page1VisitorIds = Array.from(new Set(
-          allContacts.map(c => getContactUuid(c)).filter((id): id is string => !!id)
-        ));
-
-        if (page1VisitorIds.length > 0) {
-          let existingPage1Count = 0;
-          for (let i = 0; i < page1VisitorIds.length; i += 500) {
-            const chunk = page1VisitorIds.slice(i, i + 500);
-            const { count } = await supabaseAdmin
-              .from('visitors')
-              .select('id', { count: 'exact', head: true })
-              .eq('pixel_id', pixel.id)
-              .in('visitor_id', chunk);
-            existingPage1Count += count || 0;
-          }
-
-          if (existingPage1Count === page1VisitorIds.length) {
-            console.log(`[visitors-api-fetcher] Pixel ${pixel.id}: skipping sync — all ${page1VisitorIds.length} page-1 visitors already exist and records lack timestamps`);
-
-            await supabaseAdmin
-              .from('pixels')
-              .update({
-                visitors_api_last_fetched_at: new Date().toISOString(),
-                visitors_api_last_fetch_status: `skipped: all ${page1VisitorIds.length} page-1 visitors already synced (no timestamps to verify new events)`,
-              })
-              .eq('id', pixel.id);
-
-            await logEvent({
-              type: 'api',
-              event_name: 'visitors_api_sync',
-              status: 'info',
-              message: `Visitors sync skipped for pixel ${pixel.id}: all page-1 visitors already exist (no timestamps available)`,
-              request_data: {
-                pixel_id: pixel.id,
-                api_url: pixel.visitors_api_url,
-                total_pages: recalcTotalPages,
-              },
-              response_data: {
-                fetch_mode: 'incremental_skipped',
-                page1_fetched: allContacts.length,
-                page1_unique_visitors: page1VisitorIds.length,
-                page1_existing: existingPage1Count,
-                reason: 'no_timestamps_all_existing',
-              },
-              user_id: pixel.user_id,
-            });
-
-            return {
-              totalFetched: allContacts.length,
-              totalUpserted: 0,
-              uniqueVisitors: page1VisitorIds.length,
-              newInserted: 0,
-              existingUpdated: 0,
-              fetchMode: 'incremental_skipped',
-            };
-          }
-        }
-      }
-    }
-
     // Fetch remaining pages — stop early if we hit already-seen records
     if (recalcTotalPages > 1 && currentPage === 1 && !reachedOldRecords) {
       const batchSize = 3;
@@ -542,23 +474,48 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     // The API returns multiple event records per person, so we aggregate them
     const uniqueRows = aggregateContactEvents(allContacts, pixel.id, pixel.user_id);
 
-    const fetchMode = lastFetchedAt ? 'incremental' : 'full';
+    // Some endpoints (e.g. AudienceLab /segments/... in EDID identity-only mode) return
+    // records with no EVENT_TIMESTAMP/EVENT_DATE/ACTIVITY_START_DATE. For incremental runs
+    // on those pixels, we can't tell which events are new — re-aggregating from a partial
+    // event set would shrink existing visitors' totals on every sync. So in that case we
+    // restrict the upsert to brand-new visitor_ids and leave existing rows untouched.
+    const noTimestampIncremental = !!lastFetchedAt
+      && allContacts.length > 0
+      && !allContacts.some(c => getEventTimestamp(c) !== null);
+
+    const fetchMode = noTimestampIncremental
+      ? 'incremental_new_only'
+      : (lastFetchedAt ? 'incremental' : 'full');
     console.log(`[visitors-api-fetcher] Pixel ${pixel.id} (${fetchMode}): ${totalFetched} fetched → ${uniqueRows.length} unique visitors`);
 
-    // Count existing visitors to determine new vs updated after upsert
+    // Find which visitor_ids already exist (we need actual ids, not just count, when
+    // we have to filter the upsert batch in no-timestamp incremental mode).
     const visitorIds = uniqueRows.map(r => r.visitor_id);
-    let existingCount = 0;
+    const existingIdSet = new Set<string>();
     for (let i = 0; i < visitorIds.length; i += 500) {
       const chunk = visitorIds.slice(i, i + 500);
-      const { count } = await supabaseAdmin
+      const { data: existingRows } = await supabaseAdmin
         .from('visitors')
-        .select('id', { count: 'exact', head: true })
+        .select('visitor_id')
         .eq('pixel_id', pixel.id)
         .in('visitor_id', chunk);
-      existingCount += count || 0;
+      (existingRows || []).forEach(r => existingIdSet.add(r.visitor_id));
     }
-    const newInserted = uniqueRows.length - existingCount;
-    const existingUpdated = existingCount;
+    const existingCount = existingIdSet.size;
+
+    // In no-timestamp incremental mode, only upsert net-new visitors.
+    const rowsToUpsert = noTimestampIncremental
+      ? uniqueRows.filter(r => !existingIdSet.has(r.visitor_id))
+      : uniqueRows;
+
+    const newInserted = noTimestampIncremental
+      ? rowsToUpsert.length
+      : uniqueRows.length - existingCount;
+    const existingUpdated = noTimestampIncremental ? 0 : existingCount;
+
+    if (noTimestampIncremental) {
+      console.log(`[visitors-api-fetcher] Pixel ${pixel.id}: no-timestamp incremental — upserting ${rowsToUpsert.length} new (skipping ${existingCount} existing to preserve their stats)`);
+    }
 
     // Batch upsert all rows using the unique constraint on (visitor_id, pixel_id)
     // This handles both inserts and updates in a single operation, much faster than
@@ -566,8 +523,8 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
     const BATCH_SIZE = 200;
     const dbErrors: string[] = [];
 
-    for (let i = 0; i < uniqueRows.length; i += BATCH_SIZE) {
-      const batch = uniqueRows.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < rowsToUpsert.length; i += BATCH_SIZE) {
+      const batch = rowsToUpsert.slice(i, i + BATCH_SIZE);
       const { error: upsertError, count } = await supabaseAdmin
         .from('visitors')
         .upsert(batch, {
@@ -630,10 +587,11 @@ export async function fetchVisitorsFromApi(pixel: PixelForFetch): Promise<{
       try {
         const zbConfig = await getZeroBounceConfig(pixel.user_id);
         if (zbConfig && zbConfig.auto_verify !== false) {
-          // Fetch DB records for newly inserted visitors that have emails
+          // Fetch DB records for newly inserted visitors that have emails.
+          // Use existingIdSet to precisely identify which rows were brand-new
+          // (slice-by-count was order-dependent and fragile).
           const newVisitorIds = uniqueRows
-            .filter(r => r.email)
-            .slice(0, newInserted) // only new ones
+            .filter(r => r.email && !existingIdSet.has(r.visitor_id))
             .map(r => r.visitor_id);
 
           if (newVisitorIds.length > 0) {
