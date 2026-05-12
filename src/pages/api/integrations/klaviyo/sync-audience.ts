@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
+import { getAudienceContactsForSync } from '@/lib/integrations';
 import { logEvent } from '@/lib/webhook-logger';
 
 export const config = {
@@ -112,17 +113,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'No list selected. Please select a list or create a new one.' });
     }
 
-    // Fetch audience contacts
-    const { data: contacts, error: contactsError } = await supabaseAdmin
-      .from('audience_contacts')
-      .select('email, first_name, last_name, full_name, company, job_title, phone, city, state, country, linkedin_url, seniority, department, data')
-      .eq('audience_id', audience_id)
-      .not('email', 'is', null)
-      .limit(10000);
-
-    if (contactsError) {
-      return res.status(500).json({ error: 'Failed to fetch audience contacts' });
-    }
+    // Fetch ALL audience contacts (paginated — Supabase caps at 1000 rows per request)
+    const contacts = await getAudienceContactsForSync(audience_id);
 
     if (!contacts || contacts.length === 0) {
       return res.status(200).json({ success: true, synced: 0, message: 'No contacts with email found in this audience' });

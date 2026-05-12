@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
+import { paginateAll } from '@/lib/integrations';
 import { logEvent } from '@/lib/webhook-logger';
 import { getZeroBounceConfig, isEmailSyncable } from '@/lib/email-verification';
 
@@ -127,67 +128,96 @@ async function sendEventsParallel(
   return { pushed, errors };
 }
 
+interface PushVisitor {
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
+  company: string | null;
+  job_title: string | null;
+  lead_score: number | null;
+  total_sessions: number | null;
+  total_pageviews: number | null;
+  last_seen_at: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  email_status: string | null;
+}
+
 async function getVisitorsForType(userId: string, type: string, pixelIds: string[], since: string | null) {
-  let query = supabaseAdmin
-    .from('visitors')
-    .select('email, first_name, last_name, full_name, company, job_title, lead_score, total_sessions, total_pageviews, last_seen_at, city, state, country, email_status')
-    .eq('user_id', userId)
-    .not('email', 'is', null)
-    .in('pixel_id', pixelIds);
+  return paginateAll<PushVisitor>(() => {
+    let query = supabaseAdmin
+      .from('visitors')
+      .select('email, first_name, last_name, full_name, company, job_title, lead_score, total_sessions, total_pageviews, last_seen_at, city, state, country, email_status')
+      .eq('user_id', userId)
+      .not('email', 'is', null)
+      .in('pixel_id', pixelIds);
 
-  if (since) {
-    // Match visitors whose activity changed OR who were newly inserted since last push.
-    // last_seen_at uses the actual visit date from the API, which can be older than
-    // the DB insertion time for newly fetched visitors. Without created_at check,
-    // new visitors with old last_seen_at would be skipped.
-    query = query.or(`last_seen_at.gt.${since},created_at.gt.${since}`);
-  }
+    if (since) {
+      // Match visitors whose activity changed OR who were newly inserted since last push.
+      // last_seen_at uses the actual visit date from the API, which can be older than
+      // the DB insertion time for newly fetched visitors. Without created_at check,
+      // new visitors with old last_seen_at would be skipped.
+      query = query.or(`last_seen_at.gt.${since},created_at.gt.${since}`);
+    }
 
-  switch (type) {
-    case 'identified_visitor':
-      query = query.eq('is_identified', true);
-      break;
-    case 'high_intent':
-      query = query.gte('lead_score', 75);
-      break;
-    case 'returning_visitor':
-      query = query.gte('total_sessions', 2);
-      break;
-    case 'pricing_page':
-      // Handled separately
-      break;
-  }
+    switch (type) {
+      case 'identified_visitor':
+        query = query.eq('is_identified', true);
+        break;
+      case 'high_intent':
+        query = query.gte('lead_score', 75);
+        break;
+      case 'returning_visitor':
+        query = query.gte('total_sessions', 2);
+        break;
+      case 'pricing_page':
+        // Handled separately
+        break;
+    }
 
-  const { data, error } = await query.limit(10000);
-  if (error) throw error;
-  return data || [];
+    return query.order('id', { ascending: true });
+  });
 }
 
 async function getPricingPageVisitors(userId: string, pixelIds: string[], since: string | null) {
-  let eventsQuery = supabaseAdmin
-    .from('pixel_events')
-    .select('visitor_id')
-    .in('pixel_id', pixelIds)
-    .ilike('page_url', '%pricing%');
+  const events = await paginateAll<{ visitor_id: string }>(() => {
+    let eventsQuery = supabaseAdmin
+      .from('pixel_events')
+      .select('visitor_id')
+      .in('pixel_id', pixelIds)
+      .ilike('page_url', '%pricing%');
 
-  if (since) {
-    eventsQuery = eventsQuery.gt('created_at', since);
-  }
+    if (since) {
+      eventsQuery = eventsQuery.gt('created_at', since);
+    }
 
-  const { data: events } = await eventsQuery.limit(10000);
-  if (!events || events.length === 0) return [];
+    return eventsQuery.order('id', { ascending: true });
+  });
+
+  if (events.length === 0) return [];
 
   const visitorIds = Array.from(new Set(events.map(e => e.visitor_id)));
 
-  const { data: visitors } = await supabaseAdmin
-    .from('visitors')
-    .select('email, first_name, last_name, full_name, company, job_title, lead_score, total_sessions, total_pageviews, last_seen_at, city, state, country, email_status')
-    .eq('user_id', userId)
-    .not('email', 'is', null)
-    .in('id', visitorIds)
-    .limit(10000);
+  // Postgres has a parameter cap (~32k); chunk .in() lookups to be safe.
+  const ID_CHUNK = 500;
+  const visitors: PushVisitor[] = [];
+  for (let i = 0; i < visitorIds.length; i += ID_CHUNK) {
+    const chunk = visitorIds.slice(i, i + ID_CHUNK);
+    const page = await paginateAll<PushVisitor>(() =>
+      supabaseAdmin
+        .from('visitors')
+        .select('email, first_name, last_name, full_name, company, job_title, lead_score, total_sessions, total_pageviews, last_seen_at, city, state, country, email_status')
+        .eq('user_id', userId)
+        .not('email', 'is', null)
+        .in('id', chunk)
+        .order('id', { ascending: true })
+    );
+    visitors.push(...page);
+  }
 
-  return visitors || [];
+  return visitors;
 }
 
 function buildVisitorProperties(visitor: Record<string, unknown>) {
@@ -268,7 +298,7 @@ export async function pushEventsForUser(
     const events = visitors.map(visitor => ({
       email: visitor.email!,
       metricName: EVENT_TYPES[type].metricName,
-      properties: buildVisitorProperties(visitor),
+      properties: buildVisitorProperties(visitor as unknown as Record<string, unknown>),
       uniqueId: `trafficai_${type}_${visitor.email}`,
     }));
 

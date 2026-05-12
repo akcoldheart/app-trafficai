@@ -117,6 +117,33 @@ export async function getAllIntegrationStatuses(userId: string) {
   return data || [];
 }
 
+// Generic paginator for Supabase queries.
+// Supabase caps any single request at 1000 rows by default; .limit(N) where N > 1000 silently truncates.
+// Use this for any read where the result set can exceed 1000 rows.
+export async function paginateAll<T = unknown>(
+  buildQuery: () => { range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }> },
+  opts: { pageSize?: number; maxRows?: number } = {}
+): Promise<T[]> {
+  const PAGE_SIZE = opts.pageSize ?? 1000;
+  const MAX_ROWS = opts.maxRows ?? 100_000;
+  const allData: T[] = [];
+  let from = 0;
+
+  while (allData.length < MAX_ROWS) {
+    const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  if (allData.length >= MAX_ROWS) {
+    console.warn(`[paginateAll] Hit maxRows cap of ${MAX_ROWS} — additional rows truncated`);
+  }
+  return allData;
+}
+
 // Shared data fetching for sync operations
 
 export async function getVisitorsForSync(userId: string, pixelId?: string) {

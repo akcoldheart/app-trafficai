@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
+import { paginateAll } from '@/lib/integrations';
 import { verifyAndUpdateVisitors } from '@/lib/email-verification';
 import { logEvent } from '@/lib/webhook-logger';
 
@@ -26,26 +27,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { pixel_id, reverify } = req.body;
 
   try {
-    // Fetch visitors that need verification
-    // Admins can verify all visitors (not just their own)
-    let query = supabaseAdmin
-      .from('visitors')
-      .select('id, email')
-      .not('email', 'is', null);
+    // Fetch ALL visitors that need verification (paginated — Supabase caps at 1000 rows per request)
+    const visitors = await paginateAll<{ id: string; email: string }>(() => {
+      let query = supabaseAdmin
+        .from('visitors')
+        .select('id, email')
+        .not('email', 'is', null);
 
-    if (pixel_id) {
-      query = query.eq('pixel_id', pixel_id);
-    }
+      if (pixel_id) {
+        query = query.eq('pixel_id', pixel_id);
+      }
 
-    // Only unverified unless reverify is requested
-    if (!reverify) {
-      query = query.is('email_verified_at', null);
-    }
+      // Only unverified unless reverify is requested
+      if (!reverify) {
+        query = query.is('email_verified_at', null);
+      }
 
-    const { data: visitors, error } = await query.limit(5000);
-    if (error) throw error;
+      return query.order('id', { ascending: true });
+    });
 
-    if (!visitors || visitors.length === 0) {
+    if (visitors.length === 0) {
       return res.status(200).json({ message: 'No visitors to verify', verified: 0 });
     }
 

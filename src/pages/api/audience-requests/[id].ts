@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
-import { getAuthenticatedUser, getUserProfile, logAuditAction, checkIsAdmin } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId, getUserProfile, logAuditAction, checkIsAdmin } from '@/lib/api-helpers';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
@@ -14,6 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabase = createClient(req, res);
   const profile = await getUserProfile(user.id, req, res);
   const isAdmin = await checkIsAdmin(profile);
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   try {
     if (req.method === 'GET') {
@@ -33,7 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Check access
-      if (!isAdmin && data.user_id !== user.id) {
+      if (!isAdmin && data.user_id !== effectiveUserId) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
@@ -57,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Check permissions
       if (!isAdmin) {
-        if (existing.user_id !== user.id) {
+        if (existing.user_id !== effectiveUserId) {
           return res.status(403).json({ error: 'Access denied' });
         }
         if (existing.status !== 'pending') {
