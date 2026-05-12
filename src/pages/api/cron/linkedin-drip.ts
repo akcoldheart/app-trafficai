@@ -3,6 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 
 export const config = { maxDuration: 300 };
 
+// Max time to spend processing campaigns (leave 30s buffer for response)
+const MAX_PROCESSING_MS = 270_000; // 4.5 minutes
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -49,11 +52,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Fetch all active campaigns
+    // Fetch all active campaigns.
+    // Order by updated_at ascending so the campaign least-recently-touched goes first —
+    // ensures fairness if we skip the tail under timeout pressure.
     const { data: campaigns, error } = await supabaseAdmin
       .from('linkedin_campaigns')
       .select('*')
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .order('updated_at', { ascending: true, nullsFirst: true });
 
     if (error) throw error;
     if (!campaigns || campaigns.length === 0) {
@@ -61,8 +67,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const results: Array<{ campaign_id: string; campaign_name: string; action: string }> = [];
+    const startTime = Date.now();
+    let skippedDueToTimeout = 0;
 
-    for (const campaign of campaigns) {
+    for (let i = 0; i < campaigns.length; i++) {
+      // Need at least 30s remaining to start another campaign
+      const elapsed = Date.now() - startTime;
+      if (elapsed > MAX_PROCESSING_MS - 30_000) {
+        skippedDueToTimeout = campaigns.length - i;
+        console.warn(`[cron/linkedin-drip] Timeout approaching after ${i} campaigns (${Math.round(elapsed/1000)}s elapsed), skipping remaining ${skippedDueToTimeout}.`);
+        break;
+      }
+
+      const campaign = campaigns[i];
       // Look up the user's LinkedIn integration
       const { data: integration } = await supabaseAdmin
         .from('platform_integrations')
@@ -111,6 +128,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       success: true,
       processed: results.length,
+      total: campaigns.length,
+      skipped_timeout: skippedDueToTimeout,
       results,
     });
   } catch (error) {

@@ -6,6 +6,9 @@ import { logEvent } from '@/lib/webhook-logger';
 
 export const config = { maxDuration: 300 };
 
+// Max time to spend processing integrations (leave 30s buffer for response)
+const MAX_PROCESSING_MS = 270_000; // 4.5 minutes
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -23,12 +26,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Find all connected Klaviyo integrations that have push events enabled
+    // Find all connected Klaviyo integrations that have push events enabled.
+    // Order by last_synced_at ascending (nulls first) so the stalest user goes first —
+    // ensures fairness if we skip the tail under timeout pressure.
     const { data: integrations, error } = await supabaseAdmin
       .from('platform_integrations')
       .select('user_id, api_key, config, last_synced_at')
       .eq('platform', 'klaviyo')
-      .eq('is_connected', true);
+      .eq('is_connected', true)
+      .order('last_synced_at', { ascending: true, nullsFirst: true });
 
     if (error) throw error;
     if (!integrations || integrations.length === 0) {
@@ -36,8 +42,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const results: Array<{ user_id: string; total_pushed: number; synced?: number; error?: string }> = [];
+    const startTime = Date.now();
+    let skippedDueToTimeout = 0;
 
-    for (const integration of integrations) {
+    for (let i = 0; i < integrations.length; i++) {
+      // Need at least 60s remaining to start another integration (each can do auto-sync + push)
+      const elapsed = Date.now() - startTime;
+      if (elapsed > MAX_PROCESSING_MS - 60_000) {
+        skippedDueToTimeout = integrations.length - i;
+        console.warn(`[cron/push-klaviyo-events] Timeout approaching after ${i} integrations (${Math.round(elapsed/1000)}s elapsed), skipping remaining ${skippedDueToTimeout}. They will be prioritized in the next run.`);
+        break;
+      }
+
+      const integration = integrations[i];
       const config = (integration.config || {}) as Record<string, unknown>;
 
       // --- Auto-sync visitors to list ---
@@ -139,6 +156,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       message: `Processed ${results.length} integrations`,
+      total: integrations.length,
+      skipped_timeout: skippedDueToTimeout,
       results,
     });
   } catch (error) {

@@ -10,6 +10,11 @@ import {
 
 export const config = { maxDuration: 300 };
 
+// Max time to spend processing users (leave 30s buffer for response).
+// Each SMS send is rate-limited at 1.2s; the inner loop checks budget too so we never
+// kick off a send we can't finish.
+const MAX_PROCESSING_MS = 270_000; // 4.5 minutes
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -29,18 +34,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const results: { userId: string; sent: number; skipped: number; errors: number }[] = [];
 
   try {
-    // 1. Get all users with active RingCentral integration
+    // 1. Get all users with active RingCentral integration.
+    // Order by last_synced_at ASC NULLS FIRST so stalest user goes first under timeout pressure.
     const { data: integrations } = await supabaseAdmin
       .from('platform_integrations')
       .select('user_id, config')
       .eq('platform', 'ringcentral')
-      .eq('is_connected', true);
+      .eq('is_connected', true)
+      .order('last_synced_at', { ascending: true, nullsFirst: true });
 
     if (!integrations || integrations.length === 0) {
       return res.status(200).json({ message: 'No active RingCentral integrations', results: [] });
     }
 
-    for (const integration of integrations) {
+    const cronStartTime = Date.now();
+    let skippedDueToTimeout = 0;
+
+    for (let userIdx = 0; userIdx < integrations.length; userIdx++) {
+      // Need at least 30s remaining to start another user's templates
+      const elapsed = Date.now() - cronStartTime;
+      if (elapsed > MAX_PROCESSING_MS - 30_000) {
+        skippedDueToTimeout = integrations.length - userIdx;
+        console.warn(`[cron/ringcentral-sms] Timeout approaching after ${userIdx} users (${Math.round(elapsed/1000)}s elapsed), skipping remaining ${skippedDueToTimeout}.`);
+        break;
+      }
+
+      const integration = integrations[userIdx];
       const userId = integration.user_id;
       const integConfig = (integration.config || {}) as Record<string, unknown>;
       const fromNumber = integConfig.rc_from_number as string | undefined;
@@ -108,6 +127,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (!visitors || visitors.length === 0) continue;
 
           for (const visitor of visitors) {
+            // Inner timeout check: each send burns ~1.2s for rate limiting plus SMS API time.
+            // Bail if there's not enough budget left to safely complete another send.
+            if (Date.now() - cronStartTime > MAX_PROCESSING_MS - 10_000) {
+              console.warn(`[cron/ringcentral-sms] Inner timeout approaching for user ${userId}, ending early.`);
+              break;
+            }
+
             // Extract phone number
             const phone = extractVisitorPhone(visitor);
             if (!phone) {
@@ -211,7 +237,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const totalErrors = results.reduce((sum, r) => sum + r.errors, 0);
 
     return res.status(200).json({
-      message: `Processed ${integrations.length} user(s): ${totalSent} SMS sent, ${totalErrors} errors`,
+      message: `Processed ${results.length} user(s): ${totalSent} SMS sent, ${totalErrors} errors`,
+      total: integrations.length,
+      skipped_timeout: skippedDueToTimeout,
       results,
     });
   } catch (error) {
