@@ -1,14 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegrationStatus, updateIntegrationConfig, disconnectIntegration } from '@/lib/integrations';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   if (req.method === 'GET') {
     try {
-      const data = await getIntegrationStatus(user.id, 'pipedrive');
+      const data = await getIntegrationStatus(effectiveUserId, 'pipedrive');
       return res.status(200).json({ integration: data || null });
     } catch (error) {
       console.error('Error fetching Pipedrive status:', error);
@@ -20,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { config } = req.body;
 
     try {
-      const integration = await updateIntegrationConfig(user.id, 'pipedrive', config);
+      const integration = await updateIntegrationConfig(effectiveUserId, 'pipedrive', config);
       return res.status(200).json({ integration });
     } catch (error) {
       console.error('Error updating Pipedrive config:', error);
@@ -30,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'DELETE') {
     try {
-      await disconnectIntegration(user.id, 'pipedrive');
+      await disconnectIntegration(effectiveUserId, 'pipedrive');
       return res.status(200).json({ success: true, message: 'Pipedrive disconnected' });
     } catch (error) {
       console.error('Error disconnecting Pipedrive:', error);

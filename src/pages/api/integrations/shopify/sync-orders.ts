@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration, updateLastSynced } from '@/lib/integrations';
 import { fetchOrdersFromShopify, upsertConversionFromShopifyOrder } from '@/lib/shopify-orders';
 import { logEvent } from '@/lib/webhook-logger';
@@ -22,7 +22,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
-  const integration = await getIntegration(user.id, PLATFORM);
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
+  const integration = await getIntegration(effectiveUserId, PLATFORM);
   if (!integration) {
     return res.status(400).json({ error: 'Shopify not connected' });
   }
@@ -48,7 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .from('pixels')
     .select('id, user_id, orders_last_fetched_at')
     .eq('id', pixelId)
-    .eq('user_id', user.id)
+    .eq('user_id', effectiveUserId)
     .maybeSingle();
   if (pixelErr) return res.status(500).json({ error: pixelErr.message });
   if (!pixel) return res.status(404).json({ error: 'Pixel not found for this user' });
@@ -72,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const order of orders) {
       try {
         const result = await upsertConversionFromShopifyOrder({
-          userId: user.id,
+          userId: effectiveUserId,
           pixelId,
           shopDomain,
           order,
@@ -98,7 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
       .eq('id', pixelId);
 
-    await updateLastSynced(user.id, PLATFORM);
+    await updateLastSynced(effectiveUserId, PLATFORM);
 
     await logEvent({
       type: 'api',

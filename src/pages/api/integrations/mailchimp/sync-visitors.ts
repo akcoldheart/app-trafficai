@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration, updateLastSynced, getVisitorsForSync, formatPhoneE164, validateEmail, cleanEmail, parseFullName } from '@/lib/integrations';
 
 export const config = {
@@ -25,9 +25,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { pixel_id, list_id } = req.body;
 
-  const integration = await getIntegration(user.id, 'mailchimp');
+  const integration = await getIntegration(effectiveUserId, 'mailchimp');
   if (!integration) {
     return res.status(400).json({ error: 'Mailchimp not connected' });
   }
@@ -42,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const authHeader = `Basic ${Buffer.from(`anystring:${integration.api_key}`).toString('base64')}`;
 
   try {
-    const visitors = await getVisitorsForSync(user.id, pixel_id);
+    const visitors = await getVisitorsForSync(effectiveUserId, pixel_id);
 
     if (visitors.length === 0) {
       return res.status(200).json({ success: true, synced: 0, message: 'No visitors with email to sync' });
@@ -98,7 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       totalSynced += (result.new_members?.length || 0) + (result.updated_members?.length || 0);
     }
 
-    await updateLastSynced(user.id, 'mailchimp');
+    await updateLastSynced(effectiveUserId, 'mailchimp');
 
     return res.status(200).json({
       success: true,

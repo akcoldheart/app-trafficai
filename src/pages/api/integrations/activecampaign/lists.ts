@@ -1,12 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration } from '@/lib/integrations';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
-  const integration = await getIntegration(user.id, 'activecampaign');
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
+  const integration = await getIntegration(effectiveUserId, 'activecampaign');
   if (!integration) {
     return res.status(400).json({ error: 'ActiveCampaign not connected. Please connect your ActiveCampaign account first.' });
   }

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration, updateIntegrationConfig } from '@/lib/integrations';
 import { refreshGoogleTokenIfNeeded, listAccessibleCustomers } from '@/lib/google-ads';
 
@@ -8,8 +8,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await getAuthenticatedUser(req, res);
     if (!user) return;
 
+    const effectiveUserId = await getEffectiveUserId(user.id);
+
     try {
-      const integration = await getIntegration(user.id, 'google_ads');
+      const integration = await getIntegration(effectiveUserId, 'google_ads');
       if (!integration) {
         return res.status(401).json({ error: 'Google Ads not connected' });
       }
@@ -20,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Developer token not configured' });
       }
 
-      const accessToken = await refreshGoogleTokenIfNeeded(user.id, config);
+      const accessToken = await refreshGoogleTokenIfNeeded(effectiveUserId, config);
       const customers = await listAccessibleCustomers(accessToken, developerToken);
 
       return res.status(200).json({ accounts: customers });
@@ -35,6 +37,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await getAuthenticatedUser(req, res);
     if (!user) return;
 
+    const effectiveUserId = await getEffectiveUserId(user.id);
+
     const { customer_id: rawCustomerId, customer_name } = req.body;
     if (!rawCustomerId) {
       return res.status(400).json({ error: 'customer_id is required' });
@@ -43,13 +47,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const customer_id = rawCustomerId.replace(/-/g, '');
 
     try {
-      const integration = await getIntegration(user.id, 'google_ads');
+      const integration = await getIntegration(effectiveUserId, 'google_ads');
       if (!integration) {
         return res.status(401).json({ error: 'Google Ads not connected' });
       }
 
       const config = (integration.config || {}) as Record<string, unknown>;
-      await updateIntegrationConfig(user.id, 'google_ads', {
+      await updateIntegrationConfig(effectiveUserId, 'google_ads', {
         ...config,
         customer_id,
         customer_name: customer_name || customer_id,

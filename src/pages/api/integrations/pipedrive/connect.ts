@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { saveIntegration } from '@/lib/integrations';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -9,6 +9,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
+
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   const { api_key } = req.body;
 
@@ -33,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Save the integration
-    const integration = await saveIntegration(user.id, 'pipedrive', {
+    const integration = await saveIntegration(effectiveUserId, 'pipedrive', {
       api_key,
     });
 

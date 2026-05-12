@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration, updateLastSynced, getAudienceContactsForSync } from '@/lib/integrations';
 import { getAccessToken, createSpreadsheet } from '@/lib/google-sheets';
 import type { PlatformType } from '@/lib/integrations';
@@ -27,7 +27,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
-  const integration = await getIntegration(user.id, PLATFORM);
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
+  const integration = await getIntegration(effectiveUserId, PLATFORM);
   if (!integration) {
     return res.status(400).json({ error: 'Google Sheets not connected' });
   }
@@ -39,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const accessToken = await getAccessToken(user.id);
+    const accessToken = await getAccessToken(effectiveUserId);
     const contacts = await getAudienceContactsForSync(audience_id);
 
     if (!contacts || contacts.length === 0) {
@@ -75,7 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const { spreadsheetUrl } = await createSpreadsheet(accessToken, title, headers, rows);
 
-    await updateLastSynced(user.id, PLATFORM);
+    await updateLastSynced(effectiveUserId, PLATFORM);
 
     return res.status(200).json({
       success: true,

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration, updateLastSynced, getAudienceContactsForSync, formatPhoneE164, validateEmail, cleanEmail, parseFullName } from '@/lib/integrations';
 
 export const config = {
@@ -25,13 +25,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { audience_id, list_id, create_new_list, new_list_name } = req.body;
 
   if (!audience_id) {
     return res.status(400).json({ error: 'audience_id is required' });
   }
 
-  const integration = await getIntegration(user.id, 'mailchimp');
+  const integration = await getIntegration(effectiveUserId, 'mailchimp');
   if (!integration) {
     return res.status(400).json({ error: 'Mailchimp not connected' });
   }
@@ -143,7 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       totalSynced += (result.new_members?.length || 0) + (result.updated_members?.length || 0);
     }
 
-    await updateLastSynced(user.id, 'mailchimp');
+    await updateLastSynced(effectiveUserId, 'mailchimp');
 
     return res.status(200).json({
       success: true,

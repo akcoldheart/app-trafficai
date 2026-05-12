@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { saveIntegration } from '@/lib/integrations';
 import type { PlatformType } from '@/lib/integrations';
 
@@ -12,6 +12,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
+
+  const effectiveUserId = await getEffectiveUserId(user.id);
 
   const { webhook_url } = req.body;
 
@@ -41,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Save the integration
-    const result = await saveIntegration(user.id, PLATFORM, {
+    const result = await saveIntegration(effectiveUserId, PLATFORM, {
       webhook_url,
       config: {
         notify_new_visitors: true,

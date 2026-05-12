@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration, updateLastSynced, getAudienceContactsForSync, formatPhoneE164, validateEmail, cleanEmail, parseFullName } from '@/lib/integrations';
 import type { PlatformType } from '@/lib/integrations';
 
@@ -31,13 +31,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { audience_id } = req.body;
 
   if (!audience_id) {
     return res.status(400).json({ error: 'audience_id is required' });
   }
 
-  const integration = await getIntegration(user.id, PLATFORM);
+  const integration = await getIntegration(effectiveUserId, PLATFORM);
   if (!integration) {
     return res.status(400).json({ error: 'Salesforce not connected' });
   }
@@ -116,7 +118,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Update last synced timestamp
-    await updateLastSynced(user.id, PLATFORM);
+    await updateLastSynced(effectiveUserId, PLATFORM);
 
     return res.status(200).json({
       success: true,

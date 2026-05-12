@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration, updateLastSynced, getVisitorsForSync, formatPhoneE164, validateEmail, cleanEmail, parseFullName } from '@/lib/integrations';
 
 export const config = {
@@ -14,9 +14,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { pixel_id, list_id } = req.body;
 
-  const integration = await getIntegration(user.id, 'activecampaign');
+  const integration = await getIntegration(effectiveUserId, 'activecampaign');
   if (!integration) {
     return res.status(400).json({ error: 'ActiveCampaign not connected' });
   }
@@ -25,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const apiToken = integration.api_key!;
 
   try {
-    const visitors = await getVisitorsForSync(user.id, pixel_id);
+    const visitors = await getVisitorsForSync(effectiveUserId, pixel_id);
 
     if (visitors.length === 0) {
       return res.status(200).json({ success: true, synced: 0, message: 'No visitors with email to sync' });
@@ -92,7 +94,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    await updateLastSynced(user.id, 'activecampaign');
+    await updateLastSynced(effectiveUserId, 'activecampaign');
 
     return res.status(200).json({
       success: true,

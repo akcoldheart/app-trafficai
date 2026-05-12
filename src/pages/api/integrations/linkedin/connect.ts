@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { saveIntegration } from '@/lib/integrations';
 import crypto from 'crypto';
 
@@ -24,6 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { email, password, name } = req.body;
 
   if (!email || !password) {
@@ -36,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       password: encrypt(password),
     };
 
-    const result = await saveIntegration(user.id, 'linkedin', {
+    const result = await saveIntegration(effectiveUserId, 'linkedin', {
       config: {
         credentials: encryptedCredentials,
         account_email: email,

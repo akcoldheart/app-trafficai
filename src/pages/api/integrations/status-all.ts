@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getAllIntegrationStatuses } from '@/lib/integrations';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -10,8 +10,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   try {
-    const integrations = await getAllIntegrationStatuses(user.id);
+    const integrations = await getAllIntegrationStatuses(effectiveUserId);
     return res.status(200).json({ integrations });
   } catch (error) {
     console.error('Error fetching integration statuses:', error);

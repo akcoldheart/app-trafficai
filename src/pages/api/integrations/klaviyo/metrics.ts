@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdmin = createClient(
@@ -34,7 +34,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
-  const apiKey = await getKlaviyoApiKey(user.id);
+  const effectiveUserId = await getEffectiveUserId(user.id);
+  const apiKey = await getKlaviyoApiKey(effectiveUserId);
   if (!apiKey) {
     return res.status(400).json({ error: 'Klaviyo not connected' });
   }

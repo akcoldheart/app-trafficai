@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthenticatedUser } from '@/lib/api-helpers';
+import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration, updateLastSynced, getAudienceContactsForSync, formatPhoneE164, validateEmail, cleanEmail, parseFullName } from '@/lib/integrations';
 
 export const config = {
@@ -14,13 +14,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await getAuthenticatedUser(req, res);
   if (!user) return;
 
+  const effectiveUserId = await getEffectiveUserId(user.id);
+
   const { audience_id } = req.body;
 
   if (!audience_id) {
     return res.status(400).json({ error: 'audience_id is required' });
   }
 
-  const integration = await getIntegration(user.id, 'pipedrive');
+  const integration = await getIntegration(effectiveUserId, 'pipedrive');
   if (!integration) {
     return res.status(400).json({ error: 'Pipedrive not connected' });
   }
@@ -91,7 +93,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    await updateLastSynced(user.id, 'pipedrive');
+    await updateLastSynced(effectiveUserId, 'pipedrive');
 
     return res.status(200).json({
       success: true,
