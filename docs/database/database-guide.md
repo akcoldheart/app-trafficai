@@ -124,8 +124,10 @@ Migrations are in `supabase/migrations/` with numeric prefixes.
 | 026-044 | Performance indexes, dashboard aggregates, system logs | 12 |
 | 045-057 | Integrations (Klaviyo, Facebook, LinkedIn, RingCentral, Google Ads) | 13 |
 | 058-061 | Referral system, email verification (ZeroBounce) | 4 |
+| 062-065 | Team members + RLS + plan inheritance | 4 |
+| 066-067 | Audience export index, Shopify conversions | 2 |
 
-**Next migration number:** `062`
+**Next migration number:** `068`
 
 ### Key Migrations to Know
 
@@ -140,6 +142,10 @@ Migrations are in `supabase/migrations/` with numeric prefixes.
 | `051_all_integrations.sql` | `platform_integrations` | Unified integration model |
 | `057_ringcentral_google_ads_integrations.sql` | RingCentral + Google Ads | - |
 | `061_email_verification.sql` | `email_status`, `email_sub_status`, `email_verified_at` on visitors | ZeroBounce email verification |
+| `062_team_members.sql` | `team_members` table | Foundation for team accounts |
+| `063_team_rls_policies.sql` | RLS policies for team-scoped reads | Team members see owner's data |
+| `065_team_members_inherit_plan.sql` | Team members inherit owner's plan | Billing parity for team users |
+| `067_conversions.sql` | `conversions` table + attribution columns | Shopify order tracking + retro-attribution |
 
 ---
 

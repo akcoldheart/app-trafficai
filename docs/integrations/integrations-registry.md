@@ -25,7 +25,8 @@
 | 11 | [LinkedIn](#linkedin) | Outreach | Credentials | Campaigns, sync visitors | Via extension | Yes (30m) |
 | 12 | [RingCentral](#ringcentral) | Outreach | OAuth | SMS automation | Yes | Yes (10m) |
 | 13 | [Google Ads](#google_ads) | Advertising | OAuth | Audiences, conversions | Manual | No |
-| 14 | [ZeroBounce](#zerobounce-email-verification) | Email Verification | API Key | Email validation | Auto (on fetch) | No |
+| 14 | [Google Sheets](#google-sheets) | Export | OAuth | Sync visitors + audiences to sheet | Manual | No |
+| 15 | [ZeroBounce](#zerobounce-email-verification) | Email Verification | API Key | Email validation | Auto (on fetch) | No |
 
 ---
 
@@ -58,7 +59,7 @@
 | `api_key_and_url` | Salesforce, Shopify, ActiveCampaign | API key + instance URL (URL stored in `config`) |
 | `webhook_url` | Slack | User pastes webhook URL, stored in `webhook_url` column |
 | `triggers` | Zapier | Multiple webhook URLs stored in `config` per trigger type |
-| `oauth` | Facebook, RingCentral, Google Ads | Server-side OAuth flow with callback URL |
+| `oauth` | Facebook, RingCentral, Google Ads, Google Sheets | Server-side OAuth flow with callback URL |
 | `credentials` | LinkedIn | Email/password stored encrypted (used via Chrome extension) |
 
 ---
@@ -106,9 +107,10 @@ Also triggered inline by `fetch-visitors` cron when new visitors are inserted.
 **API Endpoints:**
 - `POST /api/integrations/hubspot/connect`
 - `GET /api/integrations/hubspot/status`
-- `POST /api/integrations/hubspot/sync`
+- `POST /api/integrations/hubspot/sync-visitors` -- Sync individual visitors as contacts
+- `POST /api/integrations/hubspot/sync-audience` -- Sync an entire audience to HubSpot
 
-**Features:** Syncs visitors as HubSpot contacts with properties mapped from visitor fields.
+**Features:** Syncs visitors as HubSpot contacts with properties mapped from visitor fields. Audience sync pushes all contacts in a saved audience.
 
 ---
 
@@ -280,6 +282,22 @@ Also triggered inline by `fetch-visitors` cron when new visitors are inserted.
 - `POST /api/integrations/google_ads/upload-conversions` -- Offline conversions
 
 **Security:** PII is SHA-256 hashed before sending to Google Ads API.
+
+---
+
+### Google Sheets
+
+**Category:** Export
+**Auth:** OAuth (Client ID + Client Secret)
+**Callback URL:** `/api/integrations/google_sheets/callback`
+**API Endpoints:**
+- `POST /api/integrations/google_sheets/connect` -- Store OAuth client credentials
+- `GET /api/integrations/google_sheets/callback` -- OAuth callback (stores access/refresh tokens)
+- `GET /api/integrations/google_sheets/status`
+- `POST /api/integrations/google_sheets/sync-visitors` -- Append visitors to a sheet
+- `POST /api/integrations/google_sheets/sync-audience` -- Append a full audience to a sheet
+
+**Features:** Exports visitors or audience contacts to a Google Sheet (one-way push, manual trigger).
 
 ---
 

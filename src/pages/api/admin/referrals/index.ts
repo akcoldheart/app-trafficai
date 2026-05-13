@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser, getUserProfile } from '@/lib/api-helpers';
+import { requireRole } from '@/lib/api-helpers';
 
 const supabaseAdmin = createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,13 +12,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const user = await getAuthenticatedUser(req, res);
-  if (!user) return;
-
-  const profile = await getUserProfile(user.id, req, res);
-  if (profile.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
+  const auth = await requireRole(req, res, 'admin');
+  if (!auth) return;
 
   const { status, page = '1', limit = '50' } = req.query;
   const pageNum = Math.max(1, parseInt(page as string));

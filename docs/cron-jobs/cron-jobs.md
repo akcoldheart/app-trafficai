@@ -16,6 +16,8 @@
 | [Klaviyo Events](#2-klaviyo-events) | `/api/cron/push-klaviyo-events` | `*/30 * * * *` | Every 30 min | 300s |
 | [LinkedIn Drip](#3-linkedin-drip) | `/api/cron/linkedin-drip` | `*/30 * * * *` | Every 30 min | 300s |
 | [RingCentral SMS](#4-ringcentral-sms) | `/api/cron/ringcentral-sms` | `*/10 * * * *` | Every 10 min | 300s |
+| [Shopify Order Sync](#5-shopify-order-sync) | `/api/cron/sync-conversions` | `0 * * * *` | Hourly | 300s |
+| [Reattribute Conversions](#6-reattribute-conversions) | `/api/cron/reattribute-conversions` | `0 3 * * *` | Daily @ 3am UTC | 300s |
 
 ---
 
@@ -203,6 +205,82 @@ Sends automated SMS messages to new website visitors via RingCentral:
 | Token refresh fails | All SMS for that user skipped | User must reconnect RingCentral |
 | SMS send fails | Logged to `ringcentral_sms_log` with `status='failed'` | Check log for error |
 | No phone number | Visitor skipped (counted in `skipped`) | Expected behavior |
+
+---
+
+## 5. Shopify Order Sync
+
+**File:** `src/pages/api/cron/sync-conversions.ts`
+**Engine:** `src/lib/shopify-orders.ts`
+**Schedule:** Hourly (`0 * * * *`)
+
+### What it does
+
+Pulls orders from every connected Shopify integration that has an attribution pixel set, upserts them into `conversions`, and resolves attribution back to the visitor that triggered the order.
+
+### Processing Logic
+
+1. **Fetch integrations** -- All `platform_integrations` rows with `platform='shopify'` AND `is_connected=true`, paginated (1000/page)
+2. **Build job list** -- One job per (user, pixel, shop_domain) tuple. Integrations without `orders_attribution_pixel_id` / `shop_domain` / `api_key` are skipped.
+3. **Cross-tenant guard** -- A job is dropped if `pixel.user_id !== integration.user_id` (defence-in-depth against config drift)
+4. **Interleave by user** -- Same round-robin pattern as `fetch-visitors`, sorted by `orders_last_fetched_at` ascending (oldest first)
+5. **Timeout guard** -- Bail at 270s with 60s buffer for the in-flight Shopify call
+6. **Per-job processing:**
+   - 1.5s delay between jobs to be polite to Shopify
+   - Fetch up to 1000 orders since `pixel.orders_last_fetched_at`
+   - For each order: `upsertConversionFromShopifyOrder` (inserts conversion, runs `resolveAttribution`)
+   - Update `pixels.orders_last_fetched_at` to newest `updated_at`
+   - Update `pixels.orders_last_fetch_status` (`success` / `partial: N errors` / `error: ...`)
+   - Log a per-shop `shopify_orders_sync` event with `trigger='cron'`
+
+### Failure Modes
+
+| Failure | Impact | Recovery |
+|---------|--------|----------|
+| Shopify API down | Job marked `error: ...`, other jobs continue | Retried next hour |
+| Attribution pixel not set | Integration silently skipped | User must pick attribution pixel in Settings |
+| Cross-tenant config drift | Job dropped before fetch | Manual fix to `platform_integrations.config` |
+| Timeout (>270s) | Tail jobs skipped | `skipped_timeout` in response; ordering means stalest go first next run |
+
+### System Log Events
+
+| Event Name | Status | When |
+|------------|--------|------|
+| `shopify_orders_sync` | `success` / `warning` / `error` | Per-shop sync result |
+| `sync_conversions` | `success` / `warning` / `error` | Overall cron summary |
+
+---
+
+## 6. Reattribute Conversions
+
+**File:** `src/pages/api/cron/reattribute-conversions.ts`
+**Engine:** `resolveAttribution` from `src/lib/shopify-orders.ts`
+**Schedule:** Daily at 03:00 UTC (`0 3 * * *`)
+
+### What it does
+
+Re-runs attribution against the last 30 days of unmatched conversions. Catches late identifications — visitor orders Monday, gets identified Tuesday → this job retro-attributes on Wednesday's run.
+
+### Processing Logic
+
+1. **Window:** 30 days back, only rows where both `matched_visitor_id` and `matched_contact_id` are NULL
+2. **Keyset pagination:** `ORDER BY ordered_at ASC` with `gt(ordered_at, cursor)` for cursor advance
+3. **Per page:** 200 rows; loop continues while elapsed < 270s − 30s buffer
+4. **For each row:** call `resolveAttribution`; if a match is found, update the conversion's `matched_*`, `match_method`, `match_confidence`, `identified_before_order`
+5. **Limitation:** Only re-checks currently-unmatched rows. Matched rows whose `matched_visitor_id` was later deleted are NOT rechecked (accepted gap).
+
+### Failure Modes
+
+| Failure | Impact | Recovery |
+|---------|--------|----------|
+| Timeout before window completes | Partial pass | Next night's run resumes from oldest still-unmatched |
+| Update fails on a row | Row counted in `errors`, loop continues | Logged via console.error |
+
+### System Log Events
+
+| Event Name | Status | When |
+|------------|--------|------|
+| `reattribute_conversions` | `success` / `warning` / `error` | Daily summary |
 
 ---
 

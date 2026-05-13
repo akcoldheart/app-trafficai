@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { getAuthenticatedUser, getUserProfile } from '@/lib/api-helpers';
+import { requireRole } from '@/lib/api-helpers';
 
 const supabaseAdmin = createServiceClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,13 +8,8 @@ const supabaseAdmin = createServiceClient(
 );
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await getAuthenticatedUser(req, res);
-  if (!user) return;
-
-  const profile = await getUserProfile(user.id, req, res);
-  if (profile.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
+  const auth = await requireRole(req, res, 'admin');
+  if (!auth) return;
 
   if (req.method === 'GET') {
     const { data, error } = await supabaseAdmin

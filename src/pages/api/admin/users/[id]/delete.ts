@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createClient } from '@/lib/supabase/api';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { requireRole } from '@/lib/api-helpers';
 
 const getServiceClient = () => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -18,26 +18,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'User ID is required' });
   }
 
-  const supabase = createClient(req, res);
+  const auth = await requireRole(req, res, 'admin');
+  if (!auth) return;
+  const { user } = auth;
 
   try {
-    // Get current user to verify admin access
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    // Check if requesting user is admin
-    const { data: adminUser } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (adminUser?.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
     // Prevent admin from deleting themselves
     if (id === user.id) {
       return res.status(400).json({ error: 'Cannot delete your own account' });

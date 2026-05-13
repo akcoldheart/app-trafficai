@@ -277,6 +277,13 @@ export async function getEffectiveUserId(userId: string): Promise<string> {
 /**
  * Get full team context for the current user.
  * Cached for 30 seconds to avoid repeated DB queries.
+ *
+ * Resilience: if any DB query fails (transient Supabase blip, network), this falls
+ * back to a "solo user" context (effectiveUserId = userId, no team) rather than
+ * throwing. This keeps team members able to use their own data when the team
+ * lookup misfires — they only lose access to the team owner's shared data for
+ * up to 30 seconds (one cache TTL). The fallback is NOT cached so the next call
+ * retries the real lookup.
  */
 export async function getTeamContext(userId: string): Promise<TeamContext> {
   // Check cache
@@ -285,68 +292,86 @@ export async function getTeamContext(userId: string): Promise<TeamContext> {
     return cached.data;
   }
 
-  const supabase = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  try {
+    const supabase = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
-  // Check if user owns a team
-  const { data: ownedTeam } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('owner_user_id', userId)
-    .maybeSingle();
-
-  if (ownedTeam) {
-    const result: TeamContext = {
-      effectiveUserId: userId,
-      isTeamMember: false,
-      isTeamOwner: true,
-      teamId: ownedTeam.id,
-      teamRole: 'owner',
-    };
-    teamContextCache.set(userId, { data: result, expires: Date.now() + 30000 });
-    return result;
-  }
-
-  // Check if user is a member of a team
-  const { data: membership } = await supabase
-    .from('team_members')
-    .select('team_id, role')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (membership) {
-    // Resolve team owner's user_id
-    const { data: team } = await supabase
+    // Check if user owns a team
+    const { data: ownedTeam, error: ownedTeamError } = await supabase
       .from('teams')
-      .select('owner_user_id')
-      .eq('id', membership.team_id)
-      .single();
+      .select('id')
+      .eq('owner_user_id', userId)
+      .maybeSingle();
 
-    if (team) {
+    if (ownedTeamError) throw ownedTeamError;
+
+    if (ownedTeam) {
       const result: TeamContext = {
-        effectiveUserId: team.owner_user_id,
-        isTeamMember: true,
-        isTeamOwner: false,
-        teamId: membership.team_id,
-        teamRole: membership.role as 'admin' | 'member',
+        effectiveUserId: userId,
+        isTeamMember: false,
+        isTeamOwner: true,
+        teamId: ownedTeam.id,
+        teamRole: 'owner',
       };
       teamContextCache.set(userId, { data: result, expires: Date.now() + 30000 });
       return result;
     }
-  }
 
-  // No team association
-  const result: TeamContext = {
-    effectiveUserId: userId,
-    isTeamMember: false,
-    isTeamOwner: false,
-    teamId: null,
-    teamRole: null,
-  };
-  teamContextCache.set(userId, { data: result, expires: Date.now() + 30000 });
-  return result;
+    // Check if user is a member of a team
+    const { data: membership, error: membershipError } = await supabase
+      .from('team_members')
+      .select('team_id, role')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (membershipError) throw membershipError;
+
+    if (membership) {
+      // Resolve team owner's user_id
+      const { data: team, error: teamError } = await supabase
+        .from('teams')
+        .select('owner_user_id')
+        .eq('id', membership.team_id)
+        .single();
+
+      if (teamError) throw teamError;
+
+      if (team) {
+        const result: TeamContext = {
+          effectiveUserId: team.owner_user_id,
+          isTeamMember: true,
+          isTeamOwner: false,
+          teamId: membership.team_id,
+          teamRole: membership.role as 'admin' | 'member',
+        };
+        teamContextCache.set(userId, { data: result, expires: Date.now() + 30000 });
+        return result;
+      }
+    }
+
+    // No team association
+    const result: TeamContext = {
+      effectiveUserId: userId,
+      isTeamMember: false,
+      isTeamOwner: false,
+      teamId: null,
+      teamRole: null,
+    };
+    teamContextCache.set(userId, { data: result, expires: Date.now() + 30000 });
+    return result;
+  } catch (err) {
+    console.error(`[getTeamContext] DB lookup failed for user ${userId}, falling back to solo context:`, err);
+    // Don't cache the fallback — we want the next request to retry the real lookup
+    return {
+      effectiveUserId: userId,
+      isTeamMember: false,
+      isTeamOwner: false,
+      teamId: null,
+      teamRole: null,
+    };
+  }
 }
 
 /**
