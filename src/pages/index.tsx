@@ -23,6 +23,10 @@ import {
   IconCash,
   IconTargetArrow,
   IconReceipt,
+  IconAlertTriangle,
+  IconCheck,
+  IconBulb,
+  IconListCheck,
 } from '@tabler/icons-react';
 
 interface DashboardStats {
@@ -179,8 +183,13 @@ export default function Dashboard() {
                   </>
                 ) : (
                   <>
-                    You have {stats?.overview.activePixels || 0} active pixel{(stats?.overview.activePixels || 0) !== 1 ? 's' : ''} tracking visitor data.
-                    {stats?.overview.totalVisitors ? ` ${stats.overview.totalVisitors} visitors captured.` : ''}
+                    {stats?.overview.totalVisitors
+                      ? <>
+                          {stats.overview.totalVisitors.toLocaleString()} real people identified on your site.
+                          {(stats.overview.totalContacts ?? 0) > 0 && ` ${stats.overview.totalContacts.toLocaleString()} contact records ready to use.`}
+                        </>
+                      : <>Your pixel is ready. Visitors will be identified and enriched automatically.</>
+                    }
                   </>
                 )}
               </p>
@@ -248,19 +257,19 @@ export default function Dashboard() {
                       <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.5rem, 2.2vw, 2.25rem)', lineHeight: 1.1 }}>
                         {stats?.overview.totalVisitors?.toLocaleString() || 0}
                       </div>
-                      <div className="opacity-75 small text-nowrap">Total Visitors</div>
+                      <div className="opacity-75 small text-nowrap">Identified</div>
+                    </div>
+                    <div className="flex-fill px-2 py-1 border-start border-light border-opacity-25" style={{ minWidth: 0 }}>
+                      <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.5rem, 2.2vw, 2.25rem)', lineHeight: 1.1 }}>
+                        {stats?.overview.totalContacts?.toLocaleString() || 0}
+                      </div>
+                      <div className="opacity-75 small text-nowrap">Contacts Ready</div>
                     </div>
                     <div className="flex-fill px-2 py-1 border-start border-light border-opacity-25" style={{ minWidth: 0 }}>
                       <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.5rem, 2.2vw, 2.25rem)', lineHeight: 1.1 }}>
                         {stats?.overview.totalEvents?.toLocaleString() || 0}
                       </div>
-                      <div className="opacity-75 small text-nowrap">Total Events</div>
-                    </div>
-                    <div className="flex-fill px-2 py-1 border-start border-light border-opacity-25" style={{ minWidth: 0 }}>
-                      <div className="fw-bold text-truncate" style={{ fontSize: 'clamp(1.5rem, 2.2vw, 2.25rem)', lineHeight: 1.1 }}>
-                        {stats?.overview.avgLeadScore || 0}
-                      </div>
-                      <div className="opacity-75 small text-nowrap">Avg Score</div>
+                      <div className="opacity-75 small text-nowrap">Events Tracked</div>
                     </div>
                   </>
                 )}
@@ -269,6 +278,43 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Inactive Pixel Alert — non-admin only */}
+      {!isAdmin && stats && stats.overview.activePixels === 0 && stats.pixels.length > 0 && (
+        <div className="alert alert-danger d-flex align-items-center mb-4" role="alert">
+          <IconAlertTriangle size={20} className="me-2 flex-shrink-0" />
+          <div className="flex-grow-1">
+            <h4 className="alert-title mb-1">
+              {stats.pixels.length === 1
+                ? `${stats.pixels[0].name} pixel is inactive`
+                : 'All your pixels are inactive'
+              } — you&apos;re missing visitors right now
+            </h4>
+            <div>
+              Your pixel is offline and not capturing visitors. Reactivate it to resume identification and enrichment.
+            </div>
+          </div>
+          <div className="ms-3 flex-shrink-0">
+            <button
+              type="button"
+              className="btn btn-sm btn-danger"
+              onClick={() => {
+                const pixelName = stats.pixels.length === 1
+                  ? stats.pixels[0].name
+                  : null;
+                const message = pixelName
+                  ? `Hi! My "${pixelName}" pixel is inactive. Please help me reactivate it.`
+                  : `Hi! ${stats.pixels.length} of my pixels are inactive. Please help me reactivate them.`;
+                window.dispatchEvent(
+                  new CustomEvent('open-support-chat', { detail: { message } })
+                );
+              }}
+            >
+              Reactivate Pixel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Admin: User Role Stats */}
       {isAdmin && (
@@ -497,6 +543,202 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-2 text-muted small">
                   Across {stats?.overview.totalAudiences || 0} audience{(stats?.overview.totalAudiences || 0) !== 1 ? 's' : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6 col-lg-3">
+            <div className="card">
+              <div className="card-body">
+                <div className="subheader text-muted mb-2">Avg Lead Score</div>
+                <div className="d-flex align-items-baseline mb-2">
+                  <div className="h2 mb-0 me-1">{stats?.overview.avgLeadScore || 0}</div>
+                  <div className="text-muted small">/ 100</div>
+                </div>
+                <div className="progress mb-1" style={{ height: '6px' }}>
+                  <div
+                    className={`progress-bar ${
+                      (stats?.overview.avgLeadScore || 0) >= 50 ? 'bg-green' :
+                      (stats?.overview.avgLeadScore || 0) >= 25 ? 'bg-yellow' : 'bg-orange'
+                    }`}
+                    style={{ width: `${stats?.overview.avgLeadScore || 0}%` }}
+                  />
+                </div>
+                <div className="d-flex justify-content-between mb-2" style={{ fontSize: '10px' }} aria-hidden="true">
+                  <span className="text-muted">Cold</span>
+                  <span className="text-muted">Warm 50+</span>
+                  <span className="text-muted">Hot</span>
+                </div>
+                <div className="text-muted small d-flex align-items-center gap-1 text-nowrap">
+                  <IconBulb size={12} className="flex-shrink-0" />
+                  <span className="text-truncate">Track events for hotter leads</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Setup Progress Checklist — non-admin only */}
+      {!isAdmin && stats && (
+        <div className="card mb-4">
+          <div className="card-header border-0">
+            <h3 className="card-title">
+              <IconListCheck size={20} className="me-2 text-primary" />
+              Getting started
+            </h3>
+          </div>
+          <div className="list-group list-group-flush">
+            {/* Step 1: Pixel installed */}
+            <div className="list-group-item">
+              <div className="row align-items-center">
+                <div className="col-auto">
+                  <span className={`avatar avatar-sm ${stats.pixels.length > 0 ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                    {stats.pixels.length > 0
+                      ? <IconCheck size={16} className="text-green" />
+                      : <span className="text-muted fw-bold" style={{ fontSize: '12px' }}>1</span>}
+                  </span>
+                </div>
+                <div className="col">
+                  <div className="fw-medium">Install tracking pixel</div>
+                  <div className="text-muted small">
+                    {stats.pixels.length > 0
+                      ? `${stats.pixels.length} pixel${stats.pixels.length !== 1 ? 's' : ''} configured`
+                      : 'Add a pixel to start capturing visitors'}
+                  </div>
+                </div>
+                <div className="col-auto">
+                  {stats.pixels.length > 0
+                    ? <span className="badge bg-green-lt text-green">Done</span>
+                    : <Link href="/pixels" className="btn btn-sm btn-primary">Create pixel</Link>}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 2: Visitors captured */}
+            <div className="list-group-item">
+              <div className="row align-items-center">
+                <div className="col-auto">
+                  <span className={`avatar avatar-sm ${stats.overview.totalVisitors > 0 ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                    {stats.overview.totalVisitors > 0
+                      ? <IconCheck size={16} className="text-green" />
+                      : <span className="text-muted fw-bold" style={{ fontSize: '12px' }}>2</span>}
+                  </span>
+                </div>
+                <div className="col">
+                  <div className="fw-medium">Capture your first visitors</div>
+                  <div className="text-muted small">
+                    {stats.overview.totalVisitors > 0
+                      ? `${stats.overview.totalVisitors.toLocaleString()} visitors identified so far`
+                      : 'Visitors appear once your pixel is live on your site'}
+                  </div>
+                </div>
+                <div className="col-auto">
+                  {stats.overview.totalVisitors > 0
+                    ? <span className="badge bg-green-lt text-green">Done</span>
+                    : <Link href="/pixels" className="btn btn-sm btn-outline-primary">View pixel</Link>}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3: Pixel active */}
+            {stats.pixels.length > 0 && (
+              <div className="list-group-item">
+                <div className="row align-items-center">
+                  <div className="col-auto">
+                    <span className={`avatar avatar-sm ${stats.overview.activePixels > 0 ? 'bg-green-lt' : 'bg-red-lt'}`}>
+                      {stats.overview.activePixels > 0
+                        ? <IconCheck size={16} className="text-green" />
+                        : <IconAlertTriangle size={16} className="text-red" />}
+                    </span>
+                  </div>
+                  <div className="col">
+                    <div className={`fw-medium ${stats.overview.activePixels === 0 ? 'text-danger' : ''}`}>
+                      Keep pixel active
+                    </div>
+                    <div className="text-muted small">
+                      {stats.overview.activePixels > 0
+                        ? `${stats.overview.activePixels} pixel${stats.overview.activePixels !== 1 ? 's' : ''} currently tracking visitors`
+                        : "Pixel is offline — you're missing visitors right now"}
+                    </div>
+                  </div>
+                  <div className="col-auto">
+                    {stats.overview.activePixels > 0
+                      ? <span className="badge bg-green-lt text-green">Active</span>
+                      : <button
+                          type="button"
+                          className="btn btn-sm btn-danger"
+                          onClick={() => {
+                            const pixelName = stats.pixels.length === 1
+                              ? stats.pixels[0].name
+                              : null;
+                            const message = pixelName
+                              ? `Hi! My "${pixelName}" pixel is offline. Please help me reactivate it.`
+                              : `Hi! My pixels are offline. Please help me reactivate them.`;
+                            window.dispatchEvent(
+                              new CustomEvent('open-support-chat', { detail: { message } })
+                            );
+                          }}
+                        >
+                          Reactivate
+                        </button>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Event tracking */}
+            <div className="list-group-item">
+              <div className="row align-items-center">
+                <div className="col-auto">
+                  <span className={`avatar avatar-sm ${stats.overview.totalEvents > 0 ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                    {stats.overview.totalEvents > 0
+                      ? <IconCheck size={16} className="text-green" />
+                      : <span className="text-muted fw-bold" style={{ fontSize: '12px' }}>4</span>}
+                  </span>
+                </div>
+                <div className="col">
+                  <div className={`fw-medium ${stats.overview.totalEvents === 0 ? 'text-muted' : ''}`}>
+                    Set up event tracking
+                  </div>
+                  <div className="text-muted small">
+                    {stats.overview.totalEvents > 0
+                      ? `${stats.overview.totalEvents.toLocaleString()} events tracked — surfaces high-intent visitors`
+                      : 'Track key pages and actions to identify your hottest leads'}
+                  </div>
+                </div>
+                <div className="col-auto">
+                  {stats.overview.totalEvents > 0
+                    ? <span className="badge bg-green-lt text-green">Done</span>
+                    : <Link href="/pixels" className="btn btn-sm btn-outline-primary">Set up</Link>}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 5: Export to CRM */}
+            <div className="list-group-item">
+              <div className="row align-items-center">
+                <div className="col-auto">
+                  <span className={`avatar avatar-sm ${stats.overview.totalContacts > 0 ? 'bg-green-lt' : 'bg-secondary-lt'}`}>
+                    {stats.overview.totalContacts > 0
+                      ? <IconCheck size={16} className="text-green" />
+                      : <span className="text-muted fw-bold" style={{ fontSize: '12px' }}>5</span>}
+                  </span>
+                </div>
+                <div className="col">
+                  <div className={`fw-medium ${stats.overview.totalContacts === 0 ? 'text-muted' : ''}`}>
+                    Export contacts to your CRM or email tool
+                  </div>
+                  <div className="text-muted small">
+                    {stats.overview.totalContacts > 0
+                      ? `${stats.overview.totalContacts.toLocaleString()} contacts synced across ${stats.overview.totalAudiences} audience${stats.overview.totalAudiences !== 1 ? 's' : ''}`
+                      : 'Push identified visitors to Klaviyo, HubSpot, Mailchimp and more'}
+                  </div>
+                </div>
+                <div className="col-auto">
+                  {stats.overview.totalContacts > 0
+                    ? <span className="badge bg-green-lt text-green">Done</span>
+                    : <Link href="/integrations" className="btn btn-sm btn-outline-primary">Connect</Link>}
                 </div>
               </div>
             </div>
@@ -804,6 +1046,7 @@ export default function Dashboard() {
                     <th>Score</th>
                     <th>Company</th>
                     <th>Last Seen</th>
+                    {!isAdmin && <th></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -846,11 +1089,21 @@ export default function Dashboard() {
                         </td>
                         <td>
                           <span className={`badge ${getScoreBadgeClass(visitor.lead_score)}`}>
-                            {visitor.lead_score}
+                            {visitor.lead_score} / 100
                           </span>
                         </td>
                         <td className="text-muted">{visitor.company || '-'}</td>
                         <td className="text-muted">{formatTimeAgo(visitor.last_seen_at)}</td>
+                        {!isAdmin && (
+                          <td>
+                            <Link
+                              href="/visitors"
+                              className="btn btn-sm btn-outline-primary"
+                            >
+                              Contact
+                            </Link>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}

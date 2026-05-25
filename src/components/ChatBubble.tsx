@@ -50,6 +50,11 @@ export default function ChatBubble() {
   const isOpenRef = useRef(isOpen);
   const supabase = createClient();
   const processedMessageIds = useRef<Set<string>>(new Set());
+  // Holds a message that should be auto-sent as soon as a conversation is ready.
+  // Set when an external trigger (e.g. "Reactivate Pixel" button) dispatches
+  // an `open-support-chat` CustomEvent so the request reaches the admin chat
+  // queue without the user needing to type it.
+  const pendingAutoSendRef = useRef<string | null>(null);
 
   // Keep ref in sync so realtime callback sees latest value
   useEffect(() => {
@@ -193,9 +198,10 @@ export default function ChatBubble() {
     }
   };
 
-  const startConversation = async (e: React.FormEvent) => {
+  const startConversation = async (e: React.FormEvent, emailOverride?: string) => {
     e.preventDefault();
-    if (!customerEmail.trim()) return;
+    const emailToUse = (emailOverride || customerEmail).trim();
+    if (!emailToUse) return;
 
     setLoading(true);
     setError(null);
@@ -204,7 +210,7 @@ export default function ChatBubble() {
       const { data: existingConv } = await supabase
         .from('chat_conversations')
         .select('*')
-        .ilike('customer_email', customerEmail.toLowerCase().trim())
+        .ilike('customer_email', emailToUse.toLowerCase())
         .eq('status', 'open')
         .order('created_at', { ascending: false })
         .limit(1)
@@ -233,7 +239,7 @@ export default function ChatBubble() {
           .from('chat_conversations')
           .insert({
             customer_name: customerName || null,
-            customer_email: customerEmail.toLowerCase().trim(),
+            customer_email: emailToUse.toLowerCase(),
             customer_metadata: {
               page_url: window.location.href,
               user_agent: navigator.userAgent,
@@ -274,6 +280,13 @@ export default function ChatBubble() {
           setMessages([greeting]);
         }
       }
+
+      // Flush any pending auto-send (e.g. from "Reactivate Pixel" trigger)
+      if (conv?.id && pendingAutoSendRef.current) {
+        const queued = pendingAutoSendRef.current;
+        pendingAutoSendRef.current = null;
+        await sendMessageBody(queued, conv.id);
+      }
     } catch (err) {
       console.error('Error starting conversation:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to start chat. Please try again.';
@@ -283,19 +296,17 @@ export default function ChatBubble() {
     }
   };
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !conversation?.id || sending) return;
+  const sendMessageBody = async (messageBody: string, convId?: string) => {
+    const conversationId = convId || conversation?.id;
+    if (!messageBody.trim() || !conversationId || sending) return;
 
-    const messageBody = newMessage.trim();
-    setNewMessage('');
     setSending(true);
 
     // Optimistic update
     const tempId = `temp-${Date.now()}`;
     const tempMessage: Message = {
       id: tempId,
-      conversation_id: conversation.id,
+      conversation_id: conversationId,
       body: messageBody,
       sender_type: 'customer',
       sender_name: customerName || customerEmail,
@@ -310,7 +321,7 @@ export default function ChatBubble() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          conversation_id: conversation.id,
+          conversation_id: conversationId,
           body: messageBody,
           sender_type: 'customer',
           sender_name: customerName || customerEmail,
@@ -331,10 +342,17 @@ export default function ChatBubble() {
       console.error('Error sending message:', error);
       // Remove temp message on error
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setNewMessage(messageBody);
     } finally {
       setSending(false);
     }
+  };
+
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !conversation?.id || sending) return;
+    const messageBody = newMessage.trim();
+    setNewMessage('');
+    await sendMessageBody(messageBody);
   };
 
   const formatTime = (dateString: string) => {
@@ -422,6 +440,42 @@ export default function ChatBubble() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, user?.email, conversation?.id]);
+
+  // External trigger (e.g. dashboard "Reactivate Pixel" button) opens the
+  // chat and auto-sends a pre-built message so it reaches the admin queue
+  // without any typing from the user.
+  useEffect(() => {
+    if (isAdmin) return;
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      const message = detail?.message?.trim();
+      if (!message) return;
+
+      pendingAutoSendRef.current = message;
+      setIsOpen(true);
+      setIsMinimized(false);
+      setUnreadCount(0);
+
+      if (conversation?.id) {
+        // Conversation already exists — flush immediately
+        const queued = pendingAutoSendRef.current;
+        pendingAutoSendRef.current = null;
+        if (queued) sendMessageBody(queued);
+      } else if (user?.email) {
+        // No conversation yet — start one. startConversation will flush
+        // the queued message after the conversation is created.
+        const syntheticEvent = { preventDefault: () => {} } as React.FormEvent;
+        startConversation(syntheticEvent, user.email);
+      }
+      // Anonymous visitor: pending message stays queued until they submit
+      // the email form; startConversation will flush it on success.
+    };
+
+    window.addEventListener('open-support-chat', handler);
+    return () => window.removeEventListener('open-support-chat', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, conversation?.id, user?.email]);
 
   // Admins use the Messages menu in sidebar — no need for chat bubble
   if (isAdmin) return null;

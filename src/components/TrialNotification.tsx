@@ -84,19 +84,19 @@ export default function TrialNotification({ className = '' }: TrialNotificationP
       return {
         bgClass: 'bg-orange text-white',
         icon: <IconClock size={20} />,
-        title: `Trial Ending Soon`,
-        message: `Your free trial ends in ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}. Upgrade to keep your data and features.`,
-        buttonText: 'Choose a Plan',
+        title: `Trial ends in ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}`,
+        message: `After your trial expires, your pixel stops tracking and you permanently lose access to all identified visitors, contact records, and saved audiences. Upgrade now to keep everything.`,
+        buttonText: 'Keep My Data',
         buttonClass: 'btn-light',
       };
     }
-    // Normal trial - show friendly reminder
+    // Normal trial - data-loss framing
     return {
       bgClass: 'bg-primary-lt',
       icon: <IconGift size={20} />,
-      title: `${daysRemaining} Days Left in Trial`,
-      message: 'Explore all features during your trial. Upgrade anytime to unlock more visitors.',
-      buttonText: 'View Plans',
+      title: `${daysRemaining} Day${daysRemaining !== 1 ? 's' : ''} Left in Trial`,
+      message: `After your trial ends, your pixel stops tracking and you lose access to all identified visitor data and contact records. Upgrade now to keep your data.`,
+      buttonText: 'Upgrade & Keep Data',
       buttonClass: 'btn-primary',
     };
   };
