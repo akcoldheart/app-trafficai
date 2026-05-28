@@ -247,23 +247,35 @@ async function handleInit(
   }
   fetchHeaders['X-API-Key'] = apiKey;
 
-  // Fetch page 1
+  // Fetch page 1 (with retries — AudienceLab /segments/UUID can be intermittently slow)
   console.log(`[Import] Init: fetching page 1 from ${url}`);
-  const initController = new AbortController();
-  const initTimeout = setTimeout(() => initController.abort(), 60000);
-  let firstPageResponse: Response;
-  try {
-    firstPageResponse = await fetch(url, { method: 'GET', headers: fetchHeaders, signal: initController.signal });
-  } catch (err) {
-    clearTimeout(initTimeout);
-    const msg = err instanceof Error ? err.message : String(err);
-    return res.status(504).json({ error: msg.includes('abort') ? 'AudienceLab API timed out after 60s' : `Fetch error: ${msg}` });
+  let firstPageResponse: Response | null = null;
+  const PAGE1_RETRIES = 3;
+  const PAGE1_TIMEOUT = 45000;
+  let lastErr = '';
+  for (let attempt = 0; attempt < PAGE1_RETRIES; attempt++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), PAGE1_TIMEOUT);
+    try {
+      const resp = await fetch(url, { method: 'GET', headers: fetchHeaders, signal: ctrl.signal });
+      clearTimeout(t);
+      if (resp.ok) { firstPageResponse = resp; break; }
+      lastErr = `HTTP ${resp.status} ${resp.statusText}`;
+      if (resp.status >= 400 && resp.status < 500 && resp.status !== 408 && resp.status !== 429) {
+        return res.status(resp.status).json({ error: `Failed to fetch: ${lastErr}` });
+      }
+    } catch (err) {
+      clearTimeout(t);
+      const msg = err instanceof Error ? err.message : String(err);
+      lastErr = msg.includes('abort') ? `timeout after ${PAGE1_TIMEOUT / 1000}s` : msg;
+      console.error(`[Import] Init page 1 attempt ${attempt + 1}/${PAGE1_RETRIES} failed: ${lastErr}`);
+    }
+    if (attempt < PAGE1_RETRIES - 1) {
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+    }
   }
-  clearTimeout(initTimeout);
-  if (!firstPageResponse.ok) {
-    return res.status(firstPageResponse.status).json({
-      error: `Failed to fetch: ${firstPageResponse.status} ${firstPageResponse.statusText}`
-    });
+  if (!firstPageResponse) {
+    return res.status(504).json({ error: `AudienceLab API unreachable after ${PAGE1_RETRIES} attempts — last error: ${lastErr}` });
   }
 
   let firstPageData: Record<string, unknown>;
@@ -398,21 +410,33 @@ async function handleReimportInit(
   fetchHeaders['X-API-Key'] = apiKey;
 
   console.log(`[Import] Re-import init: fetching page 1 from ${url}`);
-  const reimportController = new AbortController();
-  const reimportTimeout = setTimeout(() => reimportController.abort(), 60000);
-  let firstPageResponse: Response;
-  try {
-    firstPageResponse = await fetch(url, { method: 'GET', headers: fetchHeaders, signal: reimportController.signal });
-  } catch (err) {
-    clearTimeout(reimportTimeout);
-    const msg = err instanceof Error ? err.message : String(err);
-    return res.status(504).json({ error: msg.includes('abort') ? 'AudienceLab API timed out after 60s' : `Fetch error: ${msg}` });
+  let firstPageResponse: Response | null = null;
+  const PAGE1_RETRIES = 3;
+  const PAGE1_TIMEOUT = 45000;
+  let lastErr = '';
+  for (let attempt = 0; attempt < PAGE1_RETRIES; attempt++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), PAGE1_TIMEOUT);
+    try {
+      const resp = await fetch(url, { method: 'GET', headers: fetchHeaders, signal: ctrl.signal });
+      clearTimeout(t);
+      if (resp.ok) { firstPageResponse = resp; break; }
+      lastErr = `HTTP ${resp.status} ${resp.statusText}`;
+      if (resp.status >= 400 && resp.status < 500 && resp.status !== 408 && resp.status !== 429) {
+        return res.status(resp.status).json({ error: `Failed to fetch: ${lastErr}` });
+      }
+    } catch (err) {
+      clearTimeout(t);
+      const msg = err instanceof Error ? err.message : String(err);
+      lastErr = msg.includes('abort') ? `timeout after ${PAGE1_TIMEOUT / 1000}s` : msg;
+      console.error(`[Import] Re-import page 1 attempt ${attempt + 1}/${PAGE1_RETRIES} failed: ${lastErr}`);
+    }
+    if (attempt < PAGE1_RETRIES - 1) {
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+    }
   }
-  clearTimeout(reimportTimeout);
-  if (!firstPageResponse.ok) {
-    return res.status(firstPageResponse.status).json({
-      error: `Failed to fetch: ${firstPageResponse.status} ${firstPageResponse.statusText}`
-    });
+  if (!firstPageResponse) {
+    return res.status(504).json({ error: `AudienceLab API unreachable after ${PAGE1_RETRIES} attempts — last error: ${lastErr}` });
   }
 
   let firstPageData: Record<string, unknown>;
