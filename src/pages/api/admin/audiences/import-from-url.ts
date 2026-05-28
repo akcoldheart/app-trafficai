@@ -249,7 +249,17 @@ async function handleInit(
 
   // Fetch page 1
   console.log(`[Import] Init: fetching page 1 from ${url}`);
-  const firstPageResponse = await fetch(url, { method: 'GET', headers: fetchHeaders });
+  const initController = new AbortController();
+  const initTimeout = setTimeout(() => initController.abort(), 60000);
+  let firstPageResponse: Response;
+  try {
+    firstPageResponse = await fetch(url, { method: 'GET', headers: fetchHeaders, signal: initController.signal });
+  } catch (err) {
+    clearTimeout(initTimeout);
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(504).json({ error: msg.includes('abort') ? 'AudienceLab API timed out after 60s' : `Fetch error: ${msg}` });
+  }
+  clearTimeout(initTimeout);
   if (!firstPageResponse.ok) {
     return res.status(firstPageResponse.status).json({
       error: `Failed to fetch: ${firstPageResponse.status} ${firstPageResponse.statusText}`
@@ -267,6 +277,7 @@ async function handleInit(
     }
   }
 
+  console.log(`[Import] Init: response keys=${Object.keys(firstPageData).join(',')} total_pages=${firstPageData.total_pages ?? firstPageData.TotalPages ?? firstPageData.totalPages}`);
   const totalPages = Number(firstPageData.total_pages || firstPageData.TotalPages || firstPageData.totalPages || 1);
   const firstPageRecords = (firstPageData.Data || firstPageData.data || firstPageData.records || firstPageData.contacts || []) as Record<string, unknown>[];
 
@@ -387,7 +398,17 @@ async function handleReimportInit(
   fetchHeaders['X-API-Key'] = apiKey;
 
   console.log(`[Import] Re-import init: fetching page 1 from ${url}`);
-  const firstPageResponse = await fetch(url, { method: 'GET', headers: fetchHeaders });
+  const reimportController = new AbortController();
+  const reimportTimeout = setTimeout(() => reimportController.abort(), 60000);
+  let firstPageResponse: Response;
+  try {
+    firstPageResponse = await fetch(url, { method: 'GET', headers: fetchHeaders, signal: reimportController.signal });
+  } catch (err) {
+    clearTimeout(reimportTimeout);
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(504).json({ error: msg.includes('abort') ? 'AudienceLab API timed out after 60s' : `Fetch error: ${msg}` });
+  }
+  clearTimeout(reimportTimeout);
   if (!firstPageResponse.ok) {
     return res.status(firstPageResponse.status).json({
       error: `Failed to fetch: ${firstPageResponse.status} ${firstPageResponse.statusText}`
@@ -404,6 +425,9 @@ async function handleReimportInit(
       return res.status(400).json({ error: 'Response is not valid JSON' });
     }
   }
+
+  // Diagnostic log — helps identify response format mismatches
+  console.log(`[Import] Re-import init: response keys=${Object.keys(firstPageData).join(',')} total_pages=${firstPageData.total_pages ?? firstPageData.TotalPages ?? firstPageData.totalPages}`);
 
   const totalPages = Number(firstPageData.total_pages || firstPageData.TotalPages || firstPageData.totalPages || 1);
   const firstPageRecords = (firstPageData.Data || firstPageData.data || firstPageData.records || firstPageData.contacts || []) as Record<string, unknown>[];
