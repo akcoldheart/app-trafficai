@@ -469,6 +469,19 @@ export default function AdminLogs() {
                                 </div>
                               </div>
 
+                              {/* Message */}
+                              {log.message && (
+                                <div className="col-12">
+                                  <h6 className="mb-2 d-flex align-items-center gap-2 small">
+                                    <IconInfoCircle size={14} className={`text-${getStatusColor(log.status)}`} />
+                                    <span>Message</span>
+                                  </h6>
+                                  <div className={`alert alert-${getStatusColor(log.status)} mb-0 py-2 px-3 small`} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                    {formatMessage(log)}
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Request Data */}
                               {log.request_data && Object.keys(log.request_data).length > 0 && (
                                 <div className="col-md-6">

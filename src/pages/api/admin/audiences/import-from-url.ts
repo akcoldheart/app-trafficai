@@ -487,23 +487,27 @@ async function handleChunk(
 
   // Fetch pages with limited concurrency (3 at a time) to avoid rate limiting
   const CONCURRENCY = 3;
-  const MAX_RETRIES = 3;
-  const FETCH_TIMEOUT = 30000; // 30s per page
+  const MAX_RETRIES = 5;
+  const FETCH_TIMEOUT = 60000; // 60s per page — deep pages can be slow
   console.log(`[Import] Chunk: fetching pages ${pageStart}-${pageEnd} (concurrency=${CONCURRENCY})`);
 
   const allPages = [];
   for (let p = pageStart; p <= pageEnd; p++) allPages.push(p);
 
   const newContacts: Record<string, unknown>[] = [];
-  let failedPages = 0;
+  const failures: { page: number; reason: string }[] = [];
 
   // Process pages in batches of CONCURRENCY
   for (let i = 0; i < allPages.length; i += CONCURRENCY) {
     const batch = allPages.slice(i, i + CONCURRENCY);
 
     const batchResults = await Promise.all(
-      batch.map(async (page) => {
+      batch.map(async (page): Promise<{ records: Record<string, unknown>[]; failure: { page: number; reason: string } | null }> => {
+        let lastReason = 'unknown error';
+
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          let waitMs = 1500 * Math.pow(2, attempt); // exponential: 1.5s, 3s, 6s, 12s, 24s, 48s
+
           try {
             const pageUrl = new URL(url);
             pageUrl.searchParams.set('page', String(page));
@@ -521,26 +525,49 @@ async function handleChunk(
 
             if (pageResponse.ok) {
               const pageData = await pageResponse.json();
-              return (pageData.Data || pageData.data || pageData.records || pageData.contacts || []) as Record<string, unknown>[];
+              return {
+                records: (pageData.Data || pageData.data || pageData.records || pageData.contacts || []) as Record<string, unknown>[],
+                failure: null,
+              };
             }
 
+            lastReason = `HTTP ${pageResponse.status} ${pageResponse.statusText}`;
             console.error(`[Import] Page ${page} returned ${pageResponse.status} (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+
+            // Honor Retry-After on 429/503
+            if (pageResponse.status === 429 || pageResponse.status === 503) {
+              const retryAfter = pageResponse.headers.get('retry-after');
+              if (retryAfter) {
+                const retrySeconds = Number(retryAfter);
+                if (!Number.isNaN(retrySeconds) && retrySeconds > 0) {
+                  waitMs = Math.min(retrySeconds * 1000, 60000);
+                }
+              }
+            }
+
+            // Don't retry on 4xx other than 408/429 — they won't recover
+            if (pageResponse.status >= 400 && pageResponse.status < 500 && pageResponse.status !== 408 && pageResponse.status !== 429) {
+              break;
+            }
           } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
+            lastReason = errMsg.includes('aborted') || errMsg.includes('AbortError')
+              ? `timeout after ${FETCH_TIMEOUT / 1000}s`
+              : errMsg;
             console.error(`[Import] Error fetching page ${page} (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${errMsg}`);
           }
 
-          // Wait before retry with exponential backoff
           if (attempt < MAX_RETRIES) {
-            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+            await new Promise(r => setTimeout(r, waitMs));
           }
         }
-        failedPages++;
-        return [];
+
+        return { records: [], failure: { page, reason: lastReason } };
       })
     );
 
-    for (const records of batchResults) {
+    for (const { records, failure } of batchResults) {
+      if (failure) failures.push(failure);
       for (const record of records) {
         newContacts.push(normalizeContact(cleanRecord(record)));
       }
@@ -552,8 +579,9 @@ async function handleChunk(
     }
   }
 
+  const failedPages = failures.length;
   if (failedPages > 0) {
-    console.warn(`[Import] Chunk: ${failedPages} pages failed after retries`);
+    console.warn(`[Import] Chunk: ${failedPages} pages failed after retries:`, failures);
   }
   console.log(`[Import] Chunk: processed ${newContacts.length} contacts from pages ${pageStart}-${pageEnd}`);
 
@@ -569,15 +597,26 @@ async function handleChunk(
     })
     .eq('audience_id', audienceId);
 
-  // Log failed pages as warnings
+  // Log failed pages as warnings — include per-page reasons so the cause is visible
   if (failedPages > 0) {
+    const failedPageNumbers = failures.map(f => f.page);
+    const failureSummary = failures
+      .map(f => `page ${f.page}: ${f.reason}`)
+      .join('; ');
+
     await logEvent({
       type: 'api',
       event_name: 'audience_import_chunk',
       status: 'warning',
-      message: `Audience chunk pages ${pageStart}-${pageEnd}: ${failedPages} pages failed after retries`,
+      message: `Audience chunk pages ${pageStart}-${pageEnd}: ${failedPages} pages failed after retries — ${failureSummary}`,
       request_data: { audience_id: audienceId, page_start: pageStart, page_end: pageEnd },
-      response_data: { chunk_records: newContacts.length, inserted, failed_pages: failedPages },
+      response_data: {
+        chunk_records: newContacts.length,
+        inserted,
+        failed_pages: failedPages,
+        failed_page_numbers: failedPageNumbers,
+        failure_reasons: failures,
+      },
     });
   }
 
@@ -588,6 +627,7 @@ async function handleChunk(
     chunk_records: newContacts.length,
     total_inserted: inserted,
     failed_pages: failedPages,
+    failed_page_numbers: failures.map(f => f.page),
   });
 }
 
