@@ -18,6 +18,7 @@
 | [RingCentral SMS](#4-ringcentral-sms) | `/api/cron/ringcentral-sms` | `*/10 * * * *` | Every 10 min | 300s |
 | [Shopify Order Sync](#5-shopify-order-sync) | `/api/cron/sync-conversions` | `0 * * * *` | Hourly | 300s |
 | [Reattribute Conversions](#6-reattribute-conversions) | `/api/cron/reattribute-conversions` | `0 3 * * *` | Daily @ 3am UTC | 300s |
+| [Audience Import Worker](#7-audience-import-worker) | `/api/cron/process-audience-imports` | `* * * * *` | Every minute | 300s |
 
 ---
 
@@ -281,6 +282,49 @@ Re-runs attribution against the last 30 days of unmatched conversions. Catches l
 | Event Name | Status | When |
 |------------|--------|------|
 | `reattribute_conversions` | `success` / `warning` / `error` | Daily summary |
+
+---
+
+## 7. Audience Import Worker
+
+**File:** `src/pages/api/cron/process-audience-imports.ts`
+**Engine:** `src/lib/audience-import.ts` (`processImportJob`)
+**Schedule:** Every minute (`* * * * *`)
+
+### What it does
+
+Processes resumable audience (re)import jobs from the `audience_import_jobs` table. This replaced the old browser-driven import loop in `src/pages/audiences/index.tsx`, which drove ~460 sequential chunk requests from the tab and **failed silently** on large audiences (e.g. "Children & Infant Nutrition", ~230k contacts / 4600 pages) whenever the tab closed, the network blipped, or the session expired — leaving a half-imported audience and no log.
+
+### Processing Logic
+
+1. **Claim a job** — `claim_next_audience_import_job(stale_before)` RPC uses `FOR UPDATE SKIP LOCKED` to atomically claim the oldest runnable job (a `pending` job, or a `running` job whose heartbeat is older than 5 min = crashed). Safe across overlapping cron runs.
+2. **Resume from cursor** — processing starts at the job's `next_page`. Each chunk (10 pages, 5-way concurrent fetch with retries) is imported into a **staging** audience id and the cursor is advanced **only after** the chunk commits — so a crash resumes cleanly without data loss.
+3. **Idempotent chunks** — each staging row is tagged with its source page in `data._p`; a chunk re-clears its page range before inserting, so re-running a chunk after a crash never duplicates rows.
+4. **Timeout guard** — stops starting work at 270s. A clean deadline-pause hands the job back as `pending` (immediate reclaim next tick); only true crashes wait out the 5-min stale window.
+5. **Clear-on-success** — when all pages are done, `swap_audience_import_staging` atomically deletes the live audience's old contacts and promotes the staging rows in one transaction. The live audience is **never emptied** mid-import.
+6. **Finalize** — updates `audience_requests.total_records` and logs `audience_reimport_complete` (or `audience_reimport_failed`).
+
+### Related endpoints
+
+- `POST /api/admin/audiences/reimport` — verifies the source URL (page 1) then enqueues a job. Idempotent: returns the existing job if one is already active for the audience.
+- `GET /api/admin/audiences/import-job-status?job_id=` — progress polling for the UI (survives tab close, since the work is server-side).
+
+### Failure modes
+
+| Symptom | Cause | Handling |
+|---------|-------|----------|
+| Job stuck `running` | Worker crashed mid-chunk | Reclaimed after 5 min stale heartbeat |
+| `audience_reimport_failed` log | No API key, or swap error, or > 12 attempts | Staging cleaned up; live audience preserved |
+| Some pages missing | AudienceLab returned non-retryable errors for those pages | Recorded in `failed_pages`; job still completes with a `warning` |
+
+### Log Events
+
+| Event | Status | Notes |
+|-------|--------|-------|
+| `audience_reimport_start` | `info` | Emitted by the enqueue endpoint |
+| `audience_reimport_complete` | `success` / `warning` | `warning` if any pages failed |
+| `audience_reimport_failed` | `error` | Terminal failure (key missing, swap failed, max attempts) |
+| `audience_import_worker` | `error` | Worker-level crash / claim failure |
 
 ---
 

@@ -707,89 +707,82 @@ export default function Audiences() {
     setReimportingId(audienceId);
     setReimportProgress({ step: 'fetching', audienceName, currentPage: 1, totalPages: 1, percent: 2, contactsFetched: 0 });
 
+    const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
     try {
-      const importApi = async (body: Record<string, unknown>) => {
-        const resp = await fetch('/api/admin/audiences/import-from-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(body),
-        });
-        const ct = resp.headers.get('content-type');
-        if (ct && ct.includes('application/json')) {
-          const json = await resp.json();
-          if (!resp.ok) throw new Error(json.error || 'Import failed');
-          return json;
-        }
-        const text = await resp.text();
-        throw new Error(text || `HTTP error: ${resp.status}`);
-      };
-
-      // Step 1: Verify URL works by fetching page 1 BEFORE clearing old data
+      // Step 1: Enqueue a server-side re-import job. The endpoint verifies the
+      // source URL (page 1) before creating the job, and the worker imports into
+      // a staging set and atomically swaps on success — the live audience is
+      // never emptied, and the import survives this tab closing.
       setReimportProgress({ step: 'fetching', audienceName, currentPage: 1, totalPages: 1, percent: 5, contactsFetched: 0 });
-      const initResult = await importApi({
-        url: sourceUrl,
-        name: audienceName,
-        audience_id: audienceId,
-        reimport: true,
-        verify_only: true,
-      });
-
-      // Step 2: URL is valid — now safe to clear old contacts
-      setReimportProgress({ step: 'clearing', audienceName, percent: 10, contactsFetched: 0 });
-      const clearResp = await fetch(`/api/admin/audiences/clear-contacts`, {
+      const enqueueResp = await fetch('/api/admin/audiences/reimport', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ audience_id: audienceId }),
+        body: JSON.stringify({ audience_id: audienceId, url: sourceUrl, name: audienceName }),
       });
-      if (!clearResp.ok) {
-        const err = await clearResp.json();
-        throw new Error(err.error || 'Failed to clear contacts');
-      }
+      const enqueueJson = await enqueueResp.json().catch(() => ({}));
+      if (!enqueueResp.ok) throw new Error(enqueueJson.error || 'Failed to start re-import');
 
-      // Step 3: Now do the actual import of page 1
-      setReimportProgress({ step: 'importing', audienceName, currentPage: 1, totalPages: initResult.total_pages || 1, percent: 15, contactsFetched: 0 });
-      const importResult = await importApi({
-        url: sourceUrl,
-        name: audienceName,
-        audience_id: audienceId,
-        reimport: true,
-      });
+      const jobId: string = enqueueJson.job_id;
+      let totalPages = enqueueJson.total_pages || 1;
+      setReimportProgress({ step: 'importing', audienceName, currentPage: 0, totalPages, percent: 8, contactsFetched: 0 });
 
-      const totalPages = importResult.total_pages || 1;
-      let totalFetched = importResult.records_fetched || 0;
+      // Step 2: Poll job status. Progress is driven server-side, so closing the
+      // tab does not stop the import — this loop only updates the progress UI.
+      const POLL_INTERVAL = 2500;
+      const MAX_POLL_MS = 60 * 60_000; // give up the UI after 1h (job may still finish server-side)
+      const pollStart = Date.now();
+      let consecutiveErrors = 0;
 
-      // Step 4: Fetch remaining pages in chunks
-      const CHUNK_SIZE = 10;
-      if (totalPages > 1) {
-        for (let pageStart = 2; pageStart <= totalPages; pageStart += CHUNK_SIZE) {
-          const pageEnd = Math.min(pageStart + CHUNK_SIZE - 1, totalPages);
-          const pct = Math.min(95, Math.round(((pageStart - 1) / totalPages) * 100));
-          setReimportProgress({ step: 'importing', audienceName, currentPage: pageEnd, totalPages, percent: pct, contactsFetched: totalFetched });
-
-          const chunkResult = await importApi({
-            url: sourceUrl,
-            audience_id: audienceId,
-            page_start: pageStart,
-            page_end: pageEnd,
-          });
-
-          totalFetched += chunkResult.chunk_records || 0;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        await sleep(POLL_INTERVAL);
+        if (Date.now() - pollStart > MAX_POLL_MS) {
+          throw new Error('Re-import is taking longer than expected — it is still running in the background. Check System Logs.');
         }
+
+        let status: {
+          status: string; total_pages: number; pages_done: number;
+          contacts_imported: number; percent: number; last_error?: string;
+        };
+        try {
+          const sResp = await fetch(`/api/admin/audiences/import-job-status?job_id=${encodeURIComponent(jobId)}`, {
+            credentials: 'include',
+          });
+          if (!sResp.ok) throw new Error(`status ${sResp.status}`);
+          status = await sResp.json();
+          consecutiveErrors = 0;
+        } catch {
+          // Transient polling error — keep trying a few times before giving up.
+          if (++consecutiveErrors >= 5) {
+            throw new Error('Lost connection to re-import status — it may still be running in the background.');
+          }
+          continue;
+        }
+
+        totalPages = status.total_pages || totalPages;
+
+        if (status.status === 'done') {
+          setReimportProgress({ step: 'done', audienceName, percent: 100, contactsFetched: status.contacts_imported, totalPages });
+          setTimeout(() => setReimportProgress(null), 4000);
+          loadAudiences(currentPage);
+          break;
+        }
+        if (status.status === 'failed') {
+          throw new Error(status.last_error || 'Re-import failed');
+        }
+
+        // pending / running
+        setReimportProgress({
+          step: status.status === 'pending' ? 'fetching' : 'importing',
+          audienceName,
+          currentPage: status.pages_done,
+          totalPages,
+          percent: Math.max(8, status.percent || 0),
+          contactsFetched: status.contacts_imported,
+        });
       }
-
-      // Step 3: Finalize
-      setReimportProgress({ step: 'finalizing', audienceName, percent: 98, contactsFetched: totalFetched, totalPages });
-      const finalResult = await importApi({
-        audience_id: audienceId,
-        finalize: true,
-        url: sourceUrl,
-      });
-
-      setReimportProgress({ step: 'done', audienceName, percent: 100, contactsFetched: finalResult.audience.total_records || totalFetched, totalPages });
-      setTimeout(() => setReimportProgress(null), 4000);
-      loadAudiences(currentPage);
     } catch (error) {
       setReimportProgress({ step: 'error', audienceName, errorMessage: (error as Error).message });
       setTimeout(() => setReimportProgress(null), 6000);

@@ -329,8 +329,10 @@ All admin routes require `requireRole('admin')`.
 |--------|-------|-------------|
 | POST | `/admin/audiences/create` | Create audience |
 | GET/POST | `/admin/audiences/manual` | Manual audience management |
-| POST | `/admin/audiences/import-from-url` | Import audience from URL |
-| POST | `/admin/audiences/clear-contacts` | Clear audience contacts |
+| POST | `/admin/audiences/import-from-url` | Import audience from URL (initial create flow) |
+| POST | `/admin/audiences/reimport` | Enqueue a resumable, crash-safe re-import job (verifies URL, then cron worker imports + clear-on-success swap) |
+| GET | `/admin/audiences/import-job-status` | Poll re-import job progress (`?job_id=` or `?audience_id=`) |
+| POST | `/admin/audiences/clear-contacts` | Clear audience contacts (legacy; reimport now uses staging swap) |
 | POST | `/admin/audience-assignments` | Assign visitors to audiences |
 
 ### Requests

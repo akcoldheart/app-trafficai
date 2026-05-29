@@ -126,8 +126,9 @@ Migrations are in `supabase/migrations/` with numeric prefixes.
 | 058-061 | Referral system, email verification (ZeroBounce) | 4 |
 | 062-065 | Team members + RLS + plan inheritance | 4 |
 | 066-067 | Audience export index, Shopify conversions | 2 |
+| 068-069 | Platform integrations team RLS, audience import jobs | 2 |
 
-**Next migration number:** `068`
+**Next migration number:** `070`
 
 ### Key Migrations to Know
 
@@ -146,6 +147,7 @@ Migrations are in `supabase/migrations/` with numeric prefixes.
 | `063_team_rls_policies.sql` | RLS policies for team-scoped reads | Team members see owner's data |
 | `065_team_members_inherit_plan.sql` | Team members inherit owner's plan | Billing parity for team users |
 | `067_conversions.sql` | `conversions` table + attribution columns | Shopify order tracking + retro-attribution |
+| `069_audience_import_jobs.sql` | `audience_import_jobs` table + `claim_next_audience_import_job` / `swap_audience_import_staging` RPCs | Resumable, crash-safe audience (re)imports with clear-on-success swap |
 
 ---
 
