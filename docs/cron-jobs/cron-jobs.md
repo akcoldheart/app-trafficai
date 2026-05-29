@@ -314,7 +314,7 @@ Processes resumable audience (re)import jobs from the `audience_import_jobs` tab
 | Symptom | Cause | Handling |
 |---------|-------|----------|
 | Job stuck `running` | Worker crashed mid-chunk | Reclaimed after 5 min stale heartbeat |
-| `audience_reimport_failed` log | No API key, or swap error, or > 12 attempts | Staging cleaned up; live audience preserved |
+| `audience_reimport_failed` log | No API key, swap error, or 12 **consecutive resumes with zero progress** (genuinely stuck — `attempts` resets to 0 whenever a chunk commits, so normal resumes never count) | Staging cleaned up; live audience preserved |
 | Some pages missing | AudienceLab returned non-retryable errors for those pages | Recorded in `failed_pages`; job still completes with a `warning` |
 
 ### Log Events

@@ -423,7 +423,11 @@ export interface ImportJob {
 
 export type JobOutcome = 'done' | 'paused' | 'failed';
 
-const MAX_JOB_ATTEMPTS = 12; // guard against a permanently-stuck job looping forever
+// Guard against a permanently-stuck job. `attempts` is incremented on every
+// claim but RESET to 0 whenever a chunk commits (see the post-commit heartbeat),
+// so this counts *consecutive runs that made no progress* — not normal resumes.
+// A large import resumes dozens of times and never trips this.
+const MAX_JOB_ATTEMPTS = 12;
 
 /**
  * Process one claimed job until completion or until `deadlineAt` is reached.
@@ -435,7 +439,7 @@ const MAX_JOB_ATTEMPTS = 12; // guard against a permanently-stuck job looping fo
  */
 export async function processImportJob(job: ImportJob, deadlineAt: number): Promise<JobOutcome> {
   if (job.attempts > MAX_JOB_ATTEMPTS) {
-    await failJob(job, `Exceeded ${MAX_JOB_ATTEMPTS} attempts without completing`);
+    await failJob(job, `Exceeded ${MAX_JOB_ATTEMPTS} consecutive attempts without progress`);
     return 'failed';
   }
 
@@ -492,11 +496,15 @@ export async function processImportJob(job: ImportJob, deadlineAt: number): Prom
     if (chunk.failedPages.length) failedPages.push(...chunk.failedPages);
     nextPage = pageEnd + 1;
 
+    // Progress was made → reset the no-progress attempt counter to 0 so the
+    // MAX_JOB_ATTEMPTS guard only ever fires on genuinely stuck jobs (not on
+    // the many normal deadline-pause resumes a large import needs).
     await heartbeat(job.id, {
       next_page: nextPage,
       pages_done: pagesDone,
       contacts_imported: contactsImported,
       failed_pages: failedPages,
+      attempts: 0,
     });
 
     // Update the audience_requests progress note (lightweight).
@@ -524,7 +532,7 @@ export async function processImportJob(job: ImportJob, deadlineAt: number): Prom
   return 'done';
 }
 
-type ProgressFields = Partial<{ next_page: number; pages_done: number; contacts_imported: number; failed_pages: unknown; last_error: string }>;
+type ProgressFields = Partial<{ next_page: number; pages_done: number; contacts_imported: number; failed_pages: unknown; last_error: string; attempts: number }>;
 
 /** Persist progress + heartbeat for a job that is still actively processing. */
 async function heartbeat(jobId: string, fields: ProgressFields) {
