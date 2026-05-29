@@ -127,8 +127,9 @@ Migrations are in `supabase/migrations/` with numeric prefixes.
 | 062-065 | Team members + RLS + plan inheritance | 4 |
 | 066-067 | Audience export index, Shopify conversions | 2 |
 | 068-069 | Platform integrations team RLS, audience import jobs | 2 |
+| 070 | Batched/resumable audience-import swap (swap_phase + batch RPCs) | 1 |
 
-**Next migration number:** `070`
+**Next migration number:** `071`
 
 ### Key Migrations to Know
 
@@ -148,6 +149,7 @@ Migrations are in `supabase/migrations/` with numeric prefixes.
 | `065_team_members_inherit_plan.sql` | Team members inherit owner's plan | Billing parity for team users |
 | `067_conversions.sql` | `conversions` table + attribution columns | Shopify order tracking + retro-attribution |
 | `069_audience_import_jobs.sql` | `audience_import_jobs` table + `claim_next_audience_import_job` / `swap_audience_import_staging` RPCs | Resumable, crash-safe audience (re)imports with clear-on-success swap |
+| `070_audience_import_batched_swap.sql` | `swap_phase` column + `promote_staging_batch` / `delete_old_real_batch` / `strip_import_marker_batch` / `delete_audience_contacts_batch` RPCs | Batched swap so large audiences (~230k) don't hit `statement_timeout`; resumable per-phase |
 
 ---
 

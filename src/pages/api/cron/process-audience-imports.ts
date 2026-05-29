@@ -75,6 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         contacts_imported: row.contacts_imported,
         failed_pages: (row.failed_pages || []) as { page: number; reason: string }[],
         attempts: row.attempts,
+        swap_phase: row.swap_phase ?? 0,
       };
 
       let outcome: JobOutcome;

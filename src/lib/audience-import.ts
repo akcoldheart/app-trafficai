@@ -419,6 +419,7 @@ export interface ImportJob {
   contacts_imported: number;
   failed_pages: { page: number; reason: string }[];
   attempts: number;
+  swap_phase: number; // 0 = fetching, 1 = promote, 2 = delete-old, 3 = strip-marker
 }
 
 export type JobOutcome = 'done' | 'paused' | 'failed';
@@ -516,23 +517,64 @@ export async function processImportJob(job: ImportJob, deadlineAt: number): Prom
     }
   }
 
-  // All pages processed → atomic swap (clear-on-success).
-  const { data: promoted, error: swapErr } = await supabaseAdmin.rpc('swap_audience_import_staging', {
-    p_real_id: job.audience_id,
-    p_staging_id: job.staging_audience_id,
-  });
+  // All pages fetched → batched, resumable swap (clear-on-success).
+  return runSwap({ ...job, failed_pages: failedPages }, deadlineAt);
+}
 
-  if (swapErr) {
-    await failJob({ ...job, contacts_imported: contactsImported }, `Swap failed: ${swapErr.message}`);
-    return 'failed';
+const SWAP_BATCH = 10_000; // rows per swap statement — small enough to never hit statement_timeout
+
+/**
+ * Promote staging → live in batches, then delete the old live rows, then strip the
+ * page marker. Each batch is its own small statement, and `swap_phase` is persisted
+ * so a crash/timeout/deadline resumes mid-swap. Promote-first means the live audience
+ * is never empty during the cutover. Returns 'done' / 'paused' / 'failed'.
+ */
+async function runSwap(job: ImportJob, deadlineAt: number): Promise<JobOutcome> {
+  // swap_phase 0 means "fetch just finished" → begin at phase 1.
+  let phase = job.swap_phase >= 1 ? job.swap_phase : 1;
+
+  const runPhase = async (
+    rpc: 'promote_staging_batch' | 'delete_old_real_batch' | 'strip_import_marker_batch',
+    args: Record<string, unknown>,
+  ): Promise<'done' | 'paused'> => {
+    while (true) {
+      if (Date.now() >= deadlineAt) { await pauseJob(job.id, { swap_phase: phase }); return 'paused'; }
+      const { data, error } = await supabaseAdmin.rpc(rpc, { ...args, p_limit: SWAP_BATCH });
+      if (error) {
+        // Transient (e.g. a slow batch timed out) — pause and retry this phase next tick.
+        await pauseJob(job.id, { swap_phase: phase, last_error: `${rpc}: ${error.message}` });
+        return 'paused';
+      }
+      // A batch did work → reset the no-progress attempt counter and keep the lease warm.
+      await heartbeat(job.id, { swap_phase: phase, attempts: 0 });
+      if ((Number(data) || 0) < SWAP_BATCH) return 'done'; // last (partial/empty) batch
+    }
+  };
+
+  if (phase === 1) {
+    const r = await runPhase('promote_staging_batch', { p_real: job.audience_id, p_staging: job.staging_audience_id });
+    if (r === 'paused') return 'paused';
+    phase = 2; await heartbeat(job.id, { swap_phase: 2, attempts: 0 });
+  }
+  if (phase === 2) {
+    const r = await runPhase('delete_old_real_batch', { p_real: job.audience_id });
+    if (r === 'paused') return 'paused';
+    phase = 3; await heartbeat(job.id, { swap_phase: 3, attempts: 0 });
+  }
+  if (phase === 3) {
+    const r = await runPhase('strip_import_marker_batch', { p_real: job.audience_id });
+    if (r === 'paused') return 'paused';
   }
 
-  const finalCount = typeof promoted === 'number' ? promoted : contactsImported;
-  await finalizeJob({ ...job, failed_pages: failedPages }, finalCount);
+  const { count } = await supabaseAdmin
+    .from('audience_contacts')
+    .select('id', { count: 'exact', head: true })
+    .eq('audience_id', job.audience_id);
+  await finalizeJob(job, count || 0);
   return 'done';
 }
 
-type ProgressFields = Partial<{ next_page: number; pages_done: number; contacts_imported: number; failed_pages: unknown; last_error: string; attempts: number }>;
+type ProgressFields = Partial<{ next_page: number; pages_done: number; contacts_imported: number; failed_pages: unknown; last_error: string; attempts: number; swap_phase: number }>;
 
 /** Persist progress + heartbeat for a job that is still actively processing. */
 async function heartbeat(jobId: string, fields: ProgressFields) {
@@ -561,8 +603,16 @@ async function failJob(job: ImportJob, reason: string) {
     .update({ status: 'failed', last_error: reason, finished_at: new Date().toISOString(), heartbeat_at: new Date().toISOString() })
     .eq('id', job.id);
 
-  // Clean up staging rows so they don't accumulate.
-  await supabaseAdmin.from('audience_contacts').delete().eq('audience_id', job.staging_audience_id);
+  // Clean up staging rows so they don't accumulate — batched so a large staging
+  // set doesn't trip statement_timeout. Bounded loop as a safety backstop.
+  for (let i = 0; i < 1000; i++) {
+    const { data, error } = await supabaseAdmin.rpc('delete_audience_contacts_batch', {
+      p_audience_id: job.staging_audience_id,
+      p_limit: 10_000,
+    });
+    if (error) { console.error('[audience-import] staging cleanup error:', error.message); break; }
+    if ((Number(data) || 0) < 10_000) break;
+  }
 
   if (job.request_id) {
     await supabaseAdmin
