@@ -77,6 +77,8 @@ interface DashboardStats {
     is_identified: boolean;
     is_enriched: boolean;
     user_id?: string;
+    pixel_id?: string | null;
+    pixel_name?: string | null;
   }[];
   pixels: { id: string; name: string; domain: string; status: string; events_count: number; user_id?: string }[];
   // Admin-only: top performing pixels
@@ -1045,6 +1047,7 @@ export default function Dashboard() {
                     <th>Visitor</th>
                     <th>Score</th>
                     <th>Company</th>
+                    <th>Pixel</th>
                     <th>Last Seen</th>
                     {!isAdmin && <th></th>}
                   </tr>
@@ -1052,14 +1055,14 @@ export default function Dashboard() {
                 <tbody>
                   {!stats ? (
                     <tr>
-                      <td colSpan={4} className="text-center text-muted py-4">
+                      <td colSpan={5} className="text-center text-muted py-4">
                         <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                         Loading visitors...
                       </td>
                     </tr>
                   ) : stats.recentVisitors.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="text-center text-muted py-4">
+                      <td colSpan={5} className="text-center text-muted py-4">
                         No visitors yet.{' '}
                         <Link href="/pixels" className="text-primary">Set up your pixel</Link> to start tracking.
                       </td>
@@ -1093,6 +1096,13 @@ export default function Dashboard() {
                           </span>
                         </td>
                         <td className="text-muted">{visitor.company || '-'}</td>
+                        <td className="text-muted">
+                          {visitor.pixel_name ? (
+                            <span className="badge bg-blue-lt">{visitor.pixel_name}</span>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
                         <td className="text-muted">{formatTimeAgo(visitor.last_seen_at)}</td>
                         {!isAdmin && (
                           <td>

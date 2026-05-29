@@ -93,7 +93,7 @@ async function fetchUserStats(supabase: any, userId: string) {
     // Actual events from pixel_events table created today
     supabase.from('pixel_events').select('*', { count: 'exact', head: true }).in('pixel_id', pixelFilter).gte('created_at', today.toISOString()),
     // Recent visitors (just 5 rows)
-    supabase.from('visitors').select('id, full_name, email, company, lead_score, last_seen_at, is_identified, is_enriched').eq('user_id', userId).order('last_seen_at', { ascending: false }).limit(5),
+    supabase.from('visitors').select('id, full_name, email, company, lead_score, last_seen_at, is_identified, is_enriched, pixel_id').eq('user_id', userId).order('last_seen_at', { ascending: false }).limit(5),
     // RPC: average lead score for this user (replaces fetching 1000 rows)
     supabase.rpc('get_avg_lead_score', { p_user_id: userId }),
     // RPC: daily visitor stats
@@ -135,7 +135,13 @@ async function fetchUserStats(supabase: any, userId: string) {
   const visitorsToday = visitorsTodayResult.count || 0;
   const visitorsYesterday = visitorsYesterdayResult.count || 0;
   const eventsToday = eventsTodayResult.count || 0;
-  const recentVisitors = recentVisitorsResult.data || [];
+  // Attach the capturing pixel's name to each recent visitor (falls back to null
+  // if the pixel isn't in this user's set, e.g. a deleted pixel).
+  const pixelNameById = new Map(pixels.map((p: { id: string; name: string }) => [p.id, p.name]));
+  const recentVisitors = (recentVisitorsResult.data || []).map((v: { pixel_id?: string | null }) => ({
+    ...v,
+    pixel_name: v.pixel_id ? (pixelNameById.get(v.pixel_id) ?? null) : null,
+  }));
 
   const avgLeadScore = typeof avgLeadScoreResult.data === 'number'
     ? avgLeadScoreResult.data

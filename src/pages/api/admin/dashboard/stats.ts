@@ -66,7 +66,7 @@ async function fetchAdminStats() {
     supabase.from('visitors').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
     supabase.from('visitors').select('*', { count: 'exact', head: true }).gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString()),
     // Recent visitors (just 10 rows)
-    supabase.from('visitors').select('id, full_name, email, company, lead_score, last_seen_at, is_identified, is_enriched, user_id').order('last_seen_at', { ascending: false }).limit(10),
+    supabase.from('visitors').select('id, full_name, email, company, lead_score, last_seen_at, is_identified, is_enriched, user_id, pixel_id').order('last_seen_at', { ascending: false }).limit(10),
     // Users
     supabase.from('users').select('id, email, role, company_website, created_at'),
     // RPC: visitor counts grouped by user (replaces fetching ALL visitor rows)
@@ -86,7 +86,13 @@ async function fetchAdminStats() {
     events_count: p.events_count,
     user_id: p.user_id,
   }));
-  const recentVisitors = recentVisitorsResult.data || [];
+  // Attach the capturing pixel's name to each recent visitor (null if the pixel
+  // no longer exists). Admin sees across all users, so resolve against allPixels.
+  const pixelNameById = new Map(allPixels.map(p => [p.id, p.name]));
+  const recentVisitors = (recentVisitorsResult.data || []).map((v: { pixel_id?: string | null }) => ({
+    ...v,
+    pixel_name: v.pixel_id ? (pixelNameById.get(v.pixel_id) ?? null) : null,
+  }));
 
   // Exclude team members from user counts (they are sub-accounts)
   const { data: teamMembersData } = await supabase
