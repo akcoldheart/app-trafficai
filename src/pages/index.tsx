@@ -47,6 +47,7 @@ interface DashboardStats {
     adminCount?: number;
     teamCount?: number;
     userCount?: number;
+    paidCount?: number;
   };
   conversions?: {
     total: number;
@@ -341,11 +342,11 @@ export default function Dashboard() {
               <div className="card-body">
                 <div className="d-flex align-items-center">
                   <span className="avatar bg-blue-lt me-3">
-                    <IconUsersGroup size={24} />
+                    <IconCash size={24} />
                   </span>
                   <div>
-                    <div className="subheader text-muted">Team Members</div>
-                    <div className="h2 mb-0">{stats?.overview.teamCount || 0}</div>
+                    <div className="subheader text-muted">Paid Plans</div>
+                    <div className="h2 mb-0">{stats?.overview.paidCount || 0}</div>
                   </div>
                 </div>
               </div>

@@ -887,7 +887,10 @@ export interface Database {
 // Convenience types
 export type User = Database['public']['Tables']['users']['Row'];
 export type UserWebsite = Database['public']['Tables']['user_websites']['Row'];
-export type Pixel = Database['public']['Tables']['pixels']['Row'];
+export type Pixel = Database['public']['Tables']['pixels']['Row'] & {
+  /** Total visitors for this pixel, computed server-side from the visitors table */
+  visitors_count?: number;
+};
 export type Integration = Database['public']['Tables']['integrations']['Row'];
 export type PixelEvent = Database['public']['Tables']['pixel_events']['Row'];
 export type Visitor = Database['public']['Tables']['visitors']['Row'];

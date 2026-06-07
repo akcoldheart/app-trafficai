@@ -54,7 +54,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: 'Failed to fetch pixels' });
       }
 
-      return res.status(200).json({ pixels: data || [] });
+      const pixels = data || [];
+
+      // Attach visitor counts per pixel (computed from the visitors table)
+      const pixelsWithCounts = await Promise.all(
+        pixels.map(async (pixel) => {
+          const { count } = await supabaseAdmin
+            .from('visitors')
+            .select('id', { count: 'exact', head: true })
+            .eq('pixel_id', pixel.id);
+          return { ...pixel, visitors_count: count || 0 };
+        })
+      );
+
+      return res.status(200).json({ pixels: pixelsWithCounts });
     }
 
     if (req.method === 'POST') {

@@ -68,7 +68,7 @@ async function fetchAdminStats() {
     // Recent visitors (just 10 rows)
     supabase.from('visitors').select('id, full_name, email, company, lead_score, last_seen_at, is_identified, is_enriched, user_id, pixel_id').order('last_seen_at', { ascending: false }).limit(10),
     // Users
-    supabase.from('users').select('id, email, role, company_website, created_at'),
+    supabase.from('users').select('id, email, role, company_website, created_at, plan'),
     // RPC: visitor counts grouped by user (replaces fetching ALL visitor rows)
     supabase.rpc('get_visitor_counts_by_user'),
     // RPC: average lead score (replaces fetching 1000 rows)
@@ -230,6 +230,12 @@ async function fetchAdminStats() {
   const adminCount = allUsers.filter(u => u.role === 'admin').length;
   const teamCount = allUsers.filter(u => u.role === 'team').length;
   const userCount = allUsers.filter(u => (u.role as string) === 'user').length;
+  // Paid plan users (any plan other than trial), excluding admin accounts
+  const paidCount = allUsers.filter(u => {
+    if (u.role === 'admin') return false;
+    const plan = (u as { plan?: string | null }).plan;
+    return !!plan && plan !== 'trial';
+  }).length;
 
   return {
     overview: {
@@ -246,6 +252,7 @@ async function fetchAdminStats() {
       adminCount,
       teamCount,
       userCount,
+      paidCount,
     },
     charts: {
       visitorsByDay: Object.entries(visitorsByDayMap).map(([date, data]) => ({

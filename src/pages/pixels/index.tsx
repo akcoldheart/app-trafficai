@@ -1101,10 +1101,10 @@ export default function Pixels() {
                     <div className="card card-sm h-100">
                       <div className="card-body py-3">
                         <div className="d-flex align-items-center">
-                          <span className="avatar bg-green-lt me-3"><IconCircleCheck size={20} /></span>
+                          <span className="avatar bg-azure-lt me-3"><IconUsers size={20} /></span>
                           <div>
-                            <div className="text-muted" style={{ fontSize: '12px' }}>Events</div>
-                            <div className="fw-semibold">{selectedPixel.events_count.toLocaleString()}</div>
+                            <div className="text-muted" style={{ fontSize: '12px' }}>Visitors</div>
+                            <div className="fw-semibold">{(selectedPixel.visitors_count ?? 0).toLocaleString()}</div>
                           </div>
                         </div>
                       </div>
