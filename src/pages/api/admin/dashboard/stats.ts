@@ -22,7 +22,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!auth) return;
 
   try {
-    const data = await cached('admin-dashboard-stats', CACHE_TTL, fetchAdminStats);
+    // NOTE: bump the version suffix whenever the response shape changes so a
+    // stale cached payload from a previous deploy (missing new fields like
+    // paidCount) is never served. v2 = added overview.paidCount.
+    const data = await cached('admin-dashboard-stats-v2', CACHE_TTL, fetchAdminStats);
 
     // Tell browser to cache for 30 seconds too
     res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
