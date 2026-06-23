@@ -153,14 +153,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await serviceClient.from(table).delete().eq('user_id', id);
     }
 
-    // 9b. Null out references where this user is recorded as an actor on rows
-    // that belong to OTHER users. These columns have no ON DELETE CASCADE, so
-    // leaving them set would block the final auth deletion.
+    // 9b. Clear references where this user is recorded as an actor on rows that
+    // belong to OTHER users. These columns have no ON DELETE CASCADE, so leaving
+    // them set would block the final auth deletion.
+    // - reviewed_by / referred_by are nullable -> null them out.
+    // - assigned_by columns are NOT NULL -> reassign to the deleting admin
+    //   (user.id) instead, which is always a valid surviving user.
     await serviceClient.from('pixel_requests').update({ reviewed_by: null }).eq('reviewed_by', id);
     await serviceClient.from('audience_requests').update({ reviewed_by: null }).eq('reviewed_by', id);
-    await serviceClient.from('user_api_keys').update({ assigned_by: null }).eq('assigned_by', id);
     await serviceClient.from('users').update({ referred_by: null }).eq('referred_by', id);
-    await serviceClient.from('audience_assignments').update({ assigned_by: null }).eq('assigned_by', id);
+    await serviceClient.from('user_api_keys').update({ assigned_by: user.id }).eq('assigned_by', id);
+    await serviceClient.from('audience_assignments').update({ assigned_by: user.id }).eq('assigned_by', id);
 
     // 10. Handle referral records before deletion
     // Mark referrals where this user was referred (they signed up via someone's link)
