@@ -133,6 +133,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .delete()
       .eq('user_id', id);
 
+    // 9a. Clean up integration / audience tables that reference the user.
+    // These mostly have ON DELETE CASCADE, but we delete explicitly so the
+    // auth deletion can't be blocked by a missing cascade on any of them.
+    for (const table of [
+      'platform_integrations',
+      'klaviyo_integrations',
+      'facebook_audience_imports',
+      'linkedin_campaigns',
+      'ringcentral_sms_templates',
+      'ringcentral_sms_log',
+      'google_ads_audience_imports',
+      'google_ads_conversion_uploads',
+      'audience_assignments',
+      'audience_import_jobs',
+      'conversions',
+      'team_members',
+    ]) {
+      await serviceClient.from(table).delete().eq('user_id', id);
+    }
+
+    // 9b. Null out references where this user is recorded as an actor on rows
+    // that belong to OTHER users. These columns have no ON DELETE CASCADE, so
+    // leaving them set would block the final auth deletion.
+    await serviceClient.from('pixel_requests').update({ reviewed_by: null }).eq('reviewed_by', id);
+    await serviceClient.from('audience_requests').update({ reviewed_by: null }).eq('reviewed_by', id);
+    await serviceClient.from('user_api_keys').update({ assigned_by: null }).eq('assigned_by', id);
+    await serviceClient.from('users').update({ referred_by: null }).eq('referred_by', id);
+    await serviceClient.from('audience_assignments').update({ assigned_by: null }).eq('assigned_by', id);
+
     // 10. Handle referral records before deletion
     // Mark referrals where this user was referred (they signed up via someone's link)
     await serviceClient
@@ -169,7 +198,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (authDeleteError) {
       console.error('Error deleting auth user:', authDeleteError);
-      return res.status(500).json({ error: 'Failed to delete user authentication record' });
+      return res.status(500).json({
+        error: 'Failed to delete user authentication record',
+        details: authDeleteError.message,
+      });
     }
 
     return res.status(200).json({
