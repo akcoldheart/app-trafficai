@@ -66,6 +66,32 @@ export default function ChatBubble() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Deep link from a notification email: /?chat=<conversationId> opens the
+  // widget on that conversation. Runs before the localStorage effect below so
+  // loadConversation picks up the id (and applies its ownership check).
+  useEffect(() => {
+    if (isAdmin || typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const convId = params.get('chat');
+    if (!convId) return;
+
+    localStorage.setItem('chat_conversation_id', convId);
+    setIsOpen(true);
+    setIsMinimized(false);
+    setUnreadCount(0);
+    localStorage.setItem(`chat_last_seen_${convId}`, new Date().toISOString());
+
+    // Strip the param so a refresh doesn't keep reopening the chat
+    params.delete('chat');
+    const query = params.toString();
+    window.history.replaceState(
+      {},
+      '',
+      `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
+    );
+  }, [isAdmin]);
+
   // Check for existing conversation in localStorage.
   // Wait for auth to settle so the ownership check inside loadConversation
   // sees the real user.email instead of momentarily-undefined.

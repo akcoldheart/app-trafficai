@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { getAuthenticatedUser, logAuditAction } from '@/lib/api-helpers';
+import { enqueueChatNotifications, type ChatMessageRow } from '@/lib/chat-notifications';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -38,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (existing) {
       // Send the message to the existing conversation
-      await supabase
+      const { data: sentMessage } = await supabase
         .from('chat_messages')
         .insert({
           conversation_id: existing.id,
@@ -47,7 +48,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           sender_id: user.id,
           sender_name: user.user_metadata?.full_name || user.email,
           is_private: false,
-        });
+        })
+        .select()
+        .single();
+
+      // This path bypasses /api/chat/messages, so notify the customer here too
+      if (sentMessage) await enqueueChatNotifications(sentMessage as ChatMessageRow);
 
       return res.status(200).json({ data: existing, existing: true });
     }
@@ -70,7 +76,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Insert first agent message
-    await supabase
+    const { data: firstMessage } = await supabase
       .from('chat_messages')
       .insert({
         conversation_id: conversation.id,
@@ -79,7 +85,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         sender_id: user.id,
         sender_name: user.user_metadata?.full_name || user.email,
         is_private: false,
-      });
+      })
+      .select()
+      .single();
+
+    if (firstMessage) await enqueueChatNotifications(firstMessage as ChatMessageRow);
 
     await logAuditAction(user.id, 'admin_create_conversation', req, res, 'conversation', conversation.id);
 

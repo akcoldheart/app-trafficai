@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { getAuthenticatedUser, logAuditAction } from '@/lib/api-helpers';
+import { enqueueChatNotifications, type ChatMessageRow } from '@/lib/chat-notifications';
 
 // Helper function to find matching auto-reply
 async function findMatchingAutoReply(supabase: ReturnType<typeof createClient>, message: string) {
@@ -140,6 +141,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (senderId) {
         await logAuditAction(senderId, 'send_chat_message', req, res, 'conversation', conversation_id);
       }
+
+      // Queue email notification (admins on a customer message, the customer on
+      // an agent reply). Enqueue-only — the cron sends it. Swallows its own
+      // errors so a mail problem can never fail the message send.
+      await enqueueChatNotifications(data as ChatMessageRow);
 
       // Auto-reply logic for customer messages
       if (sender_type === 'customer') {

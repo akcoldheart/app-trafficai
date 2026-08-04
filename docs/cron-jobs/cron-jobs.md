@@ -19,6 +19,7 @@
 | [Shopify Order Sync](#5-shopify-order-sync) | `/api/cron/sync-conversions` | `0 * * * *` | Hourly | 300s |
 | [Reattribute Conversions](#6-reattribute-conversions) | `/api/cron/reattribute-conversions` | `0 3 * * *` | Daily @ 3am UTC | 300s |
 | [Audience Import Worker](#7-audience-import-worker) | `/api/cron/process-audience-imports` | `* * * * *` | Every minute | 300s |
+| [Chat Email Notifications](#8-chat-email-notifications) | `/api/cron/send-chat-notifications` | `* * * * *` | Every minute | 300s |
 
 ---
 
@@ -325,6 +326,99 @@ Processes resumable audience (re)import jobs from the `audience_import_jobs` tab
 | `audience_reimport_complete` | `success` / `warning` | `warning` if any pages failed |
 | `audience_reimport_failed` | `error` | Terminal failure (key missing, swap failed, max attempts) |
 | `audience_import_worker` | `error` | Worker-level crash / claim failure |
+
+---
+
+## 8. Chat Email Notifications
+
+**Route:** `/api/cron/send-chat-notifications`
+**Schedule:** `* * * * *` (every minute)
+**Queue table:** `chat_email_notifications`
+**Transport:** `src/lib/mailer.ts` (nodemailer over SMTP; Gmail/Workspace app password)
+
+### What it does
+
+Drains the chat email notification queue:
+
+- **Customer sends a message** → email every admin plus the assigned agent (one email each), with a
+  link to `/chat/<id>`
+- **Agent replies** → email `chat_conversations.customer_email` with the reply text and a link to `/?chat=<id>` (the widget auto-opens that conversation)
+
+Rows are written by `enqueueChatNotifications()` in `src/lib/chat-notifications.ts`, called from
+`/api/chat/messages` and `/api/chat/conversations/admin-create`. `bot` messages (widget greeting,
+auto-replies) and private agent notes never enqueue anything.
+
+### Processing Logic
+
+1. Bail immediately if `chat_email_notifications_enabled` is not `'true'`.
+2. Requeue `sending` rows whose `claimed_at` is older than 10 min (crashed run recovery).
+3. Select up to 200 `pending` rows with `scheduled_at <= now()` (the debounce window has elapsed).
+4. **Claim atomically:** `UPDATE ... SET status='sending' WHERE id IN (...) AND status='pending' RETURNING *`.
+   Only rows this run actually transitioned come back, so two overlapping runs cannot double-send.
+5. Group rows by `(conversation_id, recipient_email)` — one email per group, so a burst of messages
+   becomes a single email listing them all.
+6. Skip rules (marked `skipped`, no email sent):
+   - admin recipient — the conversation is already `read`, or an agent already replied
+   - customer recipient — the customer sent another message since (they're active in the widget)
+7. Send, then mark `sent`. 200ms gap between sends; hard cap of 100 emails per run and a 240s time
+   budget — anything left is released back to `pending` for the next minute and logged.
+
+### Settings (`app_settings`, category `notifications`)
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `chat_email_notifications_enabled` | `false` | Master switch |
+| `chat_notify_admins_on_customer_message` | `true` | Direction toggle |
+| `chat_notify_customer_on_agent_reply` | `true` | Direction toggle |
+| `chat_notification_cc_emails` | `''` | Comma list CC'd on **both** emails (see [CC behavior](#cc-behavior)) |
+| `chat_notification_debounce_minutes` | `2` | Grouping window before send |
+| `chat_notification_admin_cooldown_minutes` | `15` | Min gap between admin emails per conversation |
+| `smtp_host` / `smtp_port` | `smtp.gmail.com` / `465` | Transport |
+| `smtp_user` / `smtp_password` | — | Gmail address + **app password** (`smtp_password` is `is_secret`) |
+| `smtp_from_name` / `smtp_reply_to` | `Traffic AI Support` / `''` | Envelope presentation |
+
+Managed from **Settings → Chat Email Notifications** (admin only), which also has a
+**Send test email** button (`POST /api/admin/settings/test-email`).
+
+### CC behavior
+
+`chat_notification_cc_emails` is applied as a real `Cc:` header, resolved at **send** time (not
+enqueue time), so editing it takes effect on everything still queued.
+
+- **Customer reply email** — single recipient, so it always carries the CC. Note this exposes those
+  addresses to the customer, who can reply-all to them.
+- **Admin notification** — fans out to one email per admin. Attaching the CC to all of them would
+  deliver N copies to the CC'd inbox, so the cron picks **one carrier per conversation** (the
+  lowest recipient address, deterministic) and only that email carries the CC.
+- An address that is already the `To:` recipient is stripped from the CC list, so nobody receives
+  the same email twice.
+- If there are no admins at all, the CC addresses are promoted to `To:` so the notification isn't
+  silently dropped.
+- Known edge: if a conversation's admin rows get split across two cron runs (only under the 100-email
+  cap or the time budget), each run picks its own carrier, so the CC'd inbox can receive two copies.
+
+### Failure Modes
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Nothing sends, cron returns "disabled" | Master switch off | Enable in Settings |
+| `SMTP is not configured` in System Logs | Missing host/user/password | Fill SMTP fields, save, send test email |
+| `Invalid login` / `Username and Password not accepted` | Gmail app password wrong or revoked; 2FA off | Regenerate app password at myaccount.google.com → Security |
+| Emails stop after high volume | Google Workspace daily send cap (~2,000/day) | Reduce recipients, raise debounce, or move to a dedicated ESP |
+| Rows stuck at `failed` | 3 consecutive SMTP failures | Check `last_error` on the row, fix SMTP, requeue by setting `status='pending', attempts=0` |
+| Duplicate emails | Should be impossible (atomic claim) | Check for a second deployment sharing the same DB and `CRON_SECRET` |
+
+### Log Events
+
+`system_logs` entries: `chat_notification_email` (per send, success/error),
+`chat_notification_enqueue` (queue insert failures), `chat_notification_cron`
+(deferred batches and failure summaries), `chat_notification_test_email` (test button).
+
+Queue health check:
+
+```sql
+SELECT status, count(*) FROM chat_email_notifications GROUP BY 1;
+```
 
 ---
 

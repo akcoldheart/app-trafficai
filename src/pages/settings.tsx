@@ -27,6 +27,7 @@ import {
   IconCopy,
   IconShieldCheck,
   IconMailOff,
+  IconMail,
   IconArrowRight,
 } from '@tabler/icons-react';
 import type { UserWebsite } from '@/lib/supabase/types';
@@ -140,6 +141,26 @@ export default function Settings() {
   const [generatingWebhookKey, setGeneratingWebhookKey] = useState(false);
   const [newWebhookKey, setNewWebhookKey] = useState<string | null>(null);
   const [webhookKeyCopied, setWebhookKeyCopied] = useState(false);
+
+  // Chat email notification settings state
+  const [notifSettings, setNotifSettings] = useState({
+    chat_email_notifications_enabled: 'false',
+    chat_notify_admins_on_customer_message: 'true',
+    chat_notify_customer_on_agent_reply: 'true',
+    chat_notification_cc_emails: '',
+    chat_notification_debounce_minutes: '2',
+    chat_notification_admin_cooldown_minutes: '15',
+    smtp_host: 'smtp.gmail.com',
+    smtp_port: '465',
+    smtp_user: '',
+    smtp_password: '',
+    smtp_from_name: 'Traffic AI Support',
+    smtp_reply_to: '',
+  });
+  const [savingNotif, setSavingNotif] = useState(false);
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [notifMessage, setNotifMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // ZeroBounce state
   const [zbConnected, setZbConnected] = useState(false);
@@ -256,6 +277,13 @@ export default function Settings() {
           // Load team seats settings
           if (setting.key.startsWith('team_seats_')) {
             setTeamSeatsSettings(prev => ({ ...prev, [setting.key]: setting.value || '' }));
+          }
+          // Load chat email notification settings (SMTP password comes back masked)
+          if (setting.key.startsWith('smtp_') || setting.key.startsWith('chat_notif') || setting.key.startsWith('chat_email_notif')) {
+            const value = setting.is_secret && setting.value
+              ? '••••••••' + setting.value.slice(-4)
+              : setting.value || '';
+            setNotifSettings(prev => ({ ...prev, [setting.key]: value }));
           }
         });
 
@@ -586,6 +614,55 @@ export default function Settings() {
       alert((error as Error).message);
     } finally {
       setSavingTeamSeats(false);
+    }
+  };
+
+  const handleSaveNotifSettings = async () => {
+    setSavingNotif(true);
+    setNotifMessage(null);
+    try {
+      // Skip the masked password — an untouched secret must not be overwritten
+      const settingsToSave = Object.entries(notifSettings).filter(
+        ([, value]) => !value.startsWith('••••••••')
+      );
+
+      for (const [key, value] of settingsToSave) {
+        const response = await fetch(`/api/admin/settings/${key}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || `Failed to save ${key}`);
+        }
+      }
+
+      setNotifMessage({ type: 'success', text: 'Notification settings saved.' });
+      fetchAdminSettings();
+    } catch (error) {
+      setNotifMessage({ type: 'error', text: (error as Error).message });
+    } finally {
+      setSavingNotif(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    setTestingEmail(true);
+    setNotifMessage(null);
+    try {
+      const response = await fetch('/api/admin/settings/test-email', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to send test email');
+      setNotifMessage({
+        type: 'success',
+        text: `Test email sent to ${data.to}${data.cc?.length ? `, cc ${data.cc.join(', ')}` : ''}.`,
+      });
+    } catch (error) {
+      setNotifMessage({ type: 'error', text: (error as Error).message });
+    } finally {
+      setTestingEmail(false);
     }
   };
 
@@ -1208,6 +1285,203 @@ export default function Settings() {
                     </button>
                   </>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Chat Email Notifications — admin only */}
+          {isAdmin && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">
+                  <IconMail className="icon me-2" />
+                  Chat Email Notifications
+                </h3>
+              </div>
+              <div className="card-body">
+                <p className="text-muted small mb-3">
+                  Emails admins when a customer sends a chat message, and emails the customer when an
+                  agent replies. Messages in the same conversation are grouped into one email, and a
+                  notification is dropped if the conversation was already read or answered.
+                </p>
+
+                {notifMessage && (
+                  <div className={`alert ${notifMessage.type === 'success' ? 'alert-success' : 'alert-danger'} py-2 px-3 small`}>
+                    {notifMessage.text}
+                  </div>
+                )}
+
+                <label className="form-check form-switch mb-2">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={notifSettings.chat_email_notifications_enabled === 'true'}
+                    onChange={(e) => setNotifSettings(prev => ({
+                      ...prev,
+                      chat_email_notifications_enabled: e.target.checked ? 'true' : 'false',
+                    }))}
+                  />
+                  <span className="form-check-label">Enable chat email notifications</span>
+                </label>
+                <label className="form-check form-switch mb-2">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={notifSettings.chat_notify_admins_on_customer_message === 'true'}
+                    onChange={(e) => setNotifSettings(prev => ({
+                      ...prev,
+                      chat_notify_admins_on_customer_message: e.target.checked ? 'true' : 'false',
+                    }))}
+                  />
+                  <span className="form-check-label">Notify admins on a new customer message</span>
+                </label>
+                <label className="form-check form-switch mb-3">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={notifSettings.chat_notify_customer_on_agent_reply === 'true'}
+                    onChange={(e) => setNotifSettings(prev => ({
+                      ...prev,
+                      chat_notify_customer_on_agent_reply: e.target.checked ? 'true' : 'false',
+                    }))}
+                  />
+                  <span className="form-check-label">Notify the customer when we reply</span>
+                </label>
+
+                <div className="row g-2 mb-3">
+                  <div className="col-6">
+                    <label className="form-label small">Group messages for (minutes)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="form-control form-control-sm"
+                      value={notifSettings.chat_notification_debounce_minutes}
+                      onChange={(e) => setNotifSettings(prev => ({ ...prev, chat_notification_debounce_minutes: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label small">Admin cooldown (minutes)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="form-control form-control-sm"
+                      value={notifSettings.chat_notification_admin_cooldown_minutes}
+                      onChange={(e) => setNotifSettings(prev => ({ ...prev, chat_notification_admin_cooldown_minutes: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label small">CC addresses</label>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder="sales@trafficai.io, support@trafficai.io"
+                    value={notifSettings.chat_notification_cc_emails}
+                    onChange={(e) => setNotifSettings(prev => ({ ...prev, chat_notification_cc_emails: e.target.value }))}
+                  />
+                  <small className="text-muted">
+                    Comma-separated. CC&apos;d on both emails — the admin notification when a customer
+                    messages, and the reply we send the customer. Visible to the customer, so they can
+                    reply-all to these addresses.
+                  </small>
+                </div>
+
+                <hr className="my-3" />
+                <div className="mb-2 small fw-bold">SMTP</div>
+
+                <div className="row g-2 mb-2">
+                  <div className="col-8">
+                    <label className="form-label small">Host</label>
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      value={notifSettings.smtp_host}
+                      onChange={(e) => setNotifSettings(prev => ({ ...prev, smtp_host: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-4">
+                    <label className="form-label small">Port</label>
+                    <input
+                      type="number"
+                      className="form-control form-control-sm"
+                      value={notifSettings.smtp_port}
+                      onChange={(e) => setNotifSettings(prev => ({ ...prev, smtp_port: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-2">
+                  <label className="form-label small">Username / from address</label>
+                  <input
+                    type="email"
+                    className="form-control form-control-sm"
+                    placeholder="orchid@trafficai.io"
+                    value={notifSettings.smtp_user}
+                    onChange={(e) => setNotifSettings(prev => ({ ...prev, smtp_user: e.target.value }))}
+                  />
+                </div>
+
+                <div className="mb-2">
+                  <label className="form-label small">Password</label>
+                  <div className="input-group input-group-sm">
+                    <input
+                      type={showSmtpPassword ? 'text' : 'password'}
+                      className="form-control"
+                      placeholder="Google app password"
+                      value={notifSettings.smtp_password}
+                      onChange={(e) => setNotifSettings(prev => ({ ...prev, smtp_password: e.target.value }))}
+                    />
+                    <button className="btn btn-outline-secondary" type="button" onClick={() => setShowSmtpPassword(!showSmtpPassword)}>
+                      {showSmtpPassword ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                    </button>
+                  </div>
+                  <small className="text-muted">
+                    For Gmail, create an app password at <strong>myaccount.google.com</strong> &gt; Security &gt; App passwords (requires 2-step verification).
+                  </small>
+                </div>
+
+                <div className="row g-2 mb-3">
+                  <div className="col-6">
+                    <label className="form-label small">From name</label>
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      value={notifSettings.smtp_from_name}
+                      onChange={(e) => setNotifSettings(prev => ({ ...prev, smtp_from_name: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label small">Reply-To</label>
+                    <input
+                      type="email"
+                      className="form-control form-control-sm"
+                      placeholder="Defaults to username"
+                      value={notifSettings.smtp_reply_to}
+                      onChange={(e) => setNotifSettings(prev => ({ ...prev, smtp_reply_to: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="d-flex gap-2">
+                  <button className="btn btn-primary btn-sm" onClick={handleSaveNotifSettings} disabled={savingNotif}>
+                    {savingNotif ? (
+                      <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} /> Saving...</>
+                    ) : (
+                      <><IconCheck size={14} className="me-1" /> Save</>
+                    )}
+                  </button>
+                  <button className="btn btn-outline-secondary btn-sm" onClick={handleSendTestEmail} disabled={testingEmail || savingNotif}>
+                    {testingEmail ? (
+                      <><IconLoader2 size={14} className="me-1" style={{ animation: 'spin 1s linear infinite' }} /> Sending...</>
+                    ) : (
+                      <><IconMail size={14} className="me-1" /> Send test email</>
+                    )}
+                  </button>
+                </div>
+                <small className="text-muted d-block mt-2">
+                  Save first, then send a test email to yourself to confirm the credentials work.
+                </small>
               </div>
             </div>
           )}

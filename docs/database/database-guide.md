@@ -102,6 +102,7 @@ const supabase = createClient(req, res);
 | `chat_conversations` | Chat threads | `id`, `user_id`, `status` |
 | `chat_messages` | Chat messages | `conversation_id`, `sender_id`, `content` |
 | `auto_replies` | Auto-reply rules | `trigger`, `response`, `is_active` |
+| `chat_email_notifications` | Outbound email queue for chat notifications | `conversation_id`, `recipient_email`, `recipient_type`, `status`, `scheduled_at`, `after_message_at` |
 
 ### Requests
 
@@ -128,8 +129,9 @@ Migrations are in `supabase/migrations/` with numeric prefixes.
 | 066-067 | Audience export index, Shopify conversions | 2 |
 | 068-069 | Platform integrations team RLS, audience import jobs | 2 |
 | 070 | Batched/resumable audience-import swap (swap_phase + batch RPCs) | 1 |
+| 071 | Chat email notification queue + SMTP/notification settings | 1 |
 
-**Next migration number:** `071`
+**Next migration number:** `072`
 
 ### Key Migrations to Know
 
@@ -149,6 +151,7 @@ Migrations are in `supabase/migrations/` with numeric prefixes.
 | `065_team_members_inherit_plan.sql` | Team members inherit owner's plan | Billing parity for team users |
 | `067_conversions.sql` | `conversions` table + attribution columns | Shopify order tracking + retro-attribution |
 | `069_audience_import_jobs.sql` | `audience_import_jobs` table + `claim_next_audience_import_job` / `swap_audience_import_staging` RPCs | Resumable, crash-safe audience (re)imports with clear-on-success swap |
+| `071_chat_email_notifications.sql` | `chat_email_notifications` queue table + 12 `app_settings` rows in category `notifications` (SMTP creds, direction toggles, debounce/cooldown) | Email notification for chat, drained by `/api/cron/send-chat-notifications` |
 | `070_audience_import_batched_swap.sql` | `swap_phase` column + `promote_staging_batch` / `delete_old_real_batch` / `strip_import_marker_batch` / `delete_audience_contacts_batch` RPCs | Batched swap so large audiences (~230k) don't hit `statement_timeout`; resumable per-phase |
 
 ---

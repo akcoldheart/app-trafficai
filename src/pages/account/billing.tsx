@@ -132,6 +132,8 @@ export default function Billing() {
   const [upgrading, setUpgrading] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [plans, setPlans] = useState<Plan[]>(defaultPlans);
+  // Until the DB pricing arrives, the hardcoded defaults must not be shown as real prices
+  const [pricingLoaded, setPricingLoaded] = useState(false);
   const [verifyingSession, setVerifyingSession] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -179,7 +181,7 @@ export default function Billing() {
 
   const loadStripePrices = useCallback(async () => {
     try {
-      const response = await fetch('/api/settings/stripe-prices');
+      const response = await fetch('/api/settings/stripe-prices', { cache: 'no-store' });
       const data = await response.json();
 
       if (response.ok) {
@@ -210,6 +212,8 @@ export default function Billing() {
       }
     } catch (error) {
       console.error('Error loading Stripe prices:', error);
+    } finally {
+      setPricingLoaded(true);
     }
   }, []);
 
@@ -543,7 +547,7 @@ export default function Billing() {
                             Popular
                           </div>
                         )}
-                        <div className="card-body d-flex flex-column">
+                        <div className={`card-body d-flex flex-column ${pricingLoaded ? '' : 'placeholder-glow'}`}>
                           <div className="text-center mb-4">
                             <span className={`avatar avatar-lg ${plan.popular ? 'bg-primary' : 'bg-primary-lt'} mb-3`}>
                               {getPlanIcon(plan.id)}
@@ -551,6 +555,10 @@ export default function Billing() {
                             <h3 className="mb-1">{plan.name}</h3>
                             {plan.contactSales ? (
                               <div className="h3 mb-0">Contact us for<br />custom solutions</div>
+                            ) : !pricingLoaded ? (
+                              <div className="h1 mb-0">
+                                <span className="placeholder col-5 d-inline-block" style={{ height: '1em' }} />
+                              </div>
                             ) : (
                               <>
                                 <div className="h1 mb-0">
@@ -580,9 +588,13 @@ export default function Billing() {
                                   ) : (
                                     <IconX size={16} className="text-red me-2 flex-shrink-0 mt-1" />
                                   )}
-                                  <span className={!feature.included ? 'text-muted' : ''}>
-                                    {feature.name}
-                                  </span>
+                                  {index === 0 && !pricingLoaded ? (
+                                    <span className="placeholder col-9" />
+                                  ) : (
+                                    <span className={!feature.included ? 'text-muted' : ''}>
+                                      {feature.name}
+                                    </span>
+                                  )}
                                 </li>
                               ))}
                             </ul>
@@ -605,7 +617,7 @@ export default function Billing() {
                               <button
                                 className={`btn ${plan.popular ? 'btn-primary' : 'btn-outline-primary'} w-100`}
                                 onClick={() => handleUpgrade(plan)}
-                                disabled={upgrading && selectedPlan === plan.id}
+                                disabled={!pricingLoaded || (upgrading && selectedPlan === plan.id)}
                               >
                                 {upgrading && selectedPlan === plan.id ? (
                                   <>

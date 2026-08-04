@@ -10,6 +10,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const config = await getStripeConfig();
     const pricing = await getPlanPricing();
 
+    // Pricing changes must show up immediately — never serve this from a cache
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+
     // Return price IDs and pricing info (not the secret key)
     return res.status(200).json({
       prices: config.prices,

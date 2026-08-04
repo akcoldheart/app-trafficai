@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/process-audience-imports",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/send-chat-notifications",
+      "schedule": "* * * * *"
     }
   ]
 }

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@/lib/supabase/api';
 import { requireRole, logAuditAction } from '@/lib/api-helpers';
+import { clearSettingsCache } from '@/lib/settings';
 
 // Determine the category based on the key prefix
 function getCategoryForKey(key: string): string | null {
@@ -10,12 +11,15 @@ function getCategoryForKey(key: string): string | null {
   if (key.startsWith('plan_')) {
     return 'pricing';
   }
+  if (key.startsWith('smtp_') || key.startsWith('chat_notif') || key.startsWith('chat_email_notif')) {
+    return 'notifications';
+  }
   return null;
 }
 
 // Determine if a key should be marked as secret
 function isSecretKey(key: string): boolean {
-  return key === 'stripe_secret_key' || key === 'stripe_webhook_secret';
+  return key === 'stripe_secret_key' || key === 'stripe_webhook_secret' || key === 'smtp_password';
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -96,6 +100,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: 'Failed to save setting' });
       }
 
+      // Drop the 60s in-memory cache so the new value is served on the next read
+      clearSettingsCache();
+
       await logAuditAction(authResult.user.id, 'update_app_setting', req, res, 'app_setting', data.id, { key });
       return res.status(200).json({ setting: data });
     }
@@ -120,6 +127,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.error('Error deleting setting:', error);
         return res.status(500).json({ error: 'Failed to delete setting' });
       }
+
+      clearSettingsCache();
 
       await logAuditAction(authResult.user.id, 'delete_app_setting', req, res, 'app_setting', data.id, { key });
       return res.status(200).json({ success: true });

@@ -353,6 +353,7 @@ All admin routes require `requireRole('admin')`.
 | GET/POST | `/admin/settings` | App settings CRUD |
 | GET/PUT | `/admin/settings/[key]` | Get/update specific setting |
 | GET | `/admin/settings/webhook-key` | Get webhook signing key |
+| POST | `/admin/settings/test-email` | Verify SMTP creds and send a test email to the calling admin |
 | GET/POST | `/admin/api-keys` | Manage API keys |
 | GET/PUT | `/admin/api-keys/[userId]` | User-specific API key |
 | GET | `/admin/dashboard/stats` | Admin dashboard statistics |
@@ -373,6 +374,7 @@ All cron routes require `Authorization: Bearer ${CRON_SECRET}`.
 | GET | `/cron/push-klaviyo-events` | Every 30m | Auto-sync/push to Klaviyo |
 | GET | `/cron/linkedin-drip` | Every 30m | Monitor LinkedIn campaigns |
 | GET | `/cron/ringcentral-sms` | Every 10m | Send automated SMS |
+| GET | `/cron/send-chat-notifications` | Every minute | Drain the chat email notification queue (see [cron docs](../cron-jobs/cron-jobs.md#8-chat-email-notifications)) |
 
 ---
 
