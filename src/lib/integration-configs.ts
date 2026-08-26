@@ -6,13 +6,39 @@ export interface IntegrationConfig {
   description: string;
   color: string;
   letterIcon: string;
-  authType: 'api_key' | 'webhook_url' | 'api_key_and_url' | 'triggers' | 'oauth' | 'credentials';
+  authType: 'api_key' | 'webhook_url' | 'api_key_and_url' | 'triggers' | 'oauth' | 'credentials' | 'credentials_and_url';
   authLabel: string;
   authPlaceholder: string;
   authHint: string;
   secondaryAuthLabel?: string;
   secondaryAuthPlaceholder?: string;
   secondaryAuthHint?: string;
+  /** Mask the secondary field (e.g. a client secret) behind a show/hide toggle. */
+  secondaryAuthSecret?: boolean;
+  /** Third field, used by 'credentials_and_url' (client id + client secret + store URL). */
+  tertiaryAuthLabel?: string;
+  tertiaryAuthPlaceholder?: string;
+  tertiaryAuthHint?: string;
+  /** Replaces tertiaryAuthHint while the legacy auth mode is active. */
+  tertiaryAuthHintLegacy?: string;
+  /**
+   * Optional fallback auth mode for customers holding a still-valid credential from a
+   * flow the provider has since retired. Renders behind a toggle; posts `api_key`.
+   */
+  legacyAuth?: {
+    /** Segmented-control label for the default (current) auth flow. */
+    primaryModeLabel: string;
+    /** Segmented-control label for the legacy flow. */
+    legacyModeLabel: string;
+    /** One line under the control explaining which option to pick. */
+    chooserHint: string;
+    authLabel: string;
+    authPlaceholder: string;
+    authHint: string;
+    /** Heading + steps shown in place of the default setupSteps while legacy mode is active. */
+    heading: string;
+    setupSteps: string[];
+  };
   features: ('sync_visitors' | 'sync_audiences' | 'notifications' | 'webhooks' | 'lists' | 'campaigns' | 'sms_automation' | 'conversions')[];
   setupSteps: string[];
   category: 'crm' | 'email_marketing' | 'notifications' | 'automation' | 'ecommerce' | 'advertising' | 'outreach';
@@ -139,23 +165,44 @@ export const INTEGRATION_CONFIGS: Record<string, IntegrationConfig> = {
     description: 'Track orders & attribute revenue',
     color: '#96BF48',
     letterIcon: 'Sh',
-    authType: 'api_key_and_url',
-    authLabel: 'Admin API Access Token',
-    authPlaceholder: 'shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    authHint: 'Create a custom app in your Shopify admin with read_customers, read_orders, read_checkouts, and read_products scopes.',
-    secondaryAuthLabel: 'Shop Domain',
-    secondaryAuthPlaceholder: 'your-store.myshopify.com',
-    secondaryAuthHint: 'Your Shopify store domain (e.g. your-store.myshopify.com)',
+    authType: 'credentials_and_url',
+    authLabel: 'Client ID',
+    authPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    authHint: 'From your app\u2019s Settings page in the Shopify Dev Dashboard.',
+    secondaryAuthLabel: 'Client Secret',
+    secondaryAuthPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    secondaryAuthHint: 'Found next to the Client ID. Once saved it is never displayed again.',
+    secondaryAuthSecret: true,
+    tertiaryAuthLabel: 'Shop Domain',
+    tertiaryAuthPlaceholder: 'your-store.myshopify.com',
+    tertiaryAuthHint: 'Your Shopify store domain. The app must belong to the same Shopify organization as this store.',
+    tertiaryAuthHintLegacy: 'The store the access token belongs to (e.g. your-store.myshopify.com).',
+    legacyAuth: {
+      primaryModeLabel: 'Create a new app',
+      legacyModeLabel: 'I already have an access token',
+      chooserHint: 'Custom apps created before 1 January 2026 still work. If your store already has one, use its token \u2014 no new app needed.',
+      authLabel: 'Admin API Access Token',
+      authPlaceholder: 'shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      authHint: 'Starts with shpat_. Shopify shows it only once when the app is installed.',
+      heading: 'Where to find your access token',
+      setupSteps: [
+        'In your Shopify admin, go to Settings \u2192 Apps and sales channels',
+        'Click Develop apps, then open your existing app',
+        'Under Configuration, confirm the Admin API scopes include read_orders, read_customers, read_checkouts, read_products',
+        'Open the API credentials tab and reveal the Admin API access token',
+        'Paste the token below along with your shop domain',
+        'After connecting, pick a pixel for orders to be attributed to',
+      ],
+    },
     features: ['conversions'],
     setupSteps: [
-      'Log in to your Shopify admin',
-      'Go to Settings → Apps and sales channels',
-      'Click Develop apps (you may need to enable developer preview first)',
-      'Click Create an app and name it "Traffic AI"',
-      'Go to Configuration and add Admin API scopes: read_customers, read_orders, read_checkouts, read_products',
-      'Click Install app and confirm',
-      'Copy the Admin API access token (starts with shpat_)',
-      'Paste the token and your shop domain below',
+      'Go to the Shopify Dev Dashboard (dev.shopify.com/dashboard) and sign in with the organization that owns your store',
+      'Create an app and name it "Traffic AI"',
+      'On the app version, select the Admin API access scopes: read_orders, read_customers, read_checkouts, read_products',
+      'Release the version so the scopes take effect',
+      'Install the app on your store (required before credentials will work)',
+      'Open the app \u2192 Settings and copy the Client ID and Client secret',
+      'Paste both below along with your shop domain',
       'After connecting, pick a pixel for orders to be attributed to',
     ],
     category: 'ecommerce',

@@ -60,7 +60,7 @@ interface Pixel {
 
 interface Toast {
   message: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'warning';
 }
 export default function IntegrationDetailPage() {
   const router = useRouter();
@@ -75,6 +75,9 @@ export default function IntegrationDetailPage() {
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [secondaryField, setSecondaryField] = useState('');
+  const [tertiaryField, setTertiaryField] = useState('');
+  const [showSecondaryField, setShowSecondaryField] = useState(false);
+  const [useLegacyAuth, setUseLegacyAuth] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
@@ -264,15 +267,30 @@ export default function IntegrationDetailPage() {
   const handleConnect = async () => {
     if (!config || !type) return;
 
+    const legacyMode = useLegacyAuth && Boolean(config.legacyAuth);
+
     const authValue = config.authType === 'webhook_url' ? apiKey.trim() : apiKey.trim();
     if (!authValue) return;
     if (config.authType === 'api_key_and_url' && !secondaryField.trim()) return;
+    if (config.authType === 'credentials_and_url' && !legacyMode && (!secondaryField.trim() || !tertiaryField.trim())) return;
+    if (config.authType === 'credentials_and_url' && legacyMode && !tertiaryField.trim()) return;
 
     setConnecting(true);
     try {
       const body: Record<string, string> = {};
       if (config.authType === 'webhook_url') {
         body.webhook_url = authValue;
+      } else if (config.authType === 'credentials_and_url') {
+        if (legacyMode) {
+          // Pre-2026 Shopify custom app: a static token that still works.
+          body.api_key = authValue;
+          body.shop_domain = tertiaryField.trim();
+        } else {
+          // Shopify: app client credentials rather than a static token.
+          body.client_id = authValue;
+          body.client_secret = secondaryField.trim();
+          body.shop_domain = tertiaryField.trim();
+        }
       } else {
         body.api_key = authValue;
       }
@@ -305,7 +323,13 @@ export default function IntegrationDetailPage() {
       setIntegration(data.integration);
       setApiKey('');
       setSecondaryField('');
-      showToast(`${config.name} connected successfully!`, 'success');
+      setTertiaryField('');
+      // e.g. Shopify app connected but missing read_orders — connect succeeded, syncing won't.
+      if (data.warning) {
+        showToast(data.warning, 'warning');
+      } else {
+        showToast(`${config.name} connected successfully!`, 'success');
+      }
     } catch (error) {
       showToast((error as Error).message, 'error');
     } finally {
@@ -544,12 +568,12 @@ export default function IntegrationDetailPage() {
       {/* Toast */}
       {toast && (
         <div
-          className={`alert alert-${toast.type === 'error' ? 'danger' : toast.type === 'success' ? 'success' : 'info'} alert-dismissible`}
+          className={`alert alert-${toast.type === 'error' ? 'danger' : toast.type === 'success' ? 'success' : toast.type === 'warning' ? 'warning' : 'info'} alert-dismissible`}
           style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, maxWidth: 400, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
         >
           <div className="d-flex align-items-center">
             {toast.type === 'success' && <IconCircleCheck size={18} className="me-2" />}
-            {toast.type === 'error' && <IconAlertCircle size={18} className="me-2" />}
+            {(toast.type === 'error' || toast.type === 'warning') && <IconAlertCircle size={18} className="me-2" />}
             {toast.message}
           </div>
           <button type="button" className="btn-close" onClick={() => setToast(null)} />
@@ -616,11 +640,54 @@ export default function IntegrationDetailPage() {
                     }.
                   </p>
 
+                  {/* Auth mode chooser -- shown before anything else so a merchant with an
+                      existing credential doesn't fill in the wrong form first. */}
+                  {config.legacyAuth && (() => {
+                    const setMode = (legacy: boolean) => {
+                      if (legacy === useLegacyAuth) return;
+                      // Field meanings change between modes, so clear rather than carry over.
+                      setUseLegacyAuth(legacy);
+                      setApiKey('');
+                      setSecondaryField('');
+                      setShowApiKey(false);
+                      setShowSecondaryField(false);
+                    };
+                    return (
+                      <div className="mb-4">
+                        <div className="btn-group w-100" role="group">
+                          <button
+                            type="button"
+                            className={`btn ${useLegacyAuth ? 'btn-outline-secondary' : 'btn-primary'}`}
+                            onClick={() => setMode(false)}
+                            disabled={connecting}
+                            aria-pressed={!useLegacyAuth}
+                          >
+                            {config.legacyAuth.primaryModeLabel}
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn ${useLegacyAuth ? 'btn-primary' : 'btn-outline-secondary'}`}
+                            onClick={() => setMode(true)}
+                            disabled={connecting}
+                            aria-pressed={useLegacyAuth}
+                          >
+                            {config.legacyAuth.legacyModeLabel}
+                          </button>
+                        </div>
+                        <div className="form-hint mt-2">{config.legacyAuth.chooserHint}</div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Setup Steps */}
                   <div className="mb-4 p-3 rounded" style={{ backgroundColor: 'var(--tblr-bg-surface-secondary)' }}>
-                    <h4 className="mb-3">How to connect {config.name}</h4>
+                    <h4 className="mb-3">
+                      {useLegacyAuth && config.legacyAuth
+                        ? config.legacyAuth.heading
+                        : `How to connect ${config.name}`}
+                    </h4>
                     <ol className="mb-0" style={{ paddingLeft: '1.25rem' }}>
-                      {config.setupSteps.map((step, i) => (
+                      {(useLegacyAuth && config.legacyAuth ? config.legacyAuth.setupSteps : config.setupSteps).map((step, i) => (
                         <li key={i} className="mb-2">{step}</li>
                       ))}
                     </ol>
@@ -628,12 +695,14 @@ export default function IntegrationDetailPage() {
 
                   {/* Primary Auth Field */}
                   <div className="mb-3">
-                    <label className="form-label fw-bold">{config.authLabel}</label>
+                    <label className="form-label fw-bold">
+                      {useLegacyAuth && config.legacyAuth ? config.legacyAuth.authLabel : config.authLabel}
+                    </label>
                     <div className="input-group">
                       <input
                         type={showApiKey ? 'text' : 'password'}
                         className="form-control"
-                        placeholder={config.authPlaceholder}
+                        placeholder={useLegacyAuth && config.legacyAuth ? config.legacyAuth.authPlaceholder : config.authPlaceholder}
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
                         disabled={connecting}
@@ -646,29 +715,77 @@ export default function IntegrationDetailPage() {
                         {showApiKey ? <IconEyeOff size={16} /> : <IconEye size={16} />}
                       </button>
                     </div>
-                    <div className="form-hint mt-1">{config.authHint}</div>
+                    <div className="form-hint mt-1">
+                      {useLegacyAuth && config.legacyAuth ? config.legacyAuth.authHint : config.authHint}
+                    </div>
                   </div>
 
-                  {/* Secondary Auth Field (for Salesforce, Shopify, ActiveCampaign) */}
-                  {config.authType === 'api_key_and_url' && config.secondaryAuthLabel && (
+                  {/* Secondary Auth Field (Salesforce, ActiveCampaign URLs; Shopify client secret) */}
+                  {(config.authType === 'api_key_and_url' || (config.authType === 'credentials_and_url' && !useLegacyAuth)) && config.secondaryAuthLabel && (
                     <div className="mb-3">
                       <label className="form-label fw-bold">{config.secondaryAuthLabel}</label>
+                      {config.secondaryAuthSecret ? (
+                        <div className="input-group">
+                          <input
+                            type={showSecondaryField ? 'text' : 'password'}
+                            className="form-control"
+                            placeholder={config.secondaryAuthPlaceholder}
+                            value={secondaryField}
+                            onChange={(e) => setSecondaryField(e.target.value)}
+                            disabled={connecting}
+                          />
+                          <button
+                            className="btn btn-outline-secondary"
+                            type="button"
+                            onClick={() => setShowSecondaryField(!showSecondaryField)}
+                          >
+                            {showSecondaryField ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+                          </button>
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder={config.secondaryAuthPlaceholder}
+                          value={secondaryField}
+                          onChange={(e) => setSecondaryField(e.target.value)}
+                          disabled={connecting}
+                        />
+                      )}
+                      <div className="form-hint mt-1">{config.secondaryAuthHint}</div>
+                    </div>
+                  )}
+
+                  {/* Tertiary Auth Field (Shopify shop domain) */}
+                  {config.authType === 'credentials_and_url' && config.tertiaryAuthLabel && (
+                    <div className="mb-3">
+                      <label className="form-label fw-bold">{config.tertiaryAuthLabel}</label>
                       <input
                         type="text"
                         className="form-control"
-                        placeholder={config.secondaryAuthPlaceholder}
-                        value={secondaryField}
-                        onChange={(e) => setSecondaryField(e.target.value)}
+                        placeholder={config.tertiaryAuthPlaceholder}
+                        value={tertiaryField}
+                        onChange={(e) => setTertiaryField(e.target.value)}
                         disabled={connecting}
                       />
-                      <div className="form-hint mt-1">{config.secondaryAuthHint}</div>
+                      <div className="form-hint mt-1">
+                        {useLegacyAuth && config.legacyAuth
+                          ? config.tertiaryAuthHintLegacy ?? config.tertiaryAuthHint
+                          : config.tertiaryAuthHint}
+                      </div>
                     </div>
                   )}
 
                   <button
                     className="btn btn-primary"
                     onClick={handleConnect}
-                    disabled={!apiKey.trim() || (config.authType === 'api_key_and_url' && !secondaryField.trim()) || connecting}
+                    disabled={
+                      !apiKey.trim() ||
+                      (config.authType === 'api_key_and_url' && !secondaryField.trim()) ||
+                      (config.authType === 'credentials_and_url' && !useLegacyAuth && (!secondaryField.trim() || !tertiaryField.trim())) ||
+                      (config.authType === 'credentials_and_url' && useLegacyAuth && !tertiaryField.trim()) ||
+                      connecting
+                    }
                   >
                     {connecting ? (
                       <>
@@ -1167,7 +1284,11 @@ export default function IntegrationDetailPage() {
             <div className="card-body">
               <div className="space-y-3">
                 {[
-                  { title: `Connect ${config.name}`, desc: `Enter your ${config.authLabel.toLowerCase()} to get started`, show: true },
+                  {
+                    title: `Connect ${config.name}`,
+                    desc: `Enter your ${(useLegacyAuth && config.legacyAuth ? config.legacyAuth.authLabel : config.authLabel).toLowerCase()} to get started`,
+                    show: true,
+                  },
                   { title: 'Sync visitors', desc: `Push identified visitors from Traffic AI to ${config.name}`, show: hasSync },
                   { title: 'Export audiences', desc: 'Send audience contacts for campaigns and outreach', show: hasAudienceSync },
                   { title: 'Track conversions', desc: `Pull orders from ${config.name} and attribute them to your identified visitors`, show: hasConversions },

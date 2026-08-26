@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { fetchOrdersFromShopify, upsertConversionFromShopifyOrder } from '@/lib/shopify-orders';
+import { getShopifyAccessToken, type ShopifyIntegrationRow } from '@/lib/shopify-auth';
 import { logEvent } from '@/lib/webhook-logger';
 
 export const config = { maxDuration: 300 };
@@ -17,7 +18,7 @@ interface SyncJob {
   pixel_id: string;
   pixel_orders_last_fetched_at: string | null;
   shop_domain: string;
-  access_token: string;
+  integration: ShopifyIntegrationRow;
   platform: 'shopify';
 }
 
@@ -105,7 +106,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const cfg = (integ.config || {}) as Record<string, unknown>;
       const pixelId = cfg.orders_attribution_pixel_id as string | undefined;
       const shopDomain = cfg.shop_domain as string | undefined;
-      if (!pixelId || !shopDomain || !integ.api_key) continue;
+      const cfgHasCredentials = Boolean(cfg.client_id && cfg.client_secret);
+      if (!pixelId || !shopDomain || (!integ.api_key && !cfgHasCredentials)) continue;
       candidatePixelIds.push(pixelId);
       integrationByPixel.set(pixelId, integ);
     }
@@ -132,7 +134,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         pixel_id: pixel.id,
         pixel_orders_last_fetched_at: pixel.orders_last_fetched_at as string | null,
         shop_domain: cfg.shop_domain as string,
-        access_token: integ.api_key!,
+        integration: integ,
         platform: 'shopify',
       });
     }
@@ -155,9 +157,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (i > 0) await new Promise(r => setTimeout(r, 1500));
 
       try {
+        // Minted per job and inside the try: a merchant whose credentials were revoked
+        // fails only their own job instead of aborting the whole cron run.
+        const accessToken = await getShopifyAccessToken(job.integration);
+
         const orders = await fetchOrdersFromShopify({
           shopDomain: job.shop_domain,
-          accessToken: job.access_token,
+          accessToken,
           updatedAtMin: job.pixel_orders_last_fetched_at,
           maxOrders: 1000, // per-job cap so one busy shop doesn't eat the whole budget
         });

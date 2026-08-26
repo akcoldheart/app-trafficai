@@ -17,7 +17,7 @@
 | 3 | [Slack](#slack) | Notifications | Webhook URL | Notifications | N/A | No |
 | 4 | [Zapier](#zapier) | Automation | Webhook triggers | Webhooks | N/A | No |
 | 5 | [Salesforce](#salesforce) | CRM | API Key + URL | Sync visitors, audiences | Manual | No |
-| 6 | [Shopify](#shopify) | E-commerce | API Key + URL | Sync visitors | Manual | No |
+| 6 | [Shopify](#shopify) | E-commerce | Client credentials + URL | Order conversions & revenue attribution | Manual + cron | Yes |
 | 7 | [Mailchimp](#mailchimp) | Email Marketing | API Key | Sync visitors, audiences, lists | Manual | No |
 | 8 | [Pipedrive](#pipedrive) | CRM | API Key | Sync visitors, audiences | Manual | No |
 | 9 | [ActiveCampaign](#activecampaign) | Email Marketing | API Key + URL | Sync visitors, audiences, lists | Manual | No |
@@ -56,11 +56,12 @@
 | Type | Platforms | Flow |
 |------|-----------|------|
 | `api_key` | Klaviyo, HubSpot, Mailchimp, Pipedrive | User pastes API key, stored in `api_key` column |
-| `api_key_and_url` | Salesforce, Shopify, ActiveCampaign | API key + instance URL (URL stored in `config`) |
+| `api_key_and_url` | Salesforce, ActiveCampaign | API key + instance URL (URL stored in `config`) |
 | `webhook_url` | Slack | User pastes webhook URL, stored in `webhook_url` column |
 | `triggers` | Zapier | Multiple webhook URLs stored in `config` per trigger type |
 | `oauth` | Facebook, RingCentral, Google Ads, Google Sheets | Server-side OAuth flow with callback URL |
 | `credentials` | LinkedIn | Email/password stored encrypted (used via Chrome extension) |
+| `credentials_and_url` | Shopify | App Client ID + Client Secret + shop domain, exchanged server-side for a 24h token via the client credentials grant |
 
 ---
 
@@ -156,13 +157,62 @@ Also triggered inline by `fetch-visitors` cron when new visitors are inserted.
 ### Shopify
 
 **Category:** E-commerce
-**Auth:** Admin API Access Token (`shpat_*`) + Shop Domain
-**API Endpoints:**
-- `POST /api/integrations/shopify/connect`
-- `GET /api/integrations/shopify/status`
-- `POST /api/integrations/shopify/sync`
+**Auth:** App Client ID + Client Secret + Shop Domain (client credentials grant)
 
-**Features:** Syncs visitors as Shopify customers.
+**API Endpoints:**
+- `POST /api/integrations/shopify/connect` -- Validate credentials, mint first token, save
+- `GET /api/integrations/shopify/status` -- Connection status (secrets redacted)
+- `PUT /api/integrations/shopify/status` -- Update settings (merges; ignores secret keys)
+- `DELETE /api/integrations/shopify/status` -- Disconnect (deletes the row and credentials)
+- `POST /api/integrations/shopify/sync-orders` -- Manual order sync
+- `GET /api/cron/sync-conversions` -- Scheduled order sync across all merchants
+
+**Features:** Pulls orders and writes them to `conversions`, attributing revenue to a chosen pixel.
+
+#### Authentication
+
+Shopify stopped allowing admin-created ("legacy") custom apps on **2026-01-01**, so new stores
+can no longer produce a static `shpat_` token. The integration now uses the **client credentials
+grant**: the merchant creates an app in the Shopify Dev Dashboard, installs it on their store,
+and gives us the Client ID and Client Secret.
+
+```
+POST https://{shop}.myshopify.com/admin/oauth/access_token
+grant_type=client_credentials&client_id=...&client_secret=...
+-> { access_token, scope, expires_in: 86399 }
+```
+
+**Requirements and constraints:**
+- The app and the store **must belong to the same Shopify organization**. This is the most
+  common setup failure; `connect.ts` surfaces a specific hint for it.
+- The app must be **installed on the store** before credentials will work.
+- Scopes are set on the app version in the Dev Dashboard, not requested at token time. We read
+  the granted scopes back and warn if `read_orders` or `read_customers` is missing.
+- Tokens **expire after 24 hours**. `src/lib/shopify-auth.ts` mints and caches them; never
+  assume a stored token is still valid.
+- `read_orders` only exposes the last 60 days of orders unless Shopify grants `read_all_orders`.
+
+**Merchants with a pre-2026 custom app:** the connect form opens with a two-option chooser
+("Create a new app" / "I already have an access token"), driven by `IntegrationConfig.legacyAuth`.
+The legacy option swaps the setup steps and shows a single token field.
+This posts `api_key` instead of `client_id`/`client_secret`, and `connect.ts` strips any
+credential keys left in `config` so the resolver does not keep preferring stale credentials.
+
+**Token resolution** (`getShopifyAccessToken` in `src/lib/shopify-auth.ts`):
+1. `config.client_id` + `config.client_secret` present -> use cached `config.access_token` if
+   more than 10 minutes from expiry, otherwise mint a fresh one and cache it.
+2. Otherwise fall back to `api_key` -- a legacy `shpat_` token from before the cutover. These
+   still work and are left untouched.
+
+Every caller must go through `getShopifyAccessToken`. Reading `integration.api_key` directly
+will skip credential-based merchants entirely.
+
+**Config keys:** `shop_domain`, `client_id`, `client_secret`, `access_token`, `token_expires_at`,
+`granted_scopes`, `auth_mode`, `orders_attribution_pixel_id`.
+
+`client_secret`, `access_token`, and `token_expires_at` are stripped by `redactShopifyConfig`
+before the config is ever returned to the browser, and the status `PUT` refuses to accept them
+from the client.
 
 ---
 

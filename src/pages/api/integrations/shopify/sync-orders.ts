@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser, getEffectiveUserId } from '@/lib/api-helpers';
 import { getIntegration, updateLastSynced } from '@/lib/integrations';
 import { fetchOrdersFromShopify, upsertConversionFromShopifyOrder } from '@/lib/shopify-orders';
+import { getShopifyAccessToken } from '@/lib/shopify-auth';
 import { logEvent } from '@/lib/webhook-logger';
 
 export const config = { maxDuration: 300 };
@@ -60,9 +61,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const updatedAtMin = fullResync ? null : pixel.orders_last_fetched_at;
 
   try {
+    // Resolves a live token: mints a fresh one for client-credentials integrations when
+    // the cached 24h token is stale, or returns the legacy static token unchanged.
+    const accessToken = await getShopifyAccessToken(integration);
+
     const orders = await fetchOrdersFromShopify({
       shopDomain,
-      accessToken: integration.api_key!,
+      accessToken,
       updatedAtMin,
     });
 

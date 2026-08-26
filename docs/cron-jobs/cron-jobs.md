@@ -214,6 +214,7 @@ Sends automated SMS messages to new website visitors via RingCentral:
 
 **File:** `src/pages/api/cron/sync-conversions.ts`
 **Engine:** `src/lib/shopify-orders.ts`
+**Auth:** `src/lib/shopify-auth.ts`
 **Schedule:** Hourly (`0 * * * *`)
 
 ### What it does
@@ -223,12 +224,13 @@ Pulls orders from every connected Shopify integration that has an attribution pi
 ### Processing Logic
 
 1. **Fetch integrations** -- All `platform_integrations` rows with `platform='shopify'` AND `is_connected=true`, paginated (1000/page)
-2. **Build job list** -- One job per (user, pixel, shop_domain) tuple. Integrations without `orders_attribution_pixel_id` / `shop_domain` / `api_key` are skipped.
+2. **Build job list** -- One job per (user, pixel, shop_domain) tuple. Integrations without `orders_attribution_pixel_id` / `shop_domain` are skipped, as are those with neither `api_key` (legacy static token) nor `config.client_id` + `config.client_secret` (client credentials).
 3. **Cross-tenant guard** -- A job is dropped if `pixel.user_id !== integration.user_id` (defence-in-depth against config drift)
 4. **Interleave by user** -- Same round-robin pattern as `fetch-visitors`, sorted by `orders_last_fetched_at` ascending (oldest first)
 5. **Timeout guard** -- Bail at 270s with 60s buffer for the in-flight Shopify call
 6. **Per-job processing:**
    - 1.5s delay between jobs to be polite to Shopify
+   - Resolve the access token via `getShopifyAccessToken` **inside** the per-job try block, so a merchant with revoked or misconfigured credentials fails only their own job. Client-credentials tokens live 24h and are minted here on demand.
    - Fetch up to 1000 orders since `pixel.orders_last_fetched_at`
    - For each order: `upsertConversionFromShopifyOrder` (inserts conversion, runs `resolveAttribution`)
    - Update `pixels.orders_last_fetched_at` to newest `updated_at`
@@ -240,6 +242,8 @@ Pulls orders from every connected Shopify integration that has an attribution pi
 | Failure | Impact | Recovery |
 |---------|--------|----------|
 | Shopify API down | Job marked `error: ...`, other jobs continue | Retried next hour |
+| Client credentials revoked / app uninstalled | Token mint fails; that job marked `error: ...`, others continue | Merchant reconnects with fresh Client ID + Secret |
+| App moved out of the store's Shopify organization | Token mint fails with a 400 | Client credentials grant requires app and store in the same org |
 | Attribution pixel not set | Integration silently skipped | User must pick attribution pixel in Settings |
 | Cross-tenant config drift | Job dropped before fetch | Manual fix to `platform_integrations.config` |
 | Timeout (>270s) | Tail jobs skipped | `skipped_timeout` in response; ordering means stalest go first next run |

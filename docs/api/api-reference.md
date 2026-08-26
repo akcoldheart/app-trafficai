@@ -147,9 +147,11 @@
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| POST | `/integrations/shopify/connect` | User | Connect with token + domain |
-| GET | `/integrations/shopify/status` | User | Connection status |
-| POST | `/integrations/shopify/sync-visitors` | User | Sync visitors as customers |
+| POST | `/integrations/shopify/connect` | User | Connect with Client ID + Secret + shop domain |
+| GET | `/integrations/shopify/status` | User | Connection status (secrets redacted) |
+| PUT | `/integrations/shopify/status` | User | Update settings (merged; secret keys ignored) |
+| DELETE | `/integrations/shopify/status` | User | Disconnect and delete credentials |
+| POST | `/integrations/shopify/sync-orders` | User | Sync orders into conversions |
 
 ### Mailchimp
 
